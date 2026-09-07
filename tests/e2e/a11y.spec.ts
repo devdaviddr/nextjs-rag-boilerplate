@@ -22,14 +22,12 @@ test('register page has no detectable a11y violations', async ({ page }) => {
   expect(results.violations).toEqual([])
 })
 
-test('dashboard (signed in) has no detectable a11y violations', async ({
-  page,
-}) => {
+test('chat (signed in) has no detectable a11y violations', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('Email').fill('demo@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -44,7 +42,7 @@ test('settings admin panel has no detectable a11y violations', async ({
   await page.getByLabel('Email').fill('demo@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await expect(page.getByRole('button', { name: 'Add User' })).toBeVisible()
@@ -97,7 +95,7 @@ test('403 page has no detectable a11y violations', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   // A member has no admin role — proxy.ts should redirect a settings-only
   // guarded path. Navigate straight to /403 to check its own rendering too.

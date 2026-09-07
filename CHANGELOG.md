@@ -10,6 +10,21 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Rag Boilerplate: chat-first UX, conversation history and source viewing**
+  ([spec 0026](specs/0026-chat-first-ux-and-history.md)). The product is now
+  called Rag Boilerplate, signing in opens a new chat, and the shell uses the
+  full viewport. Conversations and their citations persist and are listed as
+  Recents in the sidebar, grouped by recency and renameable. Answers render as
+  Markdown, show a thinking indicator until the first token, and carry
+  generation metrics (tokens, tok/s, time to first token, model). Clicking a
+  citation opens the source PDF at the cited page in a side panel.
+
+### Removed
+
+- **The `/dashboard` route.** It was a boilerplate demo page; chat is the
+  landing surface now. Removed rather than redirected — a dead route still has
+  to be maintained and tested.
+
 - **RAG knowledge base and document chat** ([spec 0025](specs/0025-rag-knowledge-base-and-chat.md),
   [docs](docs/rag.md)). Upload PDFs into a private per-user knowledge base and
   ask questions answered only from your own documents, with a page-level

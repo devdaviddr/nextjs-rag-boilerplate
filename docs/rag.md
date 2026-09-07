@@ -23,6 +23,24 @@ question → embed → kNN search → grounded answer      (retrieval)
 | Retrieve | `src/lib/rag/retrieve.ts`        | Owner-scoped kNN, or the whole document in reading order                                       |
 | Answer   | `src/app/api/chat/route.ts`      | Streams NDJSON: citations, then tokens                                                         |
 
+## The chat surface
+
+Spec [0026](../specs/0026-chat-first-ux-and-history.md) made chat the product.
+Signing in opens a new conversation; there is no dashboard.
+
+|               |                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **History**   | Conversations and messages persist. Recents in the sidebar are grouped Today / Yesterday / Previous 7 days / Older, and can be renamed or deleted.                    |
+| **Citations** | Rendered from the stored message, so a reopened thread shows the sources it was actually answered with. Clicking one opens the PDF at the cited page in a side panel. |
+| **Markdown**  | Answers render as Markdown with raw HTML disabled — see Security.                                                                                                     |
+| **Metrics**   | Tokens, tok/s, time to first token, total time, sources, retrieval mode and model, stored per message.                                                                |
+
+Token counts come from the provider's `usage` frame, not from counting stream
+deltas — a delta is not reliably one token. `tok/s` measures the generation
+window only (first token to last); including the wait beforehand would
+understate the model's actual rate. Anything the provider does not report is
+omitted rather than shown as zero.
+
 ## Setup
 
 A free NVIDIA NIM key from [build.nvidia.com](https://build.nvidia.com) —
@@ -100,6 +118,19 @@ own corpus in front of you.
 - **Indirect prompt injection**: uploaded PDFs are untrusted input that reaches
   the model. Retrieved text is fenced and labelled as data. This mitigates,
   it does not eliminate.
+- **Markdown rendering has raw HTML disabled** (no `rehype-raw`), so a document
+  that induces the model to emit `<script>` or `<img onerror=…>` produces inert
+  text. Links are `noopener noreferrer nofollow` and open in a new tab.
+- **The document source route is framable by this origin only**
+  (`X-Frame-Options: SAMEORIGIN` + `frame-ancestors 'self'`), narrowing the
+  app-wide `DENY` for that one route so the citation panel can display it. The
+  content type is pinned to `application/pdf` with `nosniff`, which is what
+  stops a crafted upload being sniffed as HTML and run on our origin. A
+  `Content-Security-Policy: sandbox` header was tried and removed — it stops
+  the browser's PDF viewer initialising, and the permissive variant that works
+  provides no protection. The residual risk (the browser's viewer executing
+  PDF JavaScript in its own process) is accepted; removing it needs a separate
+  origin or pdf.js.
 - **Document content leaves the machine** — chunks and questions go to the
   configured endpoint. Use a local endpoint if that is unacceptable.
 

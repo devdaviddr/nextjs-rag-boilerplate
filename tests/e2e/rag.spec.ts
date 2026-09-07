@@ -29,7 +29,7 @@ async function register(page: import('@playwright/test').Page, tag: string) {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
   return email
 }
 
@@ -71,9 +71,13 @@ test.describe('knowledge base', () => {
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText('Sources')).toBeVisible({ timeout: 60_000 })
-    await expect(page.getByText(/handbook — page \d+/i).first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: /handbook — p\d+/i }).first(),
+    ).toBeVisible()
     // The leave policy is on page 1 of the fixture.
-    await expect(page.getByText(/handbook — page 1/i).first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: /handbook — p1/i }).first(),
+    ).toBeVisible()
 
     // Regression: "summarise <doc>" has no semantic anchor in the content, so
     // similarity search scored it ~0.17 and the answer was refused even though
@@ -162,7 +166,7 @@ test('re-ingesting a document does not duplicate its chunks', async ({
   const dbUrl = process.env.DATABASE_URL
   test.skip(!dbUrl, 'DATABASE_URL is required for this test')
 
-  await register(page, 'reingest')
+  const email = await register(page, 'reingest')
   await page.goto('/documents')
   await page
     .getByLabel('Upload a PDF')
@@ -177,8 +181,12 @@ test('re-ingesting a document does not duplicate its chunks', async ({
 
   const sql = postgres(dbUrl!, { max: 1 })
   try {
+    // Scoped to THIS test's user. Matching on title alone would also hit the
+    // handbook belonging to whichever other worker is running the happy-path
+    // test, which is a cross-test failure that only appears under parallelism.
     await sql`UPDATE documents SET status = 'failed', error = 'forced for test'
-              WHERE title = 'handbook' AND status = 'ready'`
+              WHERE title = 'handbook' AND status = 'ready'
+                AND owner_id = (SELECT id FROM users WHERE email = ${email})`
     await page.reload()
     await expect(row.getByText('Failed')).toBeVisible()
 

@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next'
 import { env } from '@/lib/env'
 
 // Serves /sitemap.xml. Lists only publicly-reachable routes — authenticated
-// app pages (dashboard/settings) are intentionally excluded. Add per-fork
+// app pages (chat/documents/settings) are intentionally excluded. Add per-fork
 // public routes here as they are built.
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = env.APP_URL

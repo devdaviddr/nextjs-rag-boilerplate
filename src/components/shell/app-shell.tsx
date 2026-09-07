@@ -2,17 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { Menu, X } from 'lucide-react'
+import { Menu, SquarePen, X } from 'lucide-react'
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { SignOutButton } from '@/components/auth/sign-out-button'
+import { AccountMenu } from '@/components/shell/account-menu'
+import { RecentsList } from '@/components/chat/recents-list'
 import { SidebarNav } from '@/components/shell/sidebar-nav'
-import { ThemeToggle } from '@/components/theme/theme-toggle'
+import { Button } from '@/components/ui/button'
+import type { RecentConversation } from '@/lib/chat/recents'
 import { cn } from '@/lib/utils'
 
-const BRAND = 'Boilerplate'
+import { APP_NAME } from '@/lib/brand'
+
+const BRAND = APP_NAME
 
 function initials(name?: string | null): string {
   if (!name) return '?'
@@ -49,6 +53,7 @@ function Brand({ className }: { className?: string }) {
  */
 export function AppShell({
   user,
+  conversations,
   children,
 }: {
   user: {
@@ -56,6 +61,8 @@ export function AppShell({
     email?: string | null
     image?: string | null
   }
+  /** Recents, already ordered by activity by the server layout. */
+  conversations: RecentConversation[]
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -118,6 +125,32 @@ export function AppShell({
     }
   }, [open])
 
+  // The sidebar is identical on desktop and in the mobile drawer; only the
+  // container differs, so it is declared once here.
+  const sidebarBody = (
+    <>
+      <Button asChild variant="ghost" className="justify-start gap-3 px-3">
+        <Link href="/chat" onClick={() => setOpen(false)}>
+          <SquarePen className="size-4" />
+          New chat
+        </Link>
+      </Button>
+      <SidebarNav onNavigate={() => setOpen(false)} />
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+        <RecentsList
+          conversations={conversations}
+          onNavigate={() => setOpen(false)}
+        />
+      </div>
+      <div className="border-border/60 mt-auto border-t">
+        <AccountMenu
+          user={{ ...user, image: avatarImage }}
+          initials={initials(user.name)}
+        />
+      </div>
+    </>
+  )
+
   return (
     <div className="min-h-dvh">
       <a
@@ -128,11 +161,11 @@ export function AppShell({
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="bg-muted/30 fixed inset-y-0 left-0 z-30 hidden w-60 flex-col px-3 pt-[calc(env(safe-area-inset-top)_+_1rem)] pb-[env(safe-area-inset-bottom)] md:flex">
-        <div className="px-2 pb-4">
+      <aside className="bg-muted/30 fixed inset-y-0 left-0 z-30 hidden w-64 flex-col px-3 pt-[calc(env(safe-area-inset-top)_+_1rem)] pb-[env(safe-area-inset-bottom)] md:flex">
+        <div className="px-2 pb-3">
           <Brand className="text-lg font-semibold tracking-tight" />
         </div>
-        <SidebarNav />
+        {sidebarBody}
       </aside>
 
       {/* Mobile drawer */}
@@ -171,54 +204,39 @@ export function AppShell({
               <X className="size-5" />
             </button>
           </div>
-          <SidebarNav onNavigate={() => setOpen(false)} />
+          {sidebarBody}
         </aside>
       </div>
 
       {/* Main column */}
-      <div className="flex min-h-dvh flex-col md:pl-60">
-        <header className="bg-background/80 sticky top-0 z-20 pt-[env(safe-area-inset-top)] backdrop-blur">
-          <div className="flex h-14 items-center gap-2 px-4 sm:px-6">
+      <div className="flex h-dvh flex-col md:pl-64">
+        {/* Chrome only where it is needed: the drawer trigger on mobile.
+            Account controls live at the bottom of the sidebar now, so the
+            desktop viewport belongs entirely to the conversation. */}
+        <header className="bg-background/80 sticky top-0 z-20 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+          <div className="flex h-14 items-center gap-2 px-4">
             <button
               ref={menuButtonRef}
               aria-label="Open menu"
               aria-expanded={open}
               onClick={() => setOpen(true)}
-              className="text-muted-foreground hover:text-foreground -ml-1 p-1 md:hidden"
+              className="text-muted-foreground hover:text-foreground -ml-1 p-1"
             >
               <Menu className="size-5" />
             </button>
-            <Brand className="font-semibold md:hidden" />
-            <div className="ml-auto flex items-center gap-3">
-              <ThemeToggle />
-              <span className="text-muted-foreground hidden max-w-[40vw] truncate text-sm sm:inline">
-                {user.email}
-              </span>
-              <Avatar className="size-8">
-                {avatarImage && (
-                  <AvatarImage src={avatarImage} alt={user.name ?? ''} />
-                )}
-                {/* Delay the fallback when a photo is expected so a cached
-                    load doesn't flash initials first (see avatar-upload). */}
-                <AvatarFallback
-                  delayMs={avatarImage ? 500 : 0}
-                  className="text-xs"
-                >
-                  {initials(user.name)}
-                </AvatarFallback>
-              </Avatar>
-              <SignOutButton />
-            </div>
+            <Brand className="font-semibold" />
           </div>
         </header>
 
+        {/* No width cap and no padding: pages own their own layout, because a
+            chat needs the full height with a pinned composer while a settings
+            form wants a readable column. */}
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 px-4 py-6 pb-[calc(env(safe-area-inset-bottom)_+_1.5rem)] outline-none sm:px-6"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
         >
-          {/* Shared content container so every page aligns and sizes the same. */}
-          <div className="mx-auto w-full max-w-4xl">{children}</div>
+          {children}
         </main>
       </div>
     </div>

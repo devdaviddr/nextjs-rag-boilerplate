@@ -12,7 +12,7 @@ test('upload, list, download, and delete a file', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await expect(page.getByText('My Files')).toBeVisible()
@@ -69,7 +69,7 @@ test('downloads a file whose name contains non-Latin-1 characters', async ({
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   // Mimic a real macOS screenshot name: "... 12.01.47<U+202F>pm.png".
@@ -105,7 +105,7 @@ test('rejects a disallowed file type with a clear error', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await page.getByLabel('Upload a file').setInputFiles({
@@ -130,7 +130,7 @@ test("a user cannot download another user's file", async ({
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   const fileName = `private-${Date.now()}.png`
@@ -162,7 +162,7 @@ test("a user cannot download another user's file", async ({
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   const crossUserRes = await page.request.get(href!)
   expect(crossUserRes.status()).toBe(404)
@@ -179,7 +179,7 @@ test("deleting a user removes their uploaded files' download access", async ({
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   const fileName = `to-be-cascaded-${Date.now()}.png`
@@ -203,7 +203,7 @@ test("deleting a user removes their uploaded files' download access", async ({
   await page.getByLabel('Email').fill('demo@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   const row = page.getByRole('row').filter({ hasText: emailD })

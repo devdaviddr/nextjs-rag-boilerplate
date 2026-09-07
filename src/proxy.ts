@@ -11,7 +11,7 @@ import { authConfig } from '@/lib/auth/config'
 const { auth } = NextAuth(authConfig)
 
 /** Routes that require an authenticated session. */
-const PROTECTED_PREFIXES = ['/dashboard', '/settings', '/documents', '/chat']
+const PROTECTED_PREFIXES = ['/settings', '/documents', '/chat']
 /** Auth pages an already-signed-in user should be bounced away from. */
 const AUTH_ROUTES = ['/login', '/register']
 /**
@@ -39,6 +39,10 @@ function buildCsp(nonce: string, isDev: boolean): string {
     `connect-src 'self'`,
     `manifest-src 'self'`,
     `worker-src 'self'`,
+    // Same-origin only: the citation source panel frames our own
+    // /api/documents/[id]/source route, which is itself sandboxed. Explicit
+    // rather than relying on the default-src fallback.
+    `frame-src 'self'`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,
@@ -67,7 +71,7 @@ export default auth((req) => {
     return NextResponse.redirect(url)
   }
   if (isLoggedIn && AUTH_ROUTES.includes(pathname)) {
-    return NextResponse.redirect(new URL('/dashboard', nextUrl))
+    return NextResponse.redirect(new URL('/chat', nextUrl))
   }
 
   // --- Role-based access control (JWT only, no DB round-trip) ---

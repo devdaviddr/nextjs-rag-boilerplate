@@ -7,7 +7,8 @@ import { ThemeProvider } from '@/components/theme/theme-provider'
 import { env } from '@/lib/env'
 import './globals.css'
 
-const APP_NAME = 'Next.js Full-Stack Boilerplate'
+import { APP_NAME, APP_SHORT_NAME } from '@/lib/brand'
+
 const APP_DESCRIPTION =
   'Production-grade Next.js boilerplate with Auth.js, Drizzle, and Postgres.'
 
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
   applicationName: APP_NAME,
   title: {
     default: APP_NAME,
-    template: '%s · Boilerplate',
+    template: `%s · ${APP_SHORT_NAME}`,
   },
   description: APP_DESCRIPTION,
   // Social share cards. The default image (public/og.png) is a committed
@@ -40,7 +41,7 @@ export const metadata: Metadata = {
   // iOS home-screen / standalone behaviour.
   appleWebApp: {
     capable: true,
-    title: 'Boilerplate',
+    title: APP_SHORT_NAME,
     statusBarStyle: 'default',
   },
   formatDetection: { telephone: false },

@@ -50,7 +50,7 @@ export function SettingsClient({
   const formattedRoles = roles.map((r) => ({ id: r.id, name: r.name }))
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
 
       <CurrentUserCard user={session.user} allRoles={formattedRoles} />
