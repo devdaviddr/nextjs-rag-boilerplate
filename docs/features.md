@@ -138,12 +138,20 @@ See [Usage & Development](usage.md) and [Deployment](deployment.md).
 - Token-aware, page-bounded chunking so every citation resolves to an exact page
 - `pgvector` `halfvec(2048)` with an HNSW cosine index, inside the existing
   Postgres — no additional service
-- Owner-scoped retrieval enforced in the SQL `WHERE` clause
+- Hybrid retrieval — dense (`pgvector` HNSW) and lexical (`tsvector` GIN)
+  channels fused with Reciprocal Rank Fusion, both in the same Postgres table
+- Chunks embed their document title and detected section heading alongside the
+  content, while storing the original text for display
+- Owner-scoped retrieval enforced in the SQL `WHERE` clause, per channel
 - Grounded answers: when nothing clears the similarity floor the chat model is
   **never called**
 - Two retrieval paths — similarity search for content questions, whole-document
   retrieval for summarise/overview requests
 - Streamed Markdown answers with clickable page-level citations that open the
   source PDF, conversation history, and per-answer generation metrics
+
+- Retrieval evaluation harness (`pnpm rag:eval`) over a ground-truth corpus,
+  reporting hit@k, MRR and refusal accuracy — so a retrieval change is measured
+  rather than assumed
 
 Full walkthrough: **[RAG — how it works](rag.md)**.

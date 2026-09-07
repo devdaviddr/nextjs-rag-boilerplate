@@ -14,6 +14,21 @@ A single Next.js 16 application (App Router) backed by PostgreSQL. Rendering is 
 | Storage   | MinIO (S3-compatible)       | File uploads, object storage             |
 | PWA       | Custom service worker       | Offline resilience, push notifications   |
 
+### Retrieval
+
+The RAG layer is hybrid and lives entirely in Postgres: a dense channel
+(`pgvector` `halfvec(2048)`, HNSW cosine) and a lexical one (generated
+`tsvector`, GIN), fused with Reciprocal Rank Fusion. No additional service.
+
+Both channels filter on `owner_id` in their own `WHERE` clause — the tenant
+boundary is enforced per channel rather than trusted to fusion — and the
+decision to answer at all is gated on cosine similarity, so retrieval that
+finds nothing relevant never reaches the model.
+
+Changes here are measured rather than argued: `pnpm rag:eval` scores retrieval
+against a ground-truth corpus and reports hit@k, MRR and refusal accuracy. Full
+detail in **[RAG — how it works](rag.md)**.
+
 ### Request Flow
 
 1. **Edge proxy** (`src/proxy.ts`) runs first on protected paths:
