@@ -6,6 +6,7 @@ import {
   customType,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -299,12 +300,105 @@ export const chunks = pgTable(
   ],
 )
 
+/** Who authored a message. */
+export const MESSAGE_ROLES = ['user', 'assistant'] as const
+export type MessageRole = (typeof MESSAGE_ROLES)[number]
+
+/**
+ * A citation as it was resolved at answer time (spec 0026 FR12).
+ *
+ * Stored on the message rather than recomputed, so reopening a conversation
+ * shows the sources the answer was actually built from — even if the document
+ * has since been deleted or re-ingested into different chunks.
+ */
+export interface StoredCitation {
+  index: number
+  chunkId: string
+  documentId: string
+  documentTitle: string
+  pageNumber: number
+  similarity: number
+}
+
+/** Mirrors MessageMetrics in lib/chat/metrics.ts. */
+export interface StoredMetrics {
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  timeToFirstTokenMs: number | null
+  totalMs: number
+  tokensPerSecond: number | null
+  sourceCount: number
+  retrieval: 'search' | 'document'
+}
+
+export const conversations = pgTable(
+  'conversations',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Derived from the first user message; editable. See lib/chat/title.ts.
+    title: text('title').notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+    // Bumped on every new message, because Recents is ordered by activity
+    // rather than by creation.
+    updatedAt: timestamp('updated_at', { mode: 'date' })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    // Exactly how the Recents list is read: this owner, newest activity first.
+    index('conversations_owner_updated_idx').on(table.ownerId, table.updatedAt),
+  ],
+)
+
+export const messages = pgTable(
+  'messages',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    // Denormalised for the same reason `chunks.ownerId` is: every read filters
+    // on it, and a join is one refactor away from being dropped.
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').$type<MessageRole>().notNull(),
+    content: text('content').notNull(),
+    // Empty for user messages.
+    citations: jsonb('citations')
+      .$type<StoredCitation[]>()
+      .notNull()
+      .default([]),
+    // Generation metrics (tokens, tok/s, latency). Null for user messages and
+    // for assistant messages answered without calling the model.
+    metrics: jsonb('metrics').$type<StoredMetrics>(),
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('messages_conversation_created_idx').on(
+      table.conversationId,
+      table.createdAt,
+    ),
+    index('messages_owner_id_idx').on(table.ownerId),
+  ],
+)
+
 // Drizzle relations — required for `db.query.*` relational queries with `with`.
 // These are ORM-only (no database migration).
 export const usersRelations = relations(users, ({ many }) => ({
   userRoles: many(userRoles),
   files: many(files),
   documents: many(documents),
+  conversations: many(conversations),
 }))
 
 export const filesRelations = relations(files, ({ one }) => ({
@@ -324,6 +418,24 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
     references: [files.id],
   }),
   chunks: many(chunks),
+}))
+
+export const conversationsRelations = relations(
+  conversations,
+  ({ one, many }) => ({
+    owner: one(users, {
+      fields: [conversations.ownerId],
+      references: [users.id],
+    }),
+    messages: many(messages),
+  }),
+)
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
 }))
 
 export const chunksRelations = relations(chunks, ({ one }) => ({
@@ -362,3 +474,7 @@ export type DocumentRecord = typeof documents.$inferSelect
 export type NewDocumentRecord = typeof documents.$inferInsert
 export type ChunkRecord = typeof chunks.$inferSelect
 export type NewChunkRecord = typeof chunks.$inferInsert
+export type Conversation = typeof conversations.$inferSelect
+export type NewConversation = typeof conversations.$inferInsert
+export type Message = typeof messages.$inferSelect
+export type NewMessage = typeof messages.$inferInsert

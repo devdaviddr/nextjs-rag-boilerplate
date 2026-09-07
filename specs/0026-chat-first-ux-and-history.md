@@ -1,7 +1,7 @@
 ---
 id: 0026
 title: Rag Boilerplate — chat-first UX, history and source viewing
-status: Proposed
+status: In Progress
 release: '—'
 created: 2026-09-07
 updated: 2026-09-07
@@ -125,6 +125,19 @@ model answers in Markdown, and the UI renders it as plain text inside
 - **FR13** — `GET /api/documents/[id]/source`: ownership-checked route that
   streams the stored PDF **inline**. The existing `/api/files/[id]` route forces
   `Content-Disposition: attachment`, which a browser cannot display in place.
+- **FR15** — While a request is in flight and before the first token arrives,
+  the assistant message shows a three-dot thinking indicator. Once tokens
+  arrive the streaming text replaces it, since the text is then its own
+  progress indicator. Announced once via `role="status"`, and still when
+  `prefers-reduced-motion` is set (it stops moving, it does not disappear).
+- **FR16** — Each answer carries generation metrics beneath it: completion
+  tokens, tokens per second, time to first token, total time, source count,
+  retrieval mode and model. Token counts come from the provider's own `usage`
+  frame (`stream_options: { include_usage: true }`), never from counting
+  stream deltas — a delta is not reliably a token, and counting them would
+  produce a plausible number that is quietly wrong. Anything the provider does
+  not report is omitted rather than shown as zero. Metrics are stored on the
+  message, so they survive a reload as citations do.
 - **FR14** — A citation is a button. Clicking it opens a source panel beside the
   transcript showing that document at the cited page, via
   `/api/documents/[id]/source#page=N`. The panel is dismissible with Escape and
@@ -150,11 +163,24 @@ model answers in Markdown, and the UI renders it as plain text inside
   thousands of rows.
 - **NFR7** — Serving a user-uploaded PDF **inline changes the threat model**: a
   PDF is an active format and a browser viewer will run its scripting. The
-  response carries `Content-Security-Policy: sandbox`,
+  response pins `Content-Type: application/pdf`, sends
   `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`, and
-  the panel embeds it in a sandboxed frame. `/api/files/[id]` keeps serving
-  `attachment` unchanged — the inline path is new and separate, not a
-  relaxation of the existing one.
+  is framable only by this origin (`X-Frame-Options: SAMEORIGIN` plus
+  `frame-ancestors 'self'`, narrowing the global `DENY` for this one route).
+  `/api/files/[id]` keeps serving `attachment` unchanged.
+
+  > **Amended during implementation.** This originally specified
+  > `Content-Security-Policy: sandbox` on the response and `sandbox=""` on the
+  > frame. Both had to be removed: a fully-restrictive sandbox forces an opaque
+  > origin, which stops the browser's PDF viewer initialising, so the panel
+  > rendered a broken-document icon. The permissive combination that _does_
+  > work — `sandbox allow-scripts allow-same-origin` — is not a sandbox at all,
+  > since it lets the content drop its own restrictions; adopting it would have
+  > been security theatre that happened to render. The headers above close the
+  > attack that actually matters (a crafted upload being sniffed as HTML and
+  > executed on our origin). The residual risk — the browser's own viewer
+  > running PDF JavaScript in its own process, with no access to this page —
+  > is accepted and named. Eliminating it needs a separate origin or pdf.js.
 
 ## Design / approach
 
@@ -232,33 +258,38 @@ not how they are _produced_. The 0025 test suite must pass unchanged.
 
 ## Acceptance criteria
 
-- [ ] No user-visible surface says "Boilerplate" alone: sidebar, `<title>`, PWA
+- [x] No user-visible surface says "Boilerplate" alone: sidebar, `<title>`, PWA
       manifest, landing page.
-- [ ] Signing in lands on `/chat`, showing a centred greeting and composer with
+- [x] Signing in lands on `/chat`, showing a centred greeting and composer with
       no surrounding box; `/dashboard` no longer exists.
-- [ ] Sending the first message turns that view into a scrolling transcript with
+- [x] Sending the first message turns that view into a scrolling transcript with
       a pinned composer, without a navigation.
-- [ ] Asking a question in a new chat creates a conversation, titles it from the
+- [x] Asking a question in a new chat creates a conversation, titles it from the
       question, and pushes it to the top of Recents without a manual refresh.
-- [ ] Reloading a conversation shows the same messages **and the same
+- [x] Reloading a conversation shows the same messages **and the same
       citations**.
-- [ ] Recents groups by Today / Yesterday / Previous 7 days / Older.
-- [ ] A conversation can be renamed and deleted; deleting the open one starts a
+- [x] Recents groups by Today / Yesterday / Previous 7 days / Older.
+- [x] A conversation can be renamed and deleted; deleting the open one starts a
       new chat.
-- [ ] An automated test proves user B cannot open user A's conversation by id.
-- [ ] An assistant answer containing Markdown renders as formatted text, not
+- [x] An automated test proves user B cannot open user A's conversation by id.
+- [x] An assistant answer containing Markdown renders as formatted text, not
       literal `**asterisks**`.
-- [ ] A Markdown answer containing a raw `<script>` or `<img onerror=…>` renders
+- [x] A Markdown answer containing a raw `<script>` or `<img onerror=…>` renders
       as inert text.
-- [ ] Clicking a citation opens the source panel showing that document, at the
+- [x] Clicking a citation opens the source panel showing that document, at the
       cited page where the browser honours `#page=`.
-- [ ] The source route serves `Content-Disposition: inline` with
+- [x] The source route serves `Content-Disposition: inline` with
       `Content-Security-Policy: sandbox` and `nosniff`, and refuses another
       user's document with the same 404 as a missing one.
-- [ ] At 1920px the chat uses the full window width, with message text still
+- [x] A thinking indicator shows until the first token, then gives way to the
+      streaming text.
+- [x] An answer displays token count, tok/s, time to first token, total time,
+      sources, retrieval mode and model — and omits what the provider did not
+      report rather than showing zeroes.
+- [x] At 1920px the chat uses the full window width, with message text still
       constrained to a readable measure.
-- [ ] Every spec 0025 test still passes unchanged.
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass.
+- [x] Every spec 0025 test still passes unchanged.
+- [x] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass.
 
 ## Security & privacy
 

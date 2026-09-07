@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger'
 import { AUTH_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
 import { loginSchema, registerSchema } from '@/lib/validations/auth'
+import { HOME_PATH } from '@/lib/brand'
 
 /**
  * `signIn` with a `redirectTo` succeeds by throwing a Next.js redirect. We must
@@ -62,7 +63,7 @@ const TOO_MANY = 'Too many attempts. Please wait a few minutes and try again.'
 
 /**
  * Register a new credentials user, then sign them in. On success this throws a
- * redirect (handled by Next.js) to the dashboard; on failure it returns a
+ * redirect (handled by Next.js) to the chat; on failure it returns a
  * form state describing what went wrong.
  *
  * Also handles "claiming" an admin-created account (user exists but has no password).
@@ -131,7 +132,7 @@ export async function registerAction(
         await signIn('credentials', {
           email,
           password,
-          redirectTo: '/dashboard',
+          redirectTo: HOME_PATH,
         })
       } catch (error) {
         if (isNextRedirect(error)) throw error
@@ -182,7 +183,7 @@ export async function registerAction(
   })
 
   try {
-    await signIn('credentials', { email, password, redirectTo: '/dashboard' })
+    await signIn('credentials', { email, password, redirectTo: HOME_PATH })
   } catch (error) {
     if (isNextRedirect(error)) throw error
     // Account was created but auto-login failed — send them to log in manually.
@@ -202,12 +203,12 @@ export async function signOutAction() {
 /**
  * Start an OAuth sign-in. Driven from the login page's provider buttons via a
  * hidden `provider` field. `signIn` completes by throwing a redirect (to the
- * provider, then back to `/dashboard`), so there's nothing to return.
+ * provider, then back to `/chat`), so there's nothing to return.
  */
 export async function oauthSignInAction(formData: FormData) {
   const provider = String(formData.get('provider'))
   if (provider !== 'github' && provider !== 'google') return
-  await signIn(provider, { redirectTo: '/dashboard' })
+  await signIn(provider, { redirectTo: HOME_PATH })
 }
 
 /** Authenticate an existing user with email + password. */
@@ -244,7 +245,7 @@ export async function loginAction(
   }
 
   try {
-    await signIn('credentials', { email, password, redirectTo: '/dashboard' })
+    await signIn('credentials', { email, password, redirectTo: HOME_PATH })
   } catch (error) {
     if (isNextRedirect(error)) throw error
     if (error instanceof AuthError) {

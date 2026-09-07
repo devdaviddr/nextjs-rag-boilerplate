@@ -64,6 +64,20 @@
       "when": 1788755555919,
       "tag": "0008_secret_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788769158153,
+      "tag": "0009_silly_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788770415825,
+      "tag": "0010_right_oracle",
+      "breakpoints": true
     }
   ]
 }

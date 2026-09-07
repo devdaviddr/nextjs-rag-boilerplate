@@ -11,7 +11,7 @@ test('notifications panel is hidden when push is not configured', async ({
   await page.getByLabel('Email').fill('demo@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   // The panel only renders when the server passes a VAPID public key.

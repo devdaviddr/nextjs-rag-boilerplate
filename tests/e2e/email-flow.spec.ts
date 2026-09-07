@@ -56,7 +56,7 @@ async function register(page: import('@playwright/test').Page, email: string) {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 }
 
 test('email verification: register → emailed link → verified', async ({
@@ -84,7 +84,10 @@ test('password reset: request → emailed link → new password → sign in', as
 
   // Create a credentials account (has a password to reset), then sign out.
   await register(page, email)
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  // Sign out now lives in the account menu at the foot of the sidebar
+  // (spec 0026), not in a top bar.
+  await page.getByRole('button', { name: 'Account menu' }).click()
+  await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login/)
 
   // Request the reset — always the same anti-enumeration message.
@@ -111,5 +114,5 @@ test('password reset: request → emailed link → new password → sign in', as
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password', { exact: true }).fill(newPassword)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 })

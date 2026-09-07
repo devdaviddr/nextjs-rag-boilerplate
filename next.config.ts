@@ -30,7 +30,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: '/:path*',
+        // Everything EXCEPT the document source route, which the citation
+        // panel frames from this same origin. A global `X-Frame-Options: DENY`
+        // blocks that too — same-origin framing is not exempt — and the panel
+        // renders "refused to connect" instead of the PDF. The route sets its
+        // own, narrower `SAMEORIGIN` + `frame-ancestors 'self'`.
+        source: '/:path((?!api/documents/[^/]+/source$).*)',
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },

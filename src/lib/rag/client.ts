@@ -152,6 +152,10 @@ export async function createChatStream(
       messages,
       stream: true,
       temperature: 0.2,
+      // Ask for a final usage frame so token counts are the provider's own
+      // rather than inferred by counting stream deltas, which is not the same
+      // thing as counting tokens.
+      stream_options: { include_usage: true },
     },
     { stream: true, signal },
   )
@@ -160,4 +164,9 @@ export async function createChatStream(
     throw new RagUpstreamError(response.status, 'upstream returned no body')
   }
   return response.body
+}
+
+/** The chat model in use, for display alongside an answer. */
+export function chatModelName(): string {
+  return env.RAG_CHAT_MODEL
 }

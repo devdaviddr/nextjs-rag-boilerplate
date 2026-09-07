@@ -5,14 +5,14 @@ import { expect, test } from './fixtures'
 test('a non-admin user does not see the admin panel', async ({ page }) => {
   const email = `noadmin+${Date.now()}@example.com`
 
-  // Register a fresh user (gets no roles) — lands on the dashboard.
+  // Register a fresh user (gets no roles) — lands on the chat.
   await page.goto('/register')
   await page.getByLabel('Name').fill('No Admin')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await expect(page.getByText('Current User')).toBeVisible()
@@ -28,7 +28,7 @@ test('an admin invites a user who then claims the account', async ({
   await page.getByLabel('Email').fill('demo@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await expect(page.getByRole('button', { name: 'Add User' })).toBeVisible()
@@ -60,5 +60,5 @@ test('an admin invites a user who then claims the account', async ({
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 })

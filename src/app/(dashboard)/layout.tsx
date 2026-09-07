@@ -4,6 +4,7 @@ import { SessionProvider } from 'next-auth/react'
 import { AppShell } from '@/components/shell/app-shell'
 import { VerificationBanner } from '@/components/auth/verification-banner'
 import { getCurrentSession } from '@/lib/auth/session'
+import { listConversations } from '@/lib/chat/actions'
 import {
   isCurrentUserVerified,
   isEmailVerificationEnforced,
@@ -27,6 +28,10 @@ export default async function DashboardLayout({
   const showVerificationBanner =
     isEmailVerificationEnforced() && !(await isCurrentUserVerified())
 
+  // Recents are server-rendered on navigation rather than fetched client-side,
+  // so the sidebar is correct on first paint (spec 0026 NFR6).
+  const conversations = await listConversations()
+
   return (
     <SessionProvider session={session}>
       <AppShell
@@ -35,6 +40,7 @@ export default async function DashboardLayout({
           email: session.user.email,
           image: session.user.image,
         }}
+        conversations={conversations}
       >
         {showVerificationBanner && <VerificationBanner />}
         {children}

@@ -1,10 +1,4 @@
-import {
-  FileText,
-  LayoutDashboard,
-  MessagesSquare,
-  Settings,
-  type LucideIcon,
-} from 'lucide-react'
+import { FileText, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   title: string
@@ -12,10 +6,11 @@ export interface NavItem {
   icon: LucideIcon
 }
 
-/** Primary navigation shown in the sidebar / mobile drawer. */
+/**
+ * Destinations in the sidebar, between the "New chat" action above and the
+ * Recents list below. Deliberately short: chat is the product, so anything
+ * that isn't the chat or its source material belongs in the account menu.
+ */
 export const navItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Knowledge base', href: '/documents', icon: FileText },
-  { title: 'Chat', href: '/chat', icon: MessagesSquare },
-  { title: 'Settings', href: '/settings', icon: Settings },
 ]

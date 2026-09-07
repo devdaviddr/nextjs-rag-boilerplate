@@ -17,7 +17,7 @@ test('upload, replace, and remove a profile photo', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   // No photo yet — fallback initials render ("AT" for "Avatar Tester"),
@@ -54,8 +54,11 @@ test('upload, replace, and remove a profile photo', async ({ page }) => {
   const oldRes = await page.request.get(firstSrc!)
   expect(oldRes.status()).toBe(404)
 
-  // The app shell topbar reflects the same photo, without a reload/re-login.
-  const shellAvatar = page.locator('header img[alt="Avatar Tester"]')
+  // The sidebar account menu reflects the same photo, without a reload or
+  // re-login (spec 0026 moved it out of the topbar).
+  const shellAvatar = page
+    .getByRole('button', { name: 'Account menu' })
+    .locator('img[alt="Avatar Tester"]')
   await expect(shellAvatar).toBeVisible()
 
   // Remove it — back to fallback initials everywhere, object gone.
@@ -78,7 +81,7 @@ test('serves the avatar with cacheable, immutable headers (no flash on refresh)'
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await page.getByLabel('Upload profile photo').setInputFiles({
@@ -113,7 +116,7 @@ test('rejects a non-image file with a clear error (PDF is fine for general uploa
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await page.getByLabel('Upload profile photo').setInputFiles({
@@ -134,7 +137,7 @@ test('deleting a user also removes their profile photo', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByLabel('Confirm password').fill('Password123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   await page.getByLabel('Upload profile photo').setInputFiles({
@@ -153,7 +156,7 @@ test('deleting a user also removes their profile photo', async ({ page }) => {
   await page.getByLabel('Email').fill('demo@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/chat/)
 
   await page.goto('/settings')
   const row = page.getByRole('row').filter({ hasText: emailE })

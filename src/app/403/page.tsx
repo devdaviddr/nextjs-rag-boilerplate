@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ShieldAlert } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { HOME_PATH } from '@/lib/brand'
 
 export const metadata: Metadata = { title: 'Forbidden' }
 
@@ -17,7 +18,7 @@ export default function ForbiddenPage() {
         </p>
       </div>
       <Button asChild>
-        <Link href="/dashboard">Back to dashboard</Link>
+        <Link href={HOME_PATH}>Back to chat</Link>
       </Button>
     </main>
   )
