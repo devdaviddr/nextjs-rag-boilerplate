@@ -1,21 +1,23 @@
 ---
 id: 0026
-title: Rag Boilerplate — chat-first UX and conversation history
+title: Rag Boilerplate — chat-first UX, history and source viewing
 status: Proposed
 release: '—'
 created: 2026-09-07
 updated: 2026-09-07
 ---
 
-# 0026 — Rag Boilerplate: chat-first UX and conversation history
+# 0026 — Rag Boilerplate: chat-first UX, history and source viewing
 
 ## Summary
 
 Rename the product to **Rag Boilerplate**, and rebuild the signed-in experience
 around the chat, modelled on ChatGPT: a full-width shell, a sidebar that opens
-with **New chat** and lists your **recent conversations**, and chat threads that
-persist so you can come back to one. Today every answer is lost on refresh and
-every page is boxed into a 896px column in the middle of a 2000px window.
+with **New chat** and lists your **recent conversations**, chat threads that
+persist so you can come back to one, and **citations you can click to open the
+source PDF at the cited page**. Today every answer is lost on refresh, every
+page is boxed into a 896px column in the middle of a 2000px window, and a
+citation is text you have to go and verify by hand.
 
 ## Problem / motivation
 
@@ -52,6 +54,9 @@ model answers in Markdown, and the UI renders it as plain text inside
 - Assistant answers render as Markdown.
 - Citations survive a reload — they are part of the stored message, not
   transient UI state.
+- **A citation is clickable**: it opens the source PDF at the cited page, so a
+  claim can be checked in seconds rather than by hunting through a download.
+- There is no dashboard. Signing in opens a new chat.
 
 ## Non-goals
 
@@ -63,6 +68,9 @@ model answers in Markdown, and the UI renders it as plain text inside
   retrieval model is "ask across everything you have indexed", and changing
   that is a product decision, not a UI one.
 - Editing or regenerating a previous message, and branching a conversation.
+- **Highlighting the exact cited span inside the PDF.** Only `pageNumber` is
+  stored — chunking never captured bounding boxes — so the page is the finest
+  location available without re-ingesting every document. See Out of scope.
 - Multi-turn context: each question is still answered independently. Carrying
   history into retrieval and into the prompt changes grounding behaviour and is
   deliberately separated — see Out of scope.
@@ -93,8 +101,10 @@ model answers in Markdown, and the UI renders it as plain text inside
   collapsed whitespace, truncated to 60 characters on a word boundary. No model
   call — a title is not worth an inference round trip.
 - **FR6** — Routes: `/chat` starts a new conversation, `/chat/[id]` opens an
-  existing one (404 for someone else's, no existence signal). `/dashboard`
-  redirects to `/chat`, which becomes the post-login landing.
+  existing one (404 for someone else's, no existence signal). `/chat` is the
+  post-login landing. **`/dashboard` and its page are removed**, together with
+  the nav entry, the manifest shortcut and the E2E assertions that reference
+  it.
 - **FR7** — Sidebar: a **New chat** action at the top, then **Knowledge base**,
   then **Recents** — conversations grouped `Today` / `Yesterday` /
   `Previous 7 days` / `Older`, most recent first, capped at
@@ -105,11 +115,20 @@ model answers in Markdown, and the UI renders it as plain text inside
   the main region takes the remaining width with no `max-w-4xl` wrapper.
 - **FR10** — Assistant messages render Markdown — headings, bold/italic, lists,
   inline code, fenced code blocks, links, tables. User messages stay plain text.
-- **FR11** — An empty chat shows a centred greeting with the composer beneath
-  it; once a conversation has messages the composer is pinned to the bottom and
-  the transcript scrolls above it.
+- **FR11** — An empty chat is a **centred greeting with the composer directly
+  beneath it**, vertically centred in the viewport, with no surrounding card and
+  no fixed-height box. On the first message the layout becomes a scrolling
+  transcript with the composer pinned to the bottom. The transition happens in
+  place — no navigation and no flash of an empty container.
 - **FR12** — Citations are rendered from the stored message, so reopening a
   conversation shows the same sources it was answered with.
+- **FR13** — `GET /api/documents/[id]/source`: ownership-checked route that
+  streams the stored PDF **inline**. The existing `/api/files/[id]` route forces
+  `Content-Disposition: attachment`, which a browser cannot display in place.
+- **FR14** — A citation is a button. Clicking it opens a source panel beside the
+  transcript showing that document at the cited page, via
+  `/api/documents/[id]/source#page=N`. The panel is dismissible with Escape and
+  offers "Open in new tab" for anyone who prefers their own viewer.
 
 ### Non-functional
 
@@ -129,6 +148,13 @@ model answers in Markdown, and the UI renders it as plain text inside
 - **NFR6** — Recents are server-rendered on navigation, not fetched on every
   keystroke, and the list is capped (FR7) so a heavy user does not load
   thousands of rows.
+- **NFR7** — Serving a user-uploaded PDF **inline changes the threat model**: a
+  PDF is an active format and a browser viewer will run its scripting. The
+  response carries `Content-Security-Policy: sandbox`,
+  `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`, and
+  the panel embeds it in a sandboxed frame. `/api/files/[id]` keeps serving
+  `attachment` unchanged — the inline path is new and separate, not a
+  relaxation of the existing one.
 
 ## Design / approach
 
@@ -153,10 +179,10 @@ Mapping ours onto that:
 └──────────────────────────┘
 ```
 
-`Dashboard` and `Settings` leave the primary nav: Dashboard is a boilerplate
-demo page with nothing a user of _this_ product needs, and Settings belongs in
-the account menu at the bottom. Dashboard is kept as a route and redirected
-rather than deleted, so a fork that wants it back only reverts one line.
+`Dashboard` is **deleted**, not redirected: it is a boilerplate demo page with
+nothing a user of this product needs, and a dead route still has to be
+maintained and tested. A fork that wants it back has it in git history.
+`Settings` moves into the account menu at the bottom, where ChatGPT keeps it.
 
 ### Persistence and streaming
 
@@ -177,6 +203,26 @@ it is derived from PDFs a user uploaded, which is exactly the indirect-injection
 surface spec 0025 named. Disabling raw HTML is the mitigation; a custom link
 renderer adds `rel` and `target`.
 
+### Opening a citation at its source
+
+Everything needed for a **page-level** deep link already exists: a citation
+carries `documentId` and `pageNumber`, and `documents` joins to the stored
+object. Two pieces are missing — an inline-serving route (FR13) and a viewer.
+
+The viewer is a sandboxed `<iframe>` pointed at
+`/api/documents/[id]/source#page=N`, relying on the browser's built-in PDF
+viewer to honour the fragment. Zero dependencies, no client-side PDF parsing.
+The trade is that fragment support is a browser behaviour rather than a
+guarantee: Chrome and Firefox honour it, and where it is ignored the document
+still opens at page 1 — degraded, not broken. "Open in new tab" is the escape
+hatch either way.
+
+**What this cannot do yet is highlight the cited sentence.** Chunking records
+`pageNumber` but never captured bounding boxes, so a page is the finest
+resolution available. Capturing per-chunk boxes during extraction would enable a
+real highlight, but it changes the ingestion schema and requires re-ingesting
+every existing document — its own spec, not a footnote to this one.
+
 ### What stays exactly as it is
 
 Retrieval, scoping, chunking, embedding, the similarity floor, the
@@ -188,7 +234,10 @@ not how they are _produced_. The 0025 test suite must pass unchanged.
 
 - [ ] No user-visible surface says "Boilerplate" alone: sidebar, `<title>`, PWA
       manifest, landing page.
-- [ ] Signing in lands on `/chat`; `/dashboard` redirects there.
+- [ ] Signing in lands on `/chat`, showing a centred greeting and composer with
+      no surrounding box; `/dashboard` no longer exists.
+- [ ] Sending the first message turns that view into a scrolling transcript with
+      a pinned composer, without a navigation.
 - [ ] Asking a question in a new chat creates a conversation, titles it from the
       question, and pushes it to the top of Recents without a manual refresh.
 - [ ] Reloading a conversation shows the same messages **and the same
@@ -201,6 +250,11 @@ not how they are _produced_. The 0025 test suite must pass unchanged.
       literal `**asterisks**`.
 - [ ] A Markdown answer containing a raw `<script>` or `<img onerror=…>` renders
       as inert text.
+- [ ] Clicking a citation opens the source panel showing that document, at the
+      cited page where the browser honours `#page=`.
+- [ ] The source route serves `Content-Disposition: inline` with
+      `Content-Security-Policy: sandbox` and `nosniff`, and refuses another
+      user's document with the same 404 as a missing one.
 - [ ] At 1920px the chat uses the full window width, with message text still
       constrained to a readable measure.
 - [ ] Every spec 0025 test still passes unchanged.
@@ -232,8 +286,16 @@ not how they are _produced_. The 0025 test suite must pass unchanged.
 - **Sanitising HTML rather than disabling it** (`rehype-raw` + `rehype-sanitize`).
   More moving parts on a path fed by untrusted documents; nothing in a
   document-QA answer needs raw HTML.
-- **Deleting the Dashboard route.** Kept and redirected instead — this is a
-  boilerplate, and forks may want it.
+- **Redirecting `/dashboard` instead of deleting it.** Rejected: a redirect is a
+  dead route that still has to be maintained and tested. Git history is the
+  better archive.
+- **`react-pdf` / pdf.js for the source viewer.** Full control, a real text
+  layer to highlight, and consistent `#page` behaviour across browsers — at the
+  cost of a heavy client dependency and a worker bundle. Worth revisiting _when_
+  span highlighting is on the table, since that is what actually needs it.
+- **Pointing citations at the existing `/api/files/[id]` download.** Simplest,
+  but it downloads the PDF rather than showing it, and lands on page 1 — which
+  is most of the friction this change exists to remove.
 
 ## Out of scope / future
 
@@ -243,6 +305,8 @@ not how they are _produced_. The 0025 test suite must pass unchanged.
   which is why it is not smuggled in behind a UI change.
 - Regenerate, edit-and-resend, branching, sharing, export.
 - Scoping a conversation to a chosen document.
+- **Span-level citation highlighting**, which needs per-chunk bounding boxes
+  captured during ingestion plus a re-ingest of existing documents.
 
 ## References
 
@@ -250,6 +314,9 @@ not how they are _produced_. The 0025 test suite must pass unchanged.
   unchanged.
 - Current constraints: `max-w-4xl` in `src/components/shell/app-shell.tsx`;
   `BRAND` in the same file; `whitespace-pre-wrap` in
-  `src/components/rag/chat-panel.tsx`.
+  `src/components/rag/chat-panel.tsx`; `Content-Disposition: attachment` in
+  `src/app/api/files/[id]/route.ts`.
+- `chunks` stores `page_number` but no bounding boxes — the reason citation
+  linking is page-level, not span-level.
 - UX reference: ChatGPT's signed-in layout — sidebar actions/history/account,
   full-width shell, centred composer on an empty thread.
