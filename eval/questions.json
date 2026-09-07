@@ -5,6 +5,7 @@
       "id": "leave-entitlement",
       "question": "How many days of annual leave do I get?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 1,
       "answerable": true
     },
@@ -12,6 +13,7 @@
       "id": "leave-carryover",
       "question": "Can I carry unused leave into next year?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 1,
       "answerable": true
     },
@@ -19,6 +21,7 @@
       "id": "expense-deadline",
       "question": "What is the deadline for submitting travel expenses?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 2,
       "answerable": true
     },
@@ -26,6 +29,7 @@
       "id": "expense-approval",
       "question": "Who approves a claim over 500 dollars?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 2,
       "answerable": true
     },
@@ -33,6 +37,7 @@
       "id": "mileage-rate",
       "question": "What is the mileage reimbursement rate?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 2,
       "answerable": true
     },
@@ -40,6 +45,7 @@
       "id": "fire-assembly",
       "question": "Where is the fire assembly point?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 3,
       "answerable": true,
       "hard": "distractor: the facilities guide also mentions Wellington Street, for parking"
@@ -48,6 +54,7 @@
       "id": "password-length",
       "question": "How long do passwords need to be?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 4,
       "answerable": true
     },
@@ -55,6 +62,7 @@
       "id": "policy-code-hr",
       "question": "What does POL-HR-014 cover?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 1,
       "answerable": true,
       "hard": "exact identifier — dense embeddings are weakest here, lexical search strongest"
@@ -63,6 +71,7 @@
       "id": "policy-code-fin",
       "question": "Which policy is POL-FIN-022?",
       "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
       "page": 2,
       "answerable": true,
       "hard": "exact identifier"
@@ -71,6 +80,7 @@
       "id": "notice-period",
       "question": "What is the notice period after probation?",
       "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
       "page": 2,
       "answerable": true,
       "hard": "cross-document: the handbook also discusses leave notice"
@@ -79,6 +89,7 @@
       "id": "probation-length",
       "question": "How long is the probation period?",
       "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
       "page": 1,
       "answerable": true
     },
@@ -86,6 +97,7 @@
       "id": "salary-review",
       "question": "When is salary reviewed?",
       "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
       "page": 3,
       "answerable": true
     },
@@ -93,6 +105,7 @@
       "id": "overtime",
       "question": "Is overtime paid?",
       "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
       "page": 3,
       "answerable": true
     },
@@ -100,6 +113,7 @@
       "id": "staff-parking",
       "question": "Where do staff park?",
       "document": "facilities-guide",
+      "knowledgeBase": "Facilities & Operations",
       "page": 2,
       "answerable": true,
       "hard": "distractor: the handbook's fire assembly point is on the same street"
@@ -108,6 +122,7 @@
       "id": "building-hours",
       "question": "What time does the building open?",
       "document": "facilities-guide",
+      "knowledgeBase": "Facilities & Operations",
       "page": 1,
       "answerable": true
     },
@@ -115,6 +130,7 @@
       "id": "boardroom-capacity",
       "question": "How many people does the boardroom seat?",
       "document": "facilities-guide",
+      "knowledgeBase": "Facilities & Operations",
       "page": 3,
       "answerable": true
     },
@@ -122,6 +138,7 @@
       "id": "catering-notice",
       "question": "How far ahead must catering be ordered?",
       "document": "facilities-guide",
+      "knowledgeBase": "Facilities & Operations",
       "page": 3,
       "answerable": true
     },

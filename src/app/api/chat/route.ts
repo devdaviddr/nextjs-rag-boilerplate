@@ -1,9 +1,13 @@
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 import { db } from '@/db'
-import { conversations, messages } from '@/db/schema'
+import {
+  conversationKnowledgeBases,
+  conversations,
+  messages,
+} from '@/db/schema'
 import type { StoredCitation } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
@@ -18,12 +22,21 @@ import {
   isRagConfigured,
 } from '@/lib/rag/client'
 import { NO_CONTEXT_ANSWER } from '@/lib/rag/constants'
+import { stripUnsupported } from '@/lib/rag/verify'
 import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
 import {
   listReadyDocuments,
   retrieveDocumentChunks,
   retrieveForOwner,
 } from '@/lib/rag/retrieve'
+import {
+  type AgenticResult,
+  runAgenticRetrieval,
+  verifyCitations,
+} from '@/lib/rag/agentic-run'
+import type { RetrievedChunk } from '@/lib/rag/retrieve'
+import { resolvePermittedKnowledgeBaseIds } from '@/lib/rag/kb-scope'
+import { REWRITE_CONTEXT_TURNS } from '@/lib/rag/rewrite'
 import { resolveScope } from '@/lib/rag/scope'
 
 /**
@@ -47,6 +60,12 @@ export const dynamic = 'force-dynamic'
 interface ChatRequestBody {
   question?: unknown
   conversationId?: unknown
+  // Only honoured when CREATING a conversation. A thread's scope is fixed at
+  // creation (spec 0028), so every message in it has one auditable scope and a
+  // multi-search loop cannot straddle two different notions of what was
+  // permitted. Sending it with an existing conversationId is ignored, not an
+  // error — the client has no way to change it.
+  knowledgeBaseIds?: unknown
 }
 
 function line(payload: unknown): Uint8Array {
@@ -109,6 +128,7 @@ export async function POST(request: Request) {
 
   let conversationId: string
   let conversationTitle: string
+  let permittedKbIds: string[]
 
   if (requestedId) {
     const [existing] = await db
@@ -126,7 +146,27 @@ export async function POST(request: Request) {
     }
     conversationId = existing.id
     conversationTitle = existing.title
+
+    // Read the scope back from the join table rather than from the request, so
+    // a client cannot widen an existing thread's reach by sending a different
+    // selection with a follow-up.
+    const scopeRows = await db
+      .select({ id: conversationKnowledgeBases.knowledgeBaseId })
+      .from(conversationKnowledgeBases)
+      .where(eq(conversationKnowledgeBases.conversationId, existing.id))
+    permittedKbIds = scopeRows.map((r) => r.id)
   } else {
+    // Undefined means "everything I own" — the default for a new conversation.
+    // An explicitly EMPTY array means the user deselected everything, and stays
+    // empty. The two must never collapse into each other (spec 0028 NFR3).
+    const requestedKbIds = Array.isArray(body.knowledgeBaseIds)
+      ? body.knowledgeBaseIds.filter((v): v is string => typeof v === 'string')
+      : undefined
+    permittedKbIds = await resolvePermittedKnowledgeBaseIds(
+      userId,
+      requestedKbIds,
+    )
+
     const [created] = await db
       .insert(conversations)
       .values({ ownerId: userId, title: deriveTitle(question) })
@@ -134,6 +174,15 @@ export async function POST(request: Request) {
     if (!created) throw new Error('Failed to create the conversation.')
     conversationId = created.id
     conversationTitle = created.title
+
+    if (permittedKbIds.length > 0) {
+      await db.insert(conversationKnowledgeBases).values(
+        permittedKbIds.map((knowledgeBaseId) => ({
+          conversationId: created.id,
+          knowledgeBaseId,
+        })),
+      )
+    }
   }
 
   // Persisted BEFORE the model is called, so a question is never lost even if
@@ -145,27 +194,67 @@ export async function POST(request: Request) {
     content: question,
   })
 
-  // Two retrieval paths (spec 0025): similarity search for content questions,
-  // whole-document retrieval for summarise/overview requests. Both are
-  // owner-scoped in the SQL itself.
-  const scope = resolveScope(question, await listReadyDocuments(userId))
-  const retrieved =
-    scope.mode === 'document'
-      ? await retrieveDocumentChunks(
-          userId,
-          scope.documentId,
-          env.RAG_DOC_SCOPE_MAX_CHUNKS,
-        )
-      : await retrieveForOwner(userId, question)
+  /**
+   * Gather evidence.
+   *
+   * Runs INSIDE the stream (spec 0029 FR7) so phase events can reach the client
+   * while it works. The agentic path can take many seconds before any prose
+   * exists; without a heartbeat the user stares at a spinner with no idea
+   * whether anything is happening.
+   *
+   * Both paths bind `userId` and `permittedKbIds` from the session and the
+   * conversation. Neither reads scope from anything the model produced.
+   */
+  const gatherEvidence = async (
+    emit: (phase: string, iteration?: number) => void,
+  ): Promise<RetrievedChunk[]> => {
+    // An empty permitted set cannot produce a candidate row, so it
+    // short-circuits before any embedding call. Reached both for a deliberate
+    // empty selection and for a user with no knowledge bases at all; the UI
+    // prevents the latter from getting this far.
+    if (permittedKbIds.length === 0) return []
 
-  const citations: StoredCitation[] = retrieved.map((chunk, i) => ({
-    index: i + 1,
-    chunkId: chunk.chunkId,
-    documentId: chunk.documentId,
-    documentTitle: chunk.documentTitle,
-    pageNumber: chunk.pageNumber,
-    similarity: Number(chunk.similarity.toFixed(4)),
-  }))
+    if (env.RAG_AGENTIC_ENABLED) {
+      // The last few turns, oldest first, for pronoun resolution.
+      const priorRows = await db
+        .select({ role: messages.role, content: messages.content })
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(desc(messages.createdAt))
+        .limit(REWRITE_CONTEXT_TURNS + 1)
+      // Drop the question just persisted above — it is the thing being
+      // rewritten, not context for the rewrite.
+      const turns = priorRows.slice(1).reverse()
+
+      const result = await runAgenticRetrieval({
+        userId,
+        permittedKbIds,
+        question,
+        turns,
+        onStep: emit,
+        signal: request.signal,
+      })
+      agenticTrace = result
+      retrievalMode = 'agentic'
+      return result.chunks
+    }
+
+    // Fixed pipeline (spec 0025): similarity search for content questions,
+    // whole-document retrieval for summarise/overview requests.
+    const scope = resolveScope(
+      question,
+      await listReadyDocuments(userId, permittedKbIds),
+    )
+    retrievalMode = scope.mode
+    return scope.mode === 'document'
+      ? retrieveDocumentChunks(userId, scope.documentId, permittedKbIds)
+      : retrieveForOwner(userId, question, permittedKbIds)
+  }
+
+  // Assigned once evidence has been gathered; `persistAnswer` closes over it.
+  let citations: StoredCitation[] = []
+  let agenticTrace: AgenticResult | null = null
+  let retrievalMode: 'search' | 'document' | 'agentic' = 'search'
 
   /**
    * Commit the answer. Called on normal completion AND on a client
@@ -237,9 +326,42 @@ export async function POST(request: Request) {
 
       try {
         send({ type: 'conversation', conversationId, title: conversationTitle })
+
+        const retrieved = await gatherEvidence((phase, iteration) => {
+          send({ type: 'step', phase, iteration })
+        })
+        citations = retrieved.map((chunk, i) => ({
+          index: i + 1,
+          chunkId: chunk.chunkId,
+          documentId: chunk.documentId,
+          documentTitle: chunk.documentTitle,
+          pageNumber: chunk.pageNumber,
+          similarity: Number(chunk.similarity.toFixed(4)),
+        }))
         send({ type: 'citations', citations })
 
-        // Nothing relevant: answer without an inference call at all.
+        // The full trace (spec 0029 FR9). Logged rather than streamed: it is
+        // for debugging a bad answer after the fact, and the rewritten query in
+        // particular is the first thing to look at when retrieval went wrong.
+        if (agenticTrace) {
+          logger.info('Agentic trace', {
+            userId,
+            conversationId,
+            original: question,
+            query: agenticTrace.query,
+            rewritten: agenticTrace.rewritten,
+            skippedRetrieval: agenticTrace.skippedRetrieval,
+            termination: agenticTrace.termination,
+            searches: agenticTrace.searches,
+            tokensUsed: agenticTrace.tokensUsed,
+            steps: agenticTrace.steps,
+          })
+        }
+
+        // Nothing relevant: answer without an inference call at all. This is
+        // the guarantee made concrete — with no retrieved context there is no
+        // drafting call in which to hallucinate. It stays a code path here,
+        // around the loop, never something the model is asked to honour.
         if (retrieved.length === 0) {
           answer = NO_CONTEXT_ANSWER
           send({ type: 'token', value: answer })
@@ -249,6 +371,7 @@ export async function POST(request: Request) {
           return
         }
 
+        send({ type: 'step', phase: 'drafting' })
         const startedAt = Date.now()
         const upstream = await createChatStream(
           [
@@ -304,6 +427,41 @@ export async function POST(request: Request) {
           }
         }
 
+        // Verify citations before the answer is committed (spec 0029 FR6).
+        //
+        // This runs AFTER streaming rather than before it. Verifying first
+        // would mean buffering the whole answer, which kills token streaming
+        // and makes time-to-first-token meaningless on every single answer —
+        // a permanent regression to prevent a brief exposure that the revision
+        // then removes. The PERSISTED record is always the verified text, so
+        // reopening the thread never shows an unsupported claim.
+        if (
+          retrievalMode === 'agentic' &&
+          citations.length > 0 &&
+          answer.trim()
+        ) {
+          send({ type: 'step', phase: 'verifying' })
+          const unsupported = await verifyCitations(
+            answer,
+            retrieved,
+            request.signal,
+          )
+          const verified = stripUnsupported(answer, unsupported)
+          if (verified.strippedIndices.length > 0) {
+            logger.warn('Stripped unsupported citations', {
+              userId,
+              conversationId,
+              stripped: verified.strippedIndices,
+            })
+            answer = verified.empty ? NO_CONTEXT_ANSWER : verified.text
+            send({
+              type: 'revision',
+              value: answer,
+              stripped: verified.strippedIndices,
+            })
+          }
+        }
+
         const metrics = computeMetrics({
           model: chatModelName(),
           promptTokens,
@@ -312,7 +470,7 @@ export async function POST(request: Request) {
           firstTokenAt,
           finishedAt: Date.now(),
           sourceCount: citations.length,
-          retrieval: scope.mode,
+          retrieval: retrievalMode,
         })
         await persistAnswer(answer, metrics)
         send({ type: 'metrics', metrics })

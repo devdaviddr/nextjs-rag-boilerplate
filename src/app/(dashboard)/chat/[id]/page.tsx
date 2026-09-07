@@ -4,7 +4,8 @@ import { notFound, redirect } from 'next/navigation'
 import { ChatView } from '@/components/chat/chat-view'
 import { getCurrentSession } from '@/lib/auth/session'
 import { getConversation } from '@/lib/chat/actions'
-import { listMyDocuments, ragStatus } from '@/lib/rag/actions'
+import { listMyKnowledgeBases } from '@/lib/rag/kb-actions'
+import { ragStatus } from '@/lib/rag/actions'
 
 export async function generateMetadata({
   params,
@@ -25,9 +26,9 @@ export default async function ConversationPage({
   if (!session?.user) redirect('/login')
 
   const { id } = await params
-  const [conversation, documents, { configured }] = await Promise.all([
+  const [conversation, knowledgeBases, { configured }] = await Promise.all([
     getConversation(id),
-    listMyDocuments(),
+    listMyKnowledgeBases(),
     ragStatus(),
   ])
 
@@ -38,8 +39,9 @@ export default async function ConversationPage({
   return (
     <ChatView
       configured={configured}
-      readyDocumentCount={documents.filter((d) => d.status === 'ready').length}
+      knowledgeBases={knowledgeBases}
       conversationId={conversation.id}
+      knowledgeBaseIds={conversation.knowledgeBaseIds}
       initialMessages={conversation.messages}
     />
   )

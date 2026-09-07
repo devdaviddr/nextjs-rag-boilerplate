@@ -260,14 +260,26 @@ started.
 
 ```mermaid
 erDiagram
+    users ||--o{ knowledge_bases : owns
     users ||--o{ documents : owns
     users ||--o{ chunks : owns
+    knowledge_bases ||--o{ documents : "cascade delete"
+    knowledge_bases ||--o{ chunks : "cascade delete"
     documents ||--o{ chunks : "cascade delete"
     files ||--|| documents : "stored PDF"
+    conversations ||--o{ conversation_knowledge_bases : "fixed at creation"
+    knowledge_bases ||--o{ conversation_knowledge_bases : "searchable from"
 
+    knowledge_bases {
+        text id PK
+        text owner_id FK
+        text name
+        text description
+    }
     documents {
         text id PK
         text owner_id FK
+        text knowledge_base_id FK
         text file_id FK
         text title
         int page_count
@@ -278,6 +290,7 @@ erDiagram
         text id PK
         text document_id FK
         text owner_id FK
+        text knowledge_base_id FK
         text content
         int page_number
         int chunk_index
@@ -287,6 +300,22 @@ erDiagram
 ```
 
 `chunks.owner_id` duplicates `documents.owner_id` on purpose — see guarantee 2.
+`chunks.knowledge_base_id` duplicates `documents.knowledge_base_id` for exactly
+the same reason, and it is worth being precise about what that reason is.
+
+Both retrieval channels query `chunks` **directly**: the dense one orders by
+`embedding <=> $q` under an HNSW index where the filter is applied _after_ the
+ANN scan, and the lexical one runs a GIN bitmap scan. Reaching a chunk's KB
+through a join to `documents` would put a per-candidate lookup on that hot path
+and, as data grows, invite the planner to abandon the index path altogether.
+Correct results, silently degrading, no error — the same failure shape as the
+`vector`/`halfvec` trap above.
+
+A document therefore lives in **exactly one** knowledge base. Many-to-many would
+make a chunk's KB membership non-scalar, forcing either that join or a
+duplicated 2048-dimension embedding per membership. `moveDocument` re-tags both
+tables in one transaction instead, so refiling a document costs a `WHERE` clause
+rather than hundreds of rate-limited embedding calls.
 
 ---
 
@@ -315,6 +344,41 @@ document** instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
 Scoping is deliberately conservative: an ambiguous "summarise this" across
 several documents falls back to similarity search rather than guessing which
 document you meant.
+
+`src/lib/rag/scope.ts` itself knows nothing about knowledge bases, and needs no
+code to. It takes an opaque, pre-filtered document list, so KB-awareness is
+entirely a question of what the caller passes in. That matters more than it
+sounds: its "only one document" shortcut must mean _one document in the selected
+knowledge bases_, not one document in the whole account, or the shortcut
+silently stops firing for anyone with a second document anywhere.
+
+### Scoping: which knowledge bases
+
+A conversation carries a set of knowledge bases, fixed when it is created, and
+retrieval cannot see outside it. The predicate sits beside `owner_id` in the
+same `WHERE` clause, in **all five** places that clause appears — the dense CTE,
+the lexical CTE, the final `SELECT`, `listReadyDocuments`, and
+`retrieveDocumentChunks`.
+
+Adding it only to the final `SELECT` would be correct and still wrong: the CTEs'
+`LIMIT` candidate pool would be consumed by out-of-scope chunks, starving real
+candidates before fusion ever ran.
+
+`retrieveDocumentChunks` is the one to watch. It fetches a whole document by id
+and gates on owner alone, which is sufficient only while owner is the only
+boundary that exists. With knowledge bases, a conversation scoped to KB A that
+resolves a document title belonging to the same user's KB B would retrieve it —
+`owner_id` never fires, because it is the same person. That failure does not
+look like a leak in testing; it looks like retrieval being slightly generous.
+
+An **empty** selection returns nothing without calling the embedding API at all.
+It must never widen into "no filter" — that is the single silent-failure mode
+this design is built around, and it is asserted in the unit tests rather than
+left to reading.
+
+Because the dense channel's filter is applied after the ANN scan, a second
+narrowing predicate thins the candidate pool further. `RAG_HYBRID_CANDIDATES`
+therefore scales with the number of selected knowledge bases, up to a ceiling.
 
 ### Hybrid retrieval — dense and lexical, fused
 
@@ -547,6 +611,41 @@ implementation:
 | hit@3            | 0.882      | **0.941**        | +0.059        |
 | MRR              | 0.853      | **0.941**        | +0.088        |
 | Refusal accuracy | 1.000      | **1.000**        | no regression |
+
+Introducing knowledge bases held every one of those numbers exactly — the
+boundary narrows _what_ is searched, not how well.
+
+### Cross-knowledge-base leakage
+
+The harness splits the corpus across two knowledge bases — `HR & Employment`
+(staff handbook, employment contract) and `Facilities & Operations` (facilities
+guide) — deliberately putting the engineered overlap **across** the boundary:
+the handbook's fire assembly point and the guide's staff parking are both on
+Wellington Street. Splitting the other way would make the check pass for the
+wrong reason, because there would be nothing to leak.
+
+Every answerable question then runs twice more:
+
+- scoped to only the knowledge base that does **not** hold its answer — any
+  chunk returned from an unselected KB is a leak, and the correct count is **0**
+- scoped to only the knowledge base that **does** hold it — because a filter
+  returning nothing at all would otherwise pass the leakage check trivially
+  while breaking retrieval entirely
+
+`crossKbLeakage > 0` fails the run. Measured: **0 leaks**, and 16 of 17
+questions still found via their own KB alone. The one miss is the known-weak
+exact-identifier case below, which fails unscoped too, so it is not a
+regression.
+
+### The refusal gate
+
+`pnpm rag:eval --label <name> --baseline <name>` fails the run outright if
+refusal accuracy is below the baseline's, whatever every other metric does.
+
+This is not hypothetical. A change once took MRR to 0.971 while silently taking
+refusal accuracy from 1.000 to **0.000** — every headline number improved while
+the property the system exists to provide disappeared. Measuring it was not
+enough; the gate is what stops it shipping by accident.
 
 ## Known gaps
 

@@ -17,12 +17,17 @@ erDiagram
     users ||--o{ push_subscriptions : "devices"
     users ||--o{ authenticators : "passkeys"
     users ||..o{ verification_tokens : "by email (not FK)"
-    users ||--o{ documents : "knowledge base"
+    users ||--o{ knowledge_bases : "owns"
+    users ||--o{ documents : "owns (denormalised)"
     users ||--o{ chunks : "owns (denormalised)"
     users ||--o{ conversations : "owns"
+    knowledge_bases ||--o{ documents : "cascade"
+    knowledge_bases ||--o{ chunks : "cascade (denormalised)"
     files ||--|| documents : "stored PDF"
     documents ||--o{ chunks : "cascade"
     conversations ||--o{ messages : "cascade"
+    conversations ||--o{ conversation_knowledge_bases : "cascade"
+    knowledge_bases ||--o{ conversation_knowledge_bases : "cascade"
 
     users {
         text id PK
@@ -121,21 +126,23 @@ erDiagram
 
 ### Schema Tables
 
-| Table                 | Purpose                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------ |
-| `users`               | Accounts with password, email, invites, avatar                                       |
-| `accounts`            | OAuth provider links (GitHub/Google)                                                 |
-| `sessions`            | Database sessions (unused under JWT strategy)                                        |
-| `verification_tokens` | Single-use tokens for password reset & email verification                            |
-| `authenticators`      | WebAuthn/passkey credentials                                                         |
-| `roles`               | Roles: admin, member, viewer                                                         |
-| `user_roles`          | Many-to-many users ↔ roles                                                           |
-| `files`               | Uploaded file metadata + S3 storage                                                  |
-| `push_subscriptions`  | Web Push subscriptions per device                                                    |
-| `documents`           | A PDF in a user's knowledge base + its ingestion status                              |
-| `chunks`              | Indexed passages: `halfvec(2048)` embedding + generated `tsvector` for hybrid search |
-| `conversations`       | Chat threads, ordered in Recents by `updated_at`                                     |
-| `messages`            | Turns, with stored citations and generation metrics                                  |
+| Table                          | Purpose                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| `users`                        | Accounts with password, email, invites, avatar                                       |
+| `accounts`                     | OAuth provider links (GitHub/Google)                                                 |
+| `sessions`                     | Database sessions (unused under JWT strategy)                                        |
+| `verification_tokens`          | Single-use tokens for password reset & email verification                            |
+| `authenticators`               | WebAuthn/passkey credentials                                                         |
+| `roles`                        | Roles: admin, member, viewer                                                         |
+| `user_roles`                   | Many-to-many users ↔ roles                                                           |
+| `files`                        | Uploaded file metadata + S3 storage                                                  |
+| `push_subscriptions`           | Web Push subscriptions per device                                                    |
+| `knowledge_bases`              | An independent, user-owned collection of documents                                   |
+| `documents`                    | A PDF in one knowledge base + its ingestion status                                   |
+| `chunks`                       | Indexed passages: `halfvec(2048)` embedding + generated `tsvector` for hybrid search |
+| `conversations`                | Chat threads, ordered in Recents by `updated_at`                                     |
+| `messages`                     | Turns, with stored citations and generation metrics                                  |
+| `conversation_knowledge_bases` | Which knowledge bases a thread may search — fixed at creation                        |
 
 ### Migration Workflow
 

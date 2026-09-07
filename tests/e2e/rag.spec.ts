@@ -33,6 +33,27 @@ async function register(page: import('@playwright/test').Page, tag: string) {
   return email
 }
 
+/** Create a knowledge base from `/documents` and return its id (spec 0028 —
+ * a document is always uploaded into a specific KB, never a flat pool, so
+ * every ingestion in this file needs one to upload into first). */
+async function createKnowledgeBase(
+  page: import('@playwright/test').Page,
+  name: string,
+): Promise<string> {
+  await page.goto('/documents')
+  await page.getByRole('button', { name: 'New knowledge base' }).click()
+  await page.getByLabel('Name').fill(name)
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  const link = page.getByRole('link', { name })
+  await expect(link).toBeVisible()
+  const href = await link.getAttribute('href')
+  const kbId = href?.split('/').pop()
+  if (!kbId) {
+    throw new Error(`Could not read the id for "${name}" from its link.`)
+  }
+  return kbId
+}
+
 test.describe('knowledge base', () => {
   test.slow()
 
@@ -41,7 +62,8 @@ test.describe('knowledge base', () => {
   }) => {
     await register(page, 'happy')
 
-    await page.goto('/documents')
+    const kbId = await createKnowledgeBase(page, 'My documents')
+    await page.goto(`/documents/${kbId}`)
     await expect(
       page.getByText('No documents yet. Upload a PDF to get started.'),
     ).toBeVisible()
@@ -92,7 +114,7 @@ test.describe('knowledge base', () => {
     ).toHaveCount(0)
 
     // FR8: delete removes it from the knowledge base.
-    await page.goto('/documents')
+    await page.goto(`/documents/${kbId}`)
     await page.getByRole('button', { name: /Delete handbook/i }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
@@ -106,7 +128,8 @@ test.describe('knowledge base', () => {
   }) => {
     await register(page, 'scanned')
 
-    await page.goto('/documents')
+    const kbId = await createKnowledgeBase(page, 'My documents')
+    await page.goto(`/documents/${kbId}`)
     await page
       .getByLabel('Upload a PDF')
       .setInputFiles(`${FIXTURES}/no-text-layer.pdf`)
@@ -140,8 +163,11 @@ test.describe('knowledge base', () => {
   }) => {
     await register(page, 'nocontext')
 
-    // No documents at all: retrieval finds nothing, so the chat model must
-    // never be called and the fixed response is returned.
+    // A knowledge base must exist for the composer to be usable at all (spec
+    // 0028 FR7 — zero KBs disables Send entirely). It has no documents, so
+    // retrieval still finds nothing and the chat model must never be called.
+    await createKnowledgeBase(page, 'My documents')
+
     await page.goto('/chat')
     await page
       .getByLabel('Question')
@@ -167,7 +193,8 @@ test('re-ingesting a document does not duplicate its chunks', async ({
   test.skip(!dbUrl, 'DATABASE_URL is required for this test')
 
   const email = await register(page, 'reingest')
-  await page.goto('/documents')
+  const kbId = await createKnowledgeBase(page, 'My documents')
+  await page.goto(`/documents/${kbId}`)
   await page
     .getByLabel('Upload a PDF')
     .setInputFiles(`${FIXTURES}/handbook.pdf`)

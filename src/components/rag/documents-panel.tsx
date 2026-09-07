@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FileText, RotateCw, Trash2, Upload } from 'lucide-react'
+import { FileText, FolderInput, RotateCw, Trash2, Upload } from 'lucide-react'
 
 import { FormMessage } from '@/components/auth/field-error'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Table,
   TableBody,
   TableCell,
@@ -36,6 +43,7 @@ import {
   uploadDocument,
   type DocumentSummary,
 } from '@/lib/rag/actions'
+import { moveDocument, type KnowledgeBaseSummary } from '@/lib/rag/kb-actions'
 
 const IN_FLIGHT = new Set(['pending', 'extracting', 'embedding'])
 
@@ -56,11 +64,15 @@ function statusVariant(
 }
 
 interface DocumentsPanelProps {
+  knowledgeBaseId: string
+  knowledgeBases: KnowledgeBaseSummary[]
   initialDocuments: DocumentSummary[]
   configured: boolean
 }
 
 export function DocumentsPanel({
+  knowledgeBaseId,
+  knowledgeBases,
   initialDocuments,
   configured,
 }: DocumentsPanelProps) {
@@ -71,13 +83,18 @@ export function DocumentsPanel({
   const [isDeleting, setIsDeleting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Every other knowledge base the user owns — the "Move to…" candidates.
+  const otherKnowledgeBases = knowledgeBases.filter(
+    (kb) => kb.id !== knowledgeBaseId,
+  )
+
   const refresh = useCallback(async () => {
     try {
-      setDocuments(await listMyDocuments())
+      setDocuments(await listMyDocuments(knowledgeBaseId))
     } catch {
       // Session may have lapsed mid-page; the next navigation redirects.
     }
-  }, [])
+  }, [knowledgeBaseId])
 
   // Ingestion runs out-of-band, so the only way the UI learns it finished is
   // to ask. Polling stops as soon as nothing is in flight.
@@ -94,6 +111,9 @@ export function DocumentsPanel({
     try {
       const formData = new FormData()
       formData.append('file', file)
+      // Upload always targets the KB whose page this is — there is no picker
+      // (spec 0028 FR3), so the target is never ambiguous.
+      formData.append('knowledgeBaseId', knowledgeBaseId)
       const result = await uploadDocument(formData)
       if (!result.ok) setError(result.error)
       await refresh()
@@ -106,6 +126,18 @@ export function DocumentsPanel({
   const handleRetry = async (id: string) => {
     setError(null)
     const result = await retryDocument(id)
+    if (!result.ok) setError(result.error)
+    await refresh()
+  }
+
+  // Re-tags rows only — no re-extraction, no re-chunking, no re-embedding
+  // (spec 0028 FR4). The document simply drops out of this list on refresh.
+  const handleMove = async (
+    documentId: string,
+    targetKnowledgeBaseId: string,
+  ) => {
+    setError(null)
+    const result = await moveDocument(documentId, targetKnowledgeBaseId)
     if (!result.ok) setError(result.error)
     await refresh()
   }
@@ -210,6 +242,31 @@ export function DocumentsPanel({
                         >
                           <RotateCw className="size-4" />
                         </Button>
+                      )}
+                      {otherKnowledgeBases.length > 0 && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Move ${doc.title}`}
+                            >
+                              <FolderInput className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Move to</DropdownMenuLabel>
+                            {otherKnowledgeBases.map((kb) => (
+                              <DropdownMenuItem
+                                key={kb.id}
+                                onSelect={() => void handleMove(doc.id, kb.id)}
+                              >
+                                {kb.name}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       <Button
                         type="button"

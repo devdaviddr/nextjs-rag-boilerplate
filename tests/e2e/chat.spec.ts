@@ -22,6 +22,26 @@ async function register(page: import('@playwright/test').Page, tag: string) {
   return email
 }
 
+/** Create a knowledge base from `/documents` and return its id (spec 0028 —
+ * a document is always uploaded into a specific KB, never a flat pool). */
+async function createKnowledgeBase(
+  page: import('@playwright/test').Page,
+  name: string,
+): Promise<string> {
+  await page.goto('/documents')
+  await page.getByRole('button', { name: 'New knowledge base' }).click()
+  await page.getByLabel('Name').fill(name)
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  const link = page.getByRole('link', { name })
+  await expect(link).toBeVisible()
+  const href = await link.getAttribute('href')
+  const kbId = href?.split('/').pop()
+  if (!kbId) {
+    throw new Error(`Could not read the id for "${name}" from its link.`)
+  }
+  return kbId
+}
+
 test('signing in lands on the chat, and there is no dashboard', async ({
   page,
 }) => {
@@ -105,7 +125,8 @@ test.describe('with an indexed document', () => {
   }) => {
     await register(page, 'persist')
 
-    await page.goto('/documents')
+    const kbId = await createKnowledgeBase(page, 'My documents')
+    await page.goto(`/documents/${kbId}`)
     await page
       .getByLabel('Upload a PDF')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
@@ -164,7 +185,8 @@ test.describe('with an indexed document', () => {
     page,
   }) => {
     await register(page, 'headers')
-    await page.goto('/documents')
+    const kbId = await createKnowledgeBase(page, 'My documents')
+    await page.goto(`/documents/${kbId}`)
     await page
       .getByLabel('Upload a PDF')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)

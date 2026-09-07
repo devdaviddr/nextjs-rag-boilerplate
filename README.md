@@ -30,7 +30,7 @@ An opinionated, batteries-included template built on **Next.js 16** (App Router,
 - 🧑‍⚖️ **Role-based access control** — roles on the JWT, edge + server guards, admin user-management, invite-based account claim
 - 🗄️ **PostgreSQL + Drizzle ORM** — type-safe schema (see the **[ERD](docs/database.md#entity-relationship-diagram)**), committed migrations
 - 📁 **File uploads** — self-hosted, S3-compatible object storage (MinIO), size/type validation, per-user quota
-- 🧠 **[RAG document chat](docs/rag.md)** — PDF knowledge base, `pgvector` + HNSW retrieval, answers grounded in your own documents, clickable page-level citations, conversation history, and per-answer generation metrics
+- 🧠 **[RAG document chat](docs/rag.md)** — multiple independent PDF knowledge bases, hybrid `pgvector` + `tsvector` retrieval fused with RRF, answers grounded in your own documents, clickable page-level citations, conversation history, and per-answer generation metrics
 - 📱 **PWA + responsive app shell** — installable, offline-resilient, **[Web Push](docs/push.md)**, light/dark theming, mobile-to-desktop layout
 - 🔎 **SEO** — OpenGraph/Twitter cards, `robots.txt` + `sitemap.xml`
 - 💾 **[Automated backups](docs/backups.md)** — nightly Postgres + MinIO, doctor script, tested restore runbook

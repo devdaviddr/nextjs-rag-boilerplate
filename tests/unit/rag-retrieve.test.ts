@@ -10,7 +10,12 @@ vi.mock('@/lib/env', () => ({ env: mockEnv }))
 vi.mock('@/db', () => ({ db: { execute } }))
 vi.mock('@/lib/rag/embed', () => ({ embedQuery }))
 
-import { retrieveForOwner, toVectorLiteral } from '@/lib/rag/retrieve'
+import {
+  listReadyDocuments,
+  retrieveDocumentChunks,
+  retrieveForOwner,
+  toVectorLiteral,
+} from '@/lib/rag/retrieve'
 
 /**
  * Flatten a Drizzle `sql` template into its text and bound parameters, so a
@@ -62,10 +67,17 @@ function inspect(query: SqlChunk): { text: string; params: unknown[] } {
 }
 
 const VECTOR = Array.from({ length: 8 }, (_, i) => i / 10)
+const KB_A = ['kb-a']
 
 beforeEach(() => {
   for (const key of Object.keys(mockEnv)) delete mockEnv[key]
-  Object.assign(mockEnv, { RAG_TOP_K: 8, RAG_MIN_SIMILARITY: 0.35 })
+  Object.assign(mockEnv, {
+    RAG_TOP_K: 8,
+    RAG_MIN_SIMILARITY: 0.35,
+    RAG_HYBRID_CANDIDATES: 20,
+    RAG_RRF_K: 60,
+    RAG_DOC_SCOPE_MAX_CHUNKS: 24,
+  })
   execute.mockReset()
   embedQuery.mockReset()
   embedQuery.mockResolvedValue(VECTOR)
@@ -80,7 +92,7 @@ describe('toVectorLiteral', () => {
 
 describe('retrieveForOwner — tenant isolation (spec 0025 NFR1)', () => {
   it('filters on owner_id inside the SQL, not after the fact', async () => {
-    await retrieveForOwner('user-a', 'anything')
+    await retrieveForOwner('user-a', 'anything', KB_A)
 
     const query = execute.mock.calls[0]?.[0] as SqlChunk
     const { text, params } = inspect(query)
@@ -90,7 +102,7 @@ describe('retrieveForOwner — tenant isolation (spec 0025 NFR1)', () => {
   })
 
   it('never sends another user id as the owner filter', async () => {
-    await retrieveForOwner('user-b', 'anything')
+    await retrieveForOwner('user-b', 'anything', KB_A)
     const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
     expect(params).toContain('user-b')
     expect(params).not.toContain('user-a')
@@ -100,22 +112,87 @@ describe('retrieveForOwner — tenant isolation (spec 0025 NFR1)', () => {
     // The database is the boundary: with owner_id bound, a foreign row is not
     // in the result set at all. This asserts the contract the query relies on.
     execute.mockResolvedValue([])
-    const results = await retrieveForOwner('user-b', 'what is in user A file?')
+    const results = await retrieveForOwner(
+      'user-b',
+      'what is in user A file?',
+      KB_A,
+    )
     expect(results).toEqual([])
   })
 
   it('embeds the question as a query, never as a passage', async () => {
-    await retrieveForOwner('user-a', 'a question')
+    await retrieveForOwner('user-a', 'a question', KB_A)
     // embedQuery is the only exported path for questions; embedPassages is a
     // separate function, so using the wrong input_type is not reachable here.
     expect(embedQuery).toHaveBeenCalledWith('a question')
   })
 
   it('orders by raw distance so the HNSW index can be used', async () => {
-    await retrieveForOwner('user-a', 'anything')
+    await retrieveForOwner('user-a', 'anything', KB_A)
     const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
     expect(text).toMatch(/ORDER BY\s+c\.embedding\s*<=>/)
     expect(text).toContain('::halfvec')
+  })
+})
+
+describe('retrieveForOwner — knowledge-base isolation (spec 0028 FR6, NFR1)', () => {
+  it('scopes the dense CTE to the permitted knowledge bases', async () => {
+    await retrieveForOwner('user-a', 'anything', KB_A)
+    const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+
+    const vecCte = text.slice(text.indexOf('vec AS'), text.indexOf('lex AS'))
+    expect(vecCte).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+  })
+
+  it('scopes the lexical CTE to the permitted knowledge bases', async () => {
+    await retrieveForOwner('user-a', 'anything', KB_A)
+    const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+
+    const lexCte = text.slice(text.indexOf('lex AS'), text.indexOf('fused AS'))
+    expect(lexCte).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+  })
+
+  it('scopes the final SELECT to the permitted knowledge bases', async () => {
+    await retrieveForOwner('user-a', 'anything', KB_A)
+    const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+
+    const finalSelect = text.slice(text.lastIndexOf('SELECT'))
+    expect(finalSelect).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+  })
+
+  it('binds the selected knowledge base ids as query parameters', async () => {
+    await retrieveForOwner('user-a', 'anything', ['kb-1', 'kb-2'])
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(params).toContain('kb-1')
+    expect(params).toContain('kb-2')
+  })
+
+  it('never lets an unrelated knowledge base id leak into the bound parameters', async () => {
+    await retrieveForOwner('user-a', 'anything', KB_A)
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(params).not.toContain('kb-b')
+  })
+
+  it('returns [] immediately for an empty knowledge base selection, with no embedding call and no query', async () => {
+    const results = await retrieveForOwner('user-a', 'anything', [])
+    expect(results).toEqual([])
+    expect(embedQuery).not.toHaveBeenCalled()
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('scales the candidate pool with the number of selected knowledge bases', async () => {
+    await retrieveForOwner('user-a', 'anything', ['kb-1', 'kb-2', 'kb-3'])
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    // RAG_HYBRID_CANDIDATES (20) * 3 selected KBs = 60, well under the ceiling.
+    expect(params).toContain(60)
+  })
+
+  it('caps the scaled candidate pool at a sane ceiling', async () => {
+    const manyKbs = Array.from({ length: 50 }, (_, i) => `kb-${i}`)
+    await retrieveForOwner('user-a', 'anything', manyKbs)
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    // 20 * 50 = 1000, which must be capped rather than sent as-is.
+    expect(params).not.toContain(1000)
   })
 })
 
@@ -131,19 +208,63 @@ describe('retrieveForOwner — similarity floor', () => {
 
   it('drops rows below the floor', async () => {
     execute.mockResolvedValue([row('a', 0.9), row('b', 0.2), row('c', 0.36)])
-    const results = await retrieveForOwner('user-a', 'q')
+    const results = await retrieveForOwner('user-a', 'q', KB_A)
     expect(results.map((r) => r.chunkId)).toEqual(['a', 'c'])
   })
 
   it('returns nothing when everything is below the floor', async () => {
     execute.mockResolvedValue([row('a', 0.1), row('b', 0.05)])
-    expect(await retrieveForOwner('user-a', 'q')).toEqual([])
+    expect(await retrieveForOwner('user-a', 'q', KB_A)).toEqual([])
   })
 
   it('honours an explicit override', async () => {
     execute.mockResolvedValue([row('a', 0.5)])
     expect(
-      await retrieveForOwner('user-a', 'q', { minSimilarity: 0.8 }),
+      await retrieveForOwner('user-a', 'q', KB_A, { minSimilarity: 0.8 }),
     ).toEqual([])
+  })
+})
+
+describe('listReadyDocuments — knowledge-base isolation (spec 0028 FR6)', () => {
+  it('filters on both owner_id and knowledge_base_id', async () => {
+    await listReadyDocuments('user-a', KB_A)
+    const { text, params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(text).toMatch(/WHERE\s+d\.owner_id\s*=/)
+    expect(text).toMatch(/d\.knowledge_base_id\s*=\s*ANY/)
+    expect(params).toContain('user-a')
+  })
+
+  it('returns [] immediately for an empty knowledge base selection, touching no database', async () => {
+    const results = await listReadyDocuments('user-a', [])
+    expect(results).toEqual([])
+    expect(execute).not.toHaveBeenCalled()
+  })
+})
+
+describe('retrieveDocumentChunks — the dangerous one (spec 0028)', () => {
+  it('filters on owner_id, the document id, and knowledge_base_id together', async () => {
+    await retrieveDocumentChunks('user-a', 'doc-1', KB_A)
+    const { text, params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(text).toMatch(/WHERE\s+c\.owner_id\s*=/)
+    expect(text).toMatch(/c\.document_id\s*=/)
+    expect(text).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+    expect(params).toContain('user-a')
+    expect(params).toContain('doc-1')
+  })
+
+  it('returns nothing when the document belongs to a knowledge base outside the permitted set', async () => {
+    // A document id belonging to the same owner's OTHER knowledge base: the
+    // real query's WHERE clause would exclude every one of its chunks, so
+    // the database returns no rows at all — never a row the app has to
+    // remember to filter out afterwards.
+    execute.mockResolvedValue([])
+    const results = await retrieveDocumentChunks('user-a', 'doc-in-kb-b', KB_A)
+    expect(results).toEqual([])
+  })
+
+  it('returns [] immediately for an empty knowledge base selection, touching no database', async () => {
+    const results = await retrieveDocumentChunks('user-a', 'doc-1', [])
+    expect(results).toEqual([])
+    expect(execute).not.toHaveBeenCalled()
   })
 })

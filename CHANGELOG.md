@@ -10,6 +10,30 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Agentic retrieval loop**
+  ([spec 0029](specs/0029-agentic-retrieval-loop.md)), behind
+  `RAG_AGENTIC_ENABLED` (default off). The model plans its own searches through
+  a `search_documents` tool, resolves conversational references itself, and can
+  search again when the first attempt is thin — inside hard caps on searches,
+  wall-clock and tokens. Refusal remains a code path around the loop, never
+  something the model is asked to honour. Citation verification strips claims
+  their sources do not support. A separate query-rewriting call was built,
+  measured at 15s, and folded into the planner instead. `step` frames report the
+  current phase so the client is never silent without a heartbeat.
+
+- **Independent knowledge bases**
+  ([spec 0028](specs/0028-independent-knowledge-bases.md)). A user can create,
+  rename and delete several knowledge bases, upload a PDF into a chosen one, and
+  move a document between them without re-ingesting it. A conversation searches
+  a set of knowledge bases chosen when the thread is created, and cannot
+  retrieve outside it — the filter sits beside `owner_id` in the same `WHERE`
+  clause in all five places that clause appears, including the whole-document
+  path where owner alone is no longer sufficient. `pnpm rag:eval` gains a
+  cross-knowledge-base leakage metric (measured: 0) and fails the run on a
+  refusal-accuracy regression against a saved baseline. Existing documents and
+  conversations are migrated into one "My documents" knowledge base per user,
+  with the backfill asserting its own correctness before it commits.
+
 - **Rag Boilerplate: chat-first UX, conversation history and source viewing**
   ([spec 0026](specs/0026-chat-first-ux-and-history.md)). The product is now
   called Rag Boilerplate, signing in opens a new chat, and the shell uses the

@@ -3,7 +3,11 @@
 import { and, asc, desc, eq } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { conversations, messages } from '@/db/schema'
+import {
+  conversationKnowledgeBases,
+  conversations,
+  messages,
+} from '@/db/schema'
 import type { StoredCitation, StoredMetrics } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
 import { logger } from '@/lib/logger'
@@ -57,6 +61,12 @@ export async function getConversation(conversationId: string): Promise<{
   id: string
   title: string
   messages: ConversationMessage[]
+  /**
+   * The knowledge bases this thread may search. Fixed when the conversation
+   * was created (spec 0028), so the UI renders it as state, not a control.
+   * Empty for a thread created with nothing selected.
+   */
+  knowledgeBaseIds: string[]
 } | null> {
   const userId = await requireUserId()
 
@@ -89,7 +99,16 @@ export async function getConversation(conversationId: string): Promise<{
     )
     .orderBy(asc(messages.createdAt))
 
-  return { ...conversation, messages: rows }
+  const scopeRows = await db
+    .select({ id: conversationKnowledgeBases.knowledgeBaseId })
+    .from(conversationKnowledgeBases)
+    .where(eq(conversationKnowledgeBases.conversationId, conversation.id))
+
+  return {
+    ...conversation,
+    messages: rows,
+    knowledgeBaseIds: scopeRows.map((r) => r.id),
+  }
 }
 
 export async function renameConversation(
