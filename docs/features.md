@@ -128,3 +128,22 @@ See [PWA & App Shell](pwa.md).
 - **GitHub Actions** CI: lint · typecheck · unit · E2E (with Postgres service) · Docker build.
 
 See [Usage & Development](usage.md) and [Deployment](deployment.md).
+
+## RAG — knowledge base & document chat
+
+- PDF upload into a private, per-user knowledge base (reuses the MinIO storage,
+  quota and rate limits from file uploads)
+- In-process extraction with `unpdf`; image-only PDFs are **rejected**, not
+  half-ingested
+- Token-aware, page-bounded chunking so every citation resolves to an exact page
+- `pgvector` `halfvec(2048)` with an HNSW cosine index, inside the existing
+  Postgres — no additional service
+- Owner-scoped retrieval enforced in the SQL `WHERE` clause
+- Grounded answers: when nothing clears the similarity floor the chat model is
+  **never called**
+- Two retrieval paths — similarity search for content questions, whole-document
+  retrieval for summarise/overview requests
+- Streamed Markdown answers with clickable page-level citations that open the
+  source PDF, conversation history, and per-answer generation metrics
+
+Full walkthrough: **[RAG — how it works](rag.md)**.

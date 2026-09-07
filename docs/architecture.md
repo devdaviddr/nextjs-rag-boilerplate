@@ -30,21 +30,63 @@ A single Next.js 16 application (App Router) backed by PostgreSQL. Rendering is 
 3. **Drizzle ORM** executes type-safe queries:
    - Against Postgres via pooled `postgres-js` client
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Browser
+    participant P as Edge proxy
+    participant R as Server Component
+    participant D as Postgres
+
+    U->>P: GET /chat
+    Note over P: Edge-safe auth config only —<br>no DB, no argon2
+    alt No valid session
+        P-->>U: 307 to /login
+    else Signed in
+        P->>R: forward, with a CSP nonce
+        R->>R: getCurrentSession() — defence in depth
+        R->>D: owner-scoped queries
+        D-->>R: rows
+        R-->>U: streamed HTML
+    end
+```
+
+The session is checked **twice on purpose**: once at the edge so unauthenticated
+requests never reach application code, and again server-side because the edge
+check alone is a single point of failure.
+
 ### Container Topology
 
 #### Production Stack (`docker-compose.prod.yml`)
 
+```mermaid
+flowchart TB
+    B["Browser"]
+
+    subgraph host["Your machine / server — nothing below is publicly exposed"]
+        direction TB
+        APP["app:3000<br>Next.js 16 · RSC · Server Actions<br>the only public gateway"]
+        DB[("db:5432<br>Postgres 17 + pgvector<br>users · files · documents<br>chunks · conversations · messages")]
+        S3[("minio:9000<br>PDFs and uploads")]
+    end
+
+    NIM["NVIDIA NIM<br>embeddings + chat<br>or any OpenAI-compatible endpoint"]
+
+    B -->|"HTTPS"| CF["Cloudflare Tunnel<br>no open ports, no certs"]
+    CF --> APP
+    APP -->|"SQL — Drizzle, pooled"| DB
+    APP -->|"S3 API"| S3
+    APP -.->|"THE ONLY OUTBOUND CALL<br>chunk text and questions"| NIM
+
+    style NIM stroke-dasharray: 4 4
 ```
-Internet (HTTPS)
-   │
-   ▼ Cloudflare Tunnel (public gateway)
-   │
-   ▼ app:3000 (Next.js service)
-   │
-   ├─ SQL → db:5432 (Postgres)
-   │
-   └─ S3 → minio:9000 (objects)
-```
+
+Postgres and MinIO have **no public ingress** — the Next.js app is the sole
+gateway, which is why a stored PDF is only ever reachable through an
+ownership-checked route. The one dashed edge is the only thing that leaves the
+machine: document text and questions, sent to the configured inference
+endpoint. Point `RAG_LLM_BASE_URL` at a local Ollama or llama.cpp and even that
+edge disappears.
 
 ### Authentication Design
 
