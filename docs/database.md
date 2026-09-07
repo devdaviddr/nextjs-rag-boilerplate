@@ -94,7 +94,9 @@ erDiagram
         text id PK
         text document_id FK
         text owner_id FK "denormalised: every retrieval filters on it"
-        text content
+        text content "what a citation displays"
+        text heading "detected section, prefixed to the EMBEDDED text only"
+        tsvector content_tsv "generated; lexical half of hybrid retrieval, GIN"
         int page_number "1-based, citations resolve to this"
         int chunk_index
         int token_count
@@ -119,21 +121,21 @@ erDiagram
 
 ### Schema Tables
 
-| Table                 | Purpose                                                   |
-| --------------------- | --------------------------------------------------------- |
-| `users`               | Accounts with password, email, invites, avatar            |
-| `accounts`            | OAuth provider links (GitHub/Google)                      |
-| `sessions`            | Database sessions (unused under JWT strategy)             |
-| `verification_tokens` | Single-use tokens for password reset & email verification |
-| `authenticators`      | WebAuthn/passkey credentials                              |
-| `roles`               | Roles: admin, member, viewer                              |
-| `user_roles`          | Many-to-many users ↔ roles                                |
-| `files`               | Uploaded file metadata + S3 storage                       |
-| `push_subscriptions`  | Web Push subscriptions per device                         |
-| `documents`           | A PDF in a user's knowledge base + its ingestion status   |
-| `chunks`              | Indexed passages with `halfvec(2048)` embeddings          |
-| `conversations`       | Chat threads, ordered in Recents by `updated_at`          |
-| `messages`            | Turns, with stored citations and generation metrics       |
+| Table                 | Purpose                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `users`               | Accounts with password, email, invites, avatar                                       |
+| `accounts`            | OAuth provider links (GitHub/Google)                                                 |
+| `sessions`            | Database sessions (unused under JWT strategy)                                        |
+| `verification_tokens` | Single-use tokens for password reset & email verification                            |
+| `authenticators`      | WebAuthn/passkey credentials                                                         |
+| `roles`               | Roles: admin, member, viewer                                                         |
+| `user_roles`          | Many-to-many users ↔ roles                                                           |
+| `files`               | Uploaded file metadata + S3 storage                                                  |
+| `push_subscriptions`  | Web Push subscriptions per device                                                    |
+| `documents`           | A PDF in a user's knowledge base + its ingestion status                              |
+| `chunks`              | Indexed passages: `halfvec(2048)` embedding + generated `tsvector` for hybrid search |
+| `conversations`       | Chat threads, ordered in Recents by `updated_at`                                     |
+| `messages`            | Turns, with stored citations and generation metrics                                  |
 
 ### Migration Workflow
 

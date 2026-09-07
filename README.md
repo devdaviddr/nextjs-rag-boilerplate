@@ -113,6 +113,8 @@ Full reference — see **[Usage & Development](docs/usage.md)** for details.
 | `pnpm docker:db`                     | Start local Postgres                                    |
 | `pnpm docker:minio`                  | Start local MinIO + one-shot bucket init                |
 | `pnpm docker:mail`                   | Start local Mailpit (email catcher for the email E2E)   |
+| `pnpm rag:eval`                      | Score retrieval against the ground-truth corpus         |
+| `pnpm rag:corpus`                    | Regenerate the evaluation corpus PDFs                   |
 | `pnpm gen:icons` · `pnpm gen:og`     | Regenerate the PWA icon set · the OpenGraph share image |
 
 **Before pushing:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
@@ -164,21 +166,22 @@ gaps — is in **[RAG — how it works](docs/rag.md)**.
 
 ## Tech stack
 
-| Layer      | Choice                                                                            |
-| ---------- | --------------------------------------------------------------------------------- |
-| Framework  | Next.js 16 · React 19 · TypeScript 5.9 (strict)                                   |
-| Auth       | Auth.js (NextAuth) v5 — Credentials + GitHub/Google OAuth, JWT, Argon2id, RBAC    |
-| Email      | Optional SMTP via nodemailer — off by default, any provider                       |
-| Database   | PostgreSQL 17 · Drizzle ORM + drizzle-kit                                         |
-| Storage    | MinIO (S3-compatible) · @aws-sdk/client-s3                                        |
-| Retrieval  | pgvector `halfvec(2048)` + HNSW (cosine) · owner-scoped kNN                       |
-| Extraction | unpdf (in-process, per-page text) — no OCR sidecar                                |
-| Inference  | Any OpenAI-compatible endpoint — NVIDIA NIM by default, or local Ollama/llama.cpp |
-| UI         | Tailwind CSS v4 · shadcn/ui · lucide-react                                        |
-| Validation | Zod (shared client/server schemas)                                                |
-| Testing    | Vitest + Testing Library · Playwright (Mailpit for email)                         |
-| Tooling    | ESLint (flat) · Prettier · Husky · lint-staged                                    |
-| Delivery   | Multi-stage Docker (standalone, non-root) · GitHub Actions                        |
+| Layer      | Choice                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| Framework  | Next.js 16 · React 19 · TypeScript 5.9 (strict)                                                |
+| Auth       | Auth.js (NextAuth) v5 — Credentials + GitHub/Google OAuth, JWT, Argon2id, RBAC                 |
+| Email      | Optional SMTP via nodemailer — off by default, any provider                                    |
+| Database   | PostgreSQL 17 · Drizzle ORM + drizzle-kit                                                      |
+| Storage    | MinIO (S3-compatible) · @aws-sdk/client-s3                                                     |
+| Retrieval  | Hybrid — pgvector `halfvec(2048)` + HNSW (cosine) fused with Postgres `tsvector` + GIN via RRF |
+| Evaluation | `pnpm rag:eval` — ground-truth corpus, hit@k · MRR · refusal accuracy                          |
+| Extraction | unpdf (in-process, per-page text) — no OCR sidecar                                             |
+| Inference  | Any OpenAI-compatible endpoint — NVIDIA NIM by default, or local Ollama/llama.cpp              |
+| UI         | Tailwind CSS v4 · shadcn/ui · lucide-react                                                     |
+| Validation | Zod (shared client/server schemas)                                                             |
+| Testing    | Vitest + Testing Library · Playwright (Mailpit for email)                                      |
+| Tooling    | ESLint (flat) · Prettier · Husky · lint-staged                                                 |
+| Delivery   | Multi-stage Docker (standalone, non-root) · GitHub Actions                                     |
 
 ## Project structure
 

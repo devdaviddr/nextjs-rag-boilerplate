@@ -55,20 +55,22 @@ are always required — see [Features → File uploads](features.md#file-uploads
 
 ## Scripts
 
-| Command                                                                 | Description                            |
-| ----------------------------------------------------------------------- | -------------------------------------- |
-| `pnpm dev`                                                              | Start the dev server (Turbopack)       |
-| `pnpm build` / `pnpm start`                                             | Production build / serve               |
-| `pnpm lint` · `pnpm lint:fix`                                           | ESLint                                 |
-| `pnpm typecheck`                                                        | `tsc --noEmit`                         |
-| `pnpm format` · `pnpm format:check`                                     | Prettier                               |
-| `pnpm test` · `pnpm test:watch` · `pnpm test:coverage`                  | Vitest units                           |
-| `pnpm test:e2e` · `pnpm test:e2e:ui`                                    | Playwright E2E                         |
-| `pnpm db:generate` · `db:migrate` · `db:push` · `db:studio` · `db:seed` | Database (see [Database](database.md)) |
-| `pnpm gen:icons` · `pnpm gen:og`                                        | Regenerate PWA icons · OG share image  |
-| `pnpm docker:db`                                                        | Start the local Postgres container     |
-| `pnpm docker:minio`                                                     | Start local MinIO + bucket init        |
-| `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)    |
+| Command                                                                 | Description                              |
+| ----------------------------------------------------------------------- | ---------------------------------------- |
+| `pnpm dev`                                                              | Start the dev server (Turbopack)         |
+| `pnpm build` / `pnpm start`                                             | Production build / serve                 |
+| `pnpm lint` · `pnpm lint:fix`                                           | ESLint                                   |
+| `pnpm typecheck`                                                        | `tsc --noEmit`                           |
+| `pnpm format` · `pnpm format:check`                                     | Prettier                                 |
+| `pnpm test` · `pnpm test:watch` · `pnpm test:coverage`                  | Vitest units                             |
+| `pnpm test:e2e` · `pnpm test:e2e:ui`                                    | Playwright E2E                           |
+| `pnpm db:generate` · `db:migrate` · `db:push` · `db:studio` · `db:seed` | Database (see [Database](database.md))   |
+| `pnpm rag:eval`                                                         | Retrieval evaluation (see [RAG](rag.md)) |
+| `pnpm rag:corpus`                                                       | Rebuild the eval corpus PDFs             |
+| `pnpm gen:icons` · `pnpm gen:og`                                        | Regenerate PWA icons · OG share image    |
+| `pnpm docker:db`                                                        | Start the local Postgres container       |
+| `pnpm docker:minio`                                                     | Start local MinIO + bucket init          |
+| `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)      |
 
 ## Testing
 

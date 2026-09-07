@@ -180,6 +180,18 @@ const envSchema = z
       .default(50),
     // How many chunks a whole-document request may send to the model. Bounds
     // both cost and context length when someone asks to summarise a long PDF.
+    // --- Hybrid retrieval (spec 0027, 1b) ------------------------------------
+    // Candidates pulled from EACH channel before fusion. Larger costs a little
+    // more work per query and gives fusion more to work with.
+    RAG_HYBRID_CANDIDATES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(20),
+    // Reciprocal Rank Fusion constant. 60 is the value from the original paper
+    // and is not sensitive; it damps the influence of top ranks.
+    RAG_RRF_K: z.coerce.number().int().positive().optional().default(60),
     RAG_DOC_SCOPE_MAX_CHUNKS: z.coerce
       .number()
       .int()

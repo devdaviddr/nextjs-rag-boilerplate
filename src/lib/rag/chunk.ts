@@ -14,6 +14,8 @@ export interface PageText {
 
 export interface Chunk {
   content: string
+  /** Detected section heading for the page this chunk came from, if any. */
+  heading: string | null
   pageNumber: number
   /** Position within the document, stable across the whole page sequence. */
   chunkIndex: number
@@ -37,6 +39,57 @@ export interface ChunkOptions {
 export function estimateTokens(text: string): number {
   if (text.length === 0) return 0
   return Math.ceil(text.length / 4)
+}
+
+/**
+ * Detect a section heading at the top of a page (spec 0027, 1a).
+ *
+ * Deliberately conservative: a heading is a short first line that is not a
+ * sentence — all-caps, or title-case without terminal punctuation. Getting this
+ * wrong is cheap in one direction (a missed heading loses a little context) and
+ * expensive in the other (a sentence promoted to a heading is prepended to
+ * every chunk on the page and pollutes their embeddings), so it prefers to miss.
+ */
+export function detectHeading(pageText: string): string | null {
+  const first = pageText
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0)
+  if (!first) return null
+  if (first.length > 90) return null
+  if (/[.!?;:]$/.test(first)) return null
+
+  const letters = first.replace(/[^A-Za-z]/g, '')
+  if (letters.length < 3) return null
+
+  const isAllCaps = letters === letters.toUpperCase()
+  const words = first.split(/\s+/)
+  const isTitleCase =
+    words.length <= 12 &&
+    words.filter((w) => /^[A-Z]/.test(w)).length >= Math.ceil(words.length / 2)
+
+  return isAllCaps || isTitleCase ? first : null
+}
+
+/**
+ * The text that gets EMBEDDED for a chunk — not the text that gets displayed.
+ *
+ * Prefixing the document title and section heading gives the vector something
+ * to match when a question names a document or a section. Measured on the
+ * evaluation corpus before this existed, `summarise <title>` scored 0.172
+ * partly because the title appeared in no chunk's embedded text at all.
+ *
+ * The original `content` is stored separately and is what the user sees, so a
+ * citation never shows this synthetic preamble.
+ */
+export function buildEmbeddingText(input: {
+  documentTitle: string
+  heading: string | null
+  content: string
+}): string {
+  const parts = [input.documentTitle.replace(/[-_]+/g, ' ')]
+  if (input.heading) parts.push(input.heading)
+  return `${parts.join(' — ')}\n${input.content}`
 }
 
 /** Split into paragraphs, then sentences, then hard slices — in that order. */
@@ -107,6 +160,7 @@ export function chunkPages(pages: PageText[], options: ChunkOptions): Chunk[] {
   for (const page of pages) {
     const pieces = splitToBudget(page.text, chunkTokens)
     if (pieces.length === 0) continue
+    const heading = detectHeading(page.text)
 
     let current: string[] = []
     let currentTokens = 0
@@ -116,6 +170,7 @@ export function chunkPages(pages: PageText[], options: ChunkOptions): Chunk[] {
       const content = current.join('\n\n')
       chunks.push({
         content,
+        heading,
         pageNumber: page.pageNumber,
         chunkIndex: chunkIndex++,
         tokenCount: estimateTokens(content),
@@ -146,6 +201,7 @@ export function chunkPages(pages: PageText[], options: ChunkOptions): Chunk[] {
       const content = current.join('\n\n')
       chunks.push({
         content,
+        heading,
         pageNumber: page.pageNumber,
         chunkIndex: chunkIndex++,
         tokenCount: estimateTokens(content),

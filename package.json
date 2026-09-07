@@ -32,7 +32,9 @@
     "docker:db": "docker compose up -d db",
     "docker:minio": "docker compose up -d minio minio-init",
     "docker:mail": "docker compose up -d mailpit",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "rag:eval": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/run.ts",
+    "rag:corpus": "node eval/make-corpus.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.2",
