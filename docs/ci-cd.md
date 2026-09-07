@@ -1,5 +1,13 @@
 # CI/CD
 
+> **Removed.** The `CI` and `CodeQL` workflows were deleted from this fork.
+> There is no automated lint/typecheck/test/E2E run and no image publishing on
+> a tag; run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` locally
+> before pushing. `deploy.yml` is still present, but it consumes the container
+> images `ci.yml` used to build and push to GHCR — so a `v*` tag will no longer
+> produce an image for it to deploy. This document is kept as a record of what
+> the pipeline did, and as the starting point if it is restored.
+
 [← Back to README](../README.md)
 
 This documentation covers the CI/CD pipeline and testing workflow for the Next.js Fullstack Boilerplate. Deployment is covered separately in [deployment.md](deployment.md). For the full path from a feature branch to a deploy on your box, see [Feature → Production](workflow.md).

@@ -22,18 +22,28 @@ async function register(page: import('@playwright/test').Page, tag: string) {
   return email
 }
 
-test('signing in lands on a centred empty chat, and there is no dashboard', async ({
+test('signing in lands on the chat, and there is no dashboard', async ({
   page,
 }) => {
+  // Deliberately not asserting the greeting here: without an inference key the
+  // chat renders its "not configured" state by design, and CI has no key.
   await register(page, 'empty')
-
-  // FR11: greeting + composer, no surrounding card.
-  await expect(page.getByText('Ready when you are.')).toBeVisible()
-  await expect(page.getByLabel('Question')).toBeVisible()
 
   // FR6: the dashboard is gone, not redirected.
   const res = await page.request.get('/dashboard')
   expect(res.status()).toBe(404)
+})
+
+test('an empty chat is a centred greeting and composer', async ({ page }) => {
+  test.skip(
+    !process.env.NVIDIA_API_KEY,
+    'NVIDIA_API_KEY is not set — the chat renders its unconfigured state',
+  )
+  await register(page, 'greeting')
+
+  // FR11: greeting + composer, no surrounding card.
+  await expect(page.getByText('Ready when you are.')).toBeVisible()
+  await expect(page.getByLabel('Question')).toBeVisible()
 })
 
 test("another user's conversation cannot be opened by id", async ({

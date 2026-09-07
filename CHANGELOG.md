@@ -21,6 +21,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Removed
 
+- **The `CI` and `CodeQL` GitHub Actions workflows.** No automated
+  lint/typecheck/test/E2E run, and no container images published on a `v*` tag
+  — which `deploy.yml` depended on. Run the quality gate locally before
+  pushing. `docs/ci-cd.md` is kept as a record.
+
 - **The `/dashboard` route.** It was a boilerplate demo page; chat is the
   landing surface now. Removed rather than redirected — a dead route still has
   to be maintained and tested.

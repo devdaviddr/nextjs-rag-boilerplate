@@ -68,24 +68,24 @@ opencode (`/self-host`). See **[Self-hosting](docs/self-hosting.md)**.
 
 ## Documentation
 
-| Doc                                             | What's inside                                                       |
-| ----------------------------------------------- | ------------------------------------------------------------------- |
-| 📋 **[Features](docs/features.md)**             | Complete feature list and what's included                           |
-| 🏛️ **[Architecture](docs/architecture.md)**     | Request flow, auth design, security model, project structure        |
-| 🗄️ **[Database](docs/database.md)**             | ERD, schema, migrations, Drizzle workflow, seeding                  |
-| 🔑 **[OAuth](docs/oauth.md)**                   | GitHub + Google sign-in — setup, callback URLs, linking             |
-| ✉️ **[Email](docs/email.md)**                   | SMTP setup, password reset, email verification, soft gate           |
-| 🧠 **[RAG](docs/rag.md)**                       | PDF knowledge base, pgvector, grounded document chat with citations |
-| 📱 **[PWA & App Shell](docs/pwa.md)**           | Manifest, service worker strategy, icons, responsive shell          |
-| 🔔 **[Web Push](docs/push.md)**                 | VAPID setup, subscribe/send, service-worker handlers                |
-| 🛠️ **[Usage & Development](docs/usage.md)**     | Scripts, env vars, testing, Docker, extending the app               |
-| 📦 **[Self-hosting](docs/self-hosting.md)**     | `make setup` clone-to-live + continuous deployment (`make deploy`)  |
-| 🚀 **[Deployment](docs/deployment.md)**         | Cloudflare Tunnel — quick, guided, and Terraform paths              |
-| ⚙️ **[CI/CD](docs/ci-cd.md)**                   | GitHub Actions pipeline, quality gates, E2E + Docker jobs           |
-| 🔁 **[Feature → Production](docs/workflow.md)** | One playbook: branch → PR → CI → release → Mac mini deploy          |
-| 💾 **[Backups](docs/backups.md)**               | Nightly Postgres + MinIO backups, restore runbook, offsite          |
-| 📄 **[Summary](docs/summary.md)**               | One-page project overview — stats, stack, what ships                |
-| 📐 **[Specs](specs/README.md)**                 | Spec-driven development — one spec per feature/release              |
+| Doc                                             | What's inside                                                         |
+| ----------------------------------------------- | --------------------------------------------------------------------- |
+| 📋 **[Features](docs/features.md)**             | Complete feature list and what's included                             |
+| 🏛️ **[Architecture](docs/architecture.md)**     | Request flow, auth design, security model, project structure          |
+| 🗄️ **[Database](docs/database.md)**             | ERD, schema, migrations, Drizzle workflow, seeding                    |
+| 🔑 **[OAuth](docs/oauth.md)**                   | GitHub + Google sign-in — setup, callback URLs, linking               |
+| ✉️ **[Email](docs/email.md)**                   | SMTP setup, password reset, email verification, soft gate             |
+| 🧠 **[RAG](docs/rag.md)**                       | PDF knowledge base, pgvector, grounded document chat with citations   |
+| 📱 **[PWA & App Shell](docs/pwa.md)**           | Manifest, service worker strategy, icons, responsive shell            |
+| 🔔 **[Web Push](docs/push.md)**                 | VAPID setup, subscribe/send, service-worker handlers                  |
+| 🛠️ **[Usage & Development](docs/usage.md)**     | Scripts, env vars, testing, Docker, extending the app                 |
+| 📦 **[Self-hosting](docs/self-hosting.md)**     | `make setup` clone-to-live + continuous deployment (`make deploy`)    |
+| 🚀 **[Deployment](docs/deployment.md)**         | Cloudflare Tunnel — quick, guided, and Terraform paths                |
+| ⚙️ **[CI/CD](docs/ci-cd.md)**                   | _Removed in this fork_ — record of the former GitHub Actions pipeline |
+| 🔁 **[Feature → Production](docs/workflow.md)** | One playbook: branch → PR → CI → release → Mac mini deploy            |
+| 💾 **[Backups](docs/backups.md)**               | Nightly Postgres + MinIO backups, restore runbook, offsite            |
+| 📄 **[Summary](docs/summary.md)**               | One-page project overview — stats, stack, what ships                  |
+| 📐 **[Specs](specs/README.md)**                 | Spec-driven development — one spec per feature/release                |
 
 ## Scripts
 
