@@ -205,6 +205,64 @@ const envSchema = z
       .optional()
       .default(200),
 
+    // --- Agentic retrieval (spec 0029) -------------------------------------
+    // Off by default. The agentic path must earn its place against the fixed
+    // pipeline on the same eval questions before it becomes the default; with
+    // this false, the existing path runs byte-identically.
+    RAG_AGENTIC_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // Planning and prose are separate roles and need not be the same model.
+    // Measured over 40 native tool-call attempts: lightning 10/10 and 5/5 on a
+    // two-round tool loop; the default chat model 8/10, its failures clean
+    // transport 500s already inside the retry wrapper. Prose quality was NOT
+    // measured, which is exactly why the roles are configured separately.
+    RAG_PLANNER_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('nvidia/nemotron-3.5-lightning-30b-a3b'),
+    // Three, not two. Measured planner latency is 2.6-4.4s medians, not the
+    // ~10s previously on record — at 10s a call, three searches worst-cased at
+    // 45s and would have been unusable; at the real numbers it is about 14s.
+    RAG_MAX_SEARCHES: z.coerce.number().int().positive().optional().default(3),
+    // Wall-clock for the loop, excluding answer streaming. At the limit the
+    // loop stops and the caller answers from what it has, or refuses — never a
+    // partial ungrounded answer because time ran out.
+    RAG_MAX_LOOP_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(15000),
+    // How much the similarity floor rises per EXTRA search (spec 0029).
+    //
+    // Measured: with a flat floor the agentic path's refusal accuracy fell
+    // 1.000 -> 0.667, because searching three times for something the corpus
+    // cannot answer eventually turned up a chunk at 0.421 — above the 0.35
+    // floor purely by persistence. Every other metric improved, which is
+    // precisely the shape of regression this project has been bitten by before.
+    //
+    // Raising the flat floor instead would not work: true positives on this
+    // corpus score 0.41-0.62, so a floor above 0.421 discards real answers.
+    // The problem is not the threshold, it is that N attempts get N chances at
+    // it. So the bar rises with the number of attempts, and evidence found on
+    // the first search is judged exactly as before.
+    RAG_AGENTIC_FLOOR_STEP: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .default(0.04),
+    // Prompt + completion across every planning call in one question.
+    RAG_MAX_LOOP_TOKENS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(8000),
+
     // --- Build identity (baked into the image at CI build time) ------------
     // ci.yml passes these as Docker build-args (APP_VERSION=git ref name,
     // APP_GIT_SHA=commit sha); the Dockerfile persists them as ENV. Surfaced

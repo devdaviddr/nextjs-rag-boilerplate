@@ -246,6 +246,33 @@ export const DOCUMENT_STATUSES = [
 ] as const
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number]
 
+/**
+ * An independent, user-owned collection of documents (spec 0028).
+ *
+ * Names are deliberately NOT unique per owner: a "Taxes" per year is
+ * legitimate, and a rename colliding would be a loud failure for a cosmetic
+ * problem. The switcher shows counts and dates to disambiguate.
+ */
+export const knowledgeBases = pgTable(
+  'knowledge_bases',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { mode: 'date' })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [index('knowledge_bases_owner_id_idx').on(table.ownerId)],
+)
+
 export const documents = pgTable(
   'documents',
   {
@@ -255,6 +282,13 @@ export const documents = pgTable(
     ownerId: text('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    // A document lives in exactly one knowledge base (spec 0028). Many-to-many
+    // would make a chunk's KB membership non-scalar, forcing either a join on
+    // the retrieval hot path or a duplicated 2048-dim embedding per membership.
+    // `moveDocument` makes refiling cheap so that constraint is liveable.
+    knowledgeBaseId: text('knowledge_base_id')
+      .notNull()
+      .references(() => knowledgeBases.id, { onDelete: 'cascade' }),
     // The stored PDF blob. `cascade` so removing the file row can never leave
     // a document pointing at an object that no longer exists.
     fileId: text('file_id')
@@ -275,6 +309,7 @@ export const documents = pgTable(
   (table) => [
     index('documents_owner_id_idx').on(table.ownerId),
     index('documents_status_idx').on(table.status),
+    index('documents_knowledge_base_id_idx').on(table.knowledgeBaseId),
   ],
 )
 
@@ -293,6 +328,17 @@ export const chunks = pgTable(
     ownerId: text('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    // Denormalised from `documents.knowledgeBaseId` for exactly the same reason
+    // `ownerId` above is denormalised (spec 0028 NFR1). Both retrieval channels
+    // query `chunks` directly — the dense one under an HNSW index where the
+    // filter is applied after the ANN scan, the lexical one under a GIN bitmap
+    // scan. Reaching KB membership through a join to `documents` puts a
+    // per-candidate lookup on the hot path and, as data grows, invites the
+    // planner to abandon the index entirely: correct results, silently
+    // degrading, no error. Same failure shape as the `vector`/`halfvec` trap.
+    knowledgeBaseId: text('knowledge_base_id')
+      .notNull()
+      .references(() => knowledgeBases.id, { onDelete: 'cascade' }),
     content: text('content').notNull(),
     // Detected section heading for the page (spec 0027, 1a). Prefixed to the
     // EMBEDDED text, never to the displayed text, so a citation shows the
@@ -312,7 +358,10 @@ export const chunks = pgTable(
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
-    index('chunks_owner_id_idx').on(table.ownerId),
+    // Leads with ownerId, so owner-only queries still use it and nothing
+    // regresses; owner+KB queries get the composite for free. Replaces the
+    // old single-column chunks_owner_id_idx.
+    index('chunks_owner_kb_idx').on(table.ownerId, table.knowledgeBaseId),
     index('chunks_document_id_idx').on(table.documentId),
     index('chunks_content_tsv_idx').using('gin', table.contentTsv),
     // The HNSW index itself is created in the migration — drizzle-kit cannot
@@ -349,7 +398,7 @@ export interface StoredMetrics {
   totalMs: number
   tokensPerSecond: number | null
   sourceCount: number
-  retrieval: 'search' | 'document'
+  retrieval: 'search' | 'document' | 'agentic'
 }
 
 export const conversations = pgTable(
@@ -374,6 +423,36 @@ export const conversations = pgTable(
   (table) => [
     // Exactly how the Recents list is read: this owner, newest activity first.
     index('conversations_owner_updated_idx').on(table.ownerId, table.updatedAt),
+  ],
+)
+
+/**
+ * Which knowledge bases a conversation may search (spec 0028 FR5).
+ *
+ * A join table rather than a jsonb array on `conversations`: the array reads
+ * more simply and gives no referential integrity, so deleting a KB would leave
+ * a dangling id in every conversation that ever selected it, cleaned up by
+ * app-level sweep code. This schema avoids that kind of bookkeeping elsewhere.
+ * The join is read once per chat page load, never inside a retrieval query.
+ *
+ * Selection is fixed when the conversation is created, so every message in a
+ * thread has one auditable scope.
+ */
+export const conversationKnowledgeBases = pgTable(
+  'conversation_knowledge_bases',
+  {
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    knowledgeBaseId: text('knowledge_base_id')
+      .notNull()
+      .references(() => knowledgeBases.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.conversationId, table.knowledgeBaseId] }),
+    // The PK leads with conversationId, so "which conversations use this KB"
+    // needs its own index — same shape as accounts_user_id_idx.
+    index('conversation_kb_kb_id_idx').on(table.knowledgeBaseId),
   ],
 )
 
@@ -419,7 +498,21 @@ export const usersRelations = relations(users, ({ many }) => ({
   files: many(files),
   documents: many(documents),
   conversations: many(conversations),
+  knowledgeBases: many(knowledgeBases),
 }))
+
+export const knowledgeBasesRelations = relations(
+  knowledgeBases,
+  ({ one, many }) => ({
+    owner: one(users, {
+      fields: [knowledgeBases.ownerId],
+      references: [users.id],
+    }),
+    documents: many(documents),
+    chunks: many(chunks),
+    conversations: many(conversationKnowledgeBases),
+  }),
+)
 
 export const filesRelations = relations(files, ({ one }) => ({
   owner: one(users, {
@@ -437,6 +530,10 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
     fields: [documents.fileId],
     references: [files.id],
   }),
+  knowledgeBase: one(knowledgeBases, {
+    fields: [documents.knowledgeBaseId],
+    references: [knowledgeBases.id],
+  }),
   chunks: many(chunks),
 }))
 
@@ -448,6 +545,7 @@ export const conversationsRelations = relations(
       references: [users.id],
     }),
     messages: many(messages),
+    knowledgeBases: many(conversationKnowledgeBases),
   }),
 )
 

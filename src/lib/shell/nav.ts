@@ -12,5 +12,5 @@ export interface NavItem {
  * that isn't the chat or its source material belongs in the account menu.
  */
 export const navItems: NavItem[] = [
-  { title: 'Knowledge base', href: '/documents', icon: FileText },
+  { title: 'Knowledge bases', href: '/documents', icon: FileText },
 ]

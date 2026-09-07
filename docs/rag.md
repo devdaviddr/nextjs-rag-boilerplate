@@ -260,14 +260,26 @@ started.
 
 ```mermaid
 erDiagram
+    users ||--o{ knowledge_bases : owns
     users ||--o{ documents : owns
     users ||--o{ chunks : owns
+    knowledge_bases ||--o{ documents : "cascade delete"
+    knowledge_bases ||--o{ chunks : "cascade delete"
     documents ||--o{ chunks : "cascade delete"
     files ||--|| documents : "stored PDF"
+    conversations ||--o{ conversation_knowledge_bases : "fixed at creation"
+    knowledge_bases ||--o{ conversation_knowledge_bases : "searchable from"
 
+    knowledge_bases {
+        text id PK
+        text owner_id FK
+        text name
+        text description
+    }
     documents {
         text id PK
         text owner_id FK
+        text knowledge_base_id FK
         text file_id FK
         text title
         int page_count
@@ -278,6 +290,7 @@ erDiagram
         text id PK
         text document_id FK
         text owner_id FK
+        text knowledge_base_id FK
         text content
         int page_number
         int chunk_index
@@ -287,6 +300,22 @@ erDiagram
 ```
 
 `chunks.owner_id` duplicates `documents.owner_id` on purpose — see guarantee 2.
+`chunks.knowledge_base_id` duplicates `documents.knowledge_base_id` for exactly
+the same reason, and it is worth being precise about what that reason is.
+
+Both retrieval channels query `chunks` **directly**: the dense one orders by
+`embedding <=> $q` under an HNSW index where the filter is applied _after_ the
+ANN scan, and the lexical one runs a GIN bitmap scan. Reaching a chunk's KB
+through a join to `documents` would put a per-candidate lookup on that hot path
+and, as data grows, invite the planner to abandon the index path altogether.
+Correct results, silently degrading, no error — the same failure shape as the
+`vector`/`halfvec` trap above.
+
+A document therefore lives in **exactly one** knowledge base. Many-to-many would
+make a chunk's KB membership non-scalar, forcing either that join or a
+duplicated 2048-dimension embedding per membership. `moveDocument` re-tags both
+tables in one transaction instead, so refiling a document costs a `WHERE` clause
+rather than hundreds of rate-limited embedding calls.
 
 ---
 
@@ -315,6 +344,41 @@ document** instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
 Scoping is deliberately conservative: an ambiguous "summarise this" across
 several documents falls back to similarity search rather than guessing which
 document you meant.
+
+`src/lib/rag/scope.ts` itself knows nothing about knowledge bases, and needs no
+code to. It takes an opaque, pre-filtered document list, so KB-awareness is
+entirely a question of what the caller passes in. That matters more than it
+sounds: its "only one document" shortcut must mean _one document in the selected
+knowledge bases_, not one document in the whole account, or the shortcut
+silently stops firing for anyone with a second document anywhere.
+
+### Scoping: which knowledge bases
+
+A conversation carries a set of knowledge bases, fixed when it is created, and
+retrieval cannot see outside it. The predicate sits beside `owner_id` in the
+same `WHERE` clause, in **all five** places that clause appears — the dense CTE,
+the lexical CTE, the final `SELECT`, `listReadyDocuments`, and
+`retrieveDocumentChunks`.
+
+Adding it only to the final `SELECT` would be correct and still wrong: the CTEs'
+`LIMIT` candidate pool would be consumed by out-of-scope chunks, starving real
+candidates before fusion ever ran.
+
+`retrieveDocumentChunks` is the one to watch. It fetches a whole document by id
+and gates on owner alone, which is sufficient only while owner is the only
+boundary that exists. With knowledge bases, a conversation scoped to KB A that
+resolves a document title belonging to the same user's KB B would retrieve it —
+`owner_id` never fires, because it is the same person. That failure does not
+look like a leak in testing; it looks like retrieval being slightly generous.
+
+An **empty** selection returns nothing without calling the embedding API at all.
+It must never widen into "no filter" — that is the single silent-failure mode
+this design is built around, and it is asserted in the unit tests rather than
+left to reading.
+
+Because the dense channel's filter is applied after the ANN scan, a second
+narrowing predicate thins the candidate pool further. `RAG_HYBRID_CANDIDATES`
+therefore scales with the number of selected knowledge bases, up to a ceiling.
 
 ### Hybrid retrieval — dense and lexical, fused
 
@@ -547,6 +611,192 @@ implementation:
 | hit@3            | 0.882      | **0.941**        | +0.059        |
 | MRR              | 0.853      | **0.941**        | +0.088        |
 | Refusal accuracy | 1.000      | **1.000**        | no regression |
+
+Introducing knowledge bases held every one of those numbers exactly — the
+boundary narrows _what_ is searched, not how well.
+
+### Cross-knowledge-base leakage
+
+The harness splits the corpus across two knowledge bases — `HR & Employment`
+(staff handbook, employment contract) and `Facilities & Operations` (facilities
+guide) — deliberately putting the engineered overlap **across** the boundary:
+the handbook's fire assembly point and the guide's staff parking are both on
+Wellington Street. Splitting the other way would make the check pass for the
+wrong reason, because there would be nothing to leak.
+
+Every answerable question then runs twice more:
+
+- scoped to only the knowledge base that does **not** hold its answer — any
+  chunk returned from an unselected KB is a leak, and the correct count is **0**
+- scoped to only the knowledge base that **does** hold it — because a filter
+  returning nothing at all would otherwise pass the leakage check trivially
+  while breaking retrieval entirely
+
+`crossKbLeakage > 0` fails the run. Measured: **0 leaks**, and 16 of 17
+questions still found via their own KB alone. The one miss is the known-weak
+exact-identifier case below, which fails unscoped too, so it is not a
+regression.
+
+### The refusal gate
+
+`pnpm rag:eval --label <name> --baseline <name>` fails the run outright if
+refusal accuracy is below the baseline's, whatever every other metric does.
+
+This is not hypothetical. A change once took MRR to 0.971 while silently taking
+refusal accuracy from 1.000 to **0.000** — every headline number improved while
+the property the system exists to provide disappeared. Measuring it was not
+enough; the gate is what stops it shipping by accident.
+
+## The agentic path
+
+Everything above describes the **fixed pipeline**: a regular expression picks
+the strategy, one hybrid search runs, and the model only writes prose. Spec 0029
+adds a second path where the model directs retrieval instead.
+
+It is behind `RAG_AGENTIC_ENABLED` and **off by default**. With the flag off the
+fixed pipeline runs unchanged.
+
+```mermaid
+flowchart TB
+    Q["Question + conversation"] --> RT{"Route<br>deterministic allowlist"}
+    RT -->|"filler"| ANS["Answer, no search"]
+    RT -->|"anything else"| LOOP
+
+    subgraph LOOP["Bounded loop — 3 searches, 15s, 8k tokens"]
+        direction TB
+        PL["Plan<br>tool call, sees recent turns"] --> SR["search_documents<br>owner + KB set SERVER-BOUND"]
+        SR --> ACC["Accumulate + dedup"]
+        ACC --> EN{"Enough to answer?"}
+        EN -->|"no, budget left"| PL
+        EN -->|"no, budget spent"| REF["REFUSE"]
+        EN -->|yes| DRAFT
+    end
+
+    DRAFT["Draft + stream"] --> VER{"Verify citations"}
+    VER -->|"unsupported found"| STRIP["Strip those sentences<br>emit a revision"]
+    VER -->|"all supported"| DONE["Done"]
+    STRIP --> CHK{"Anything left?"}
+    CHK -->|no| REF
+    CHK -->|yes| DONE
+```
+
+### Where the boundary lives
+
+`userId` and the permitted knowledge bases are bound **once per question**, from
+the session and the conversation, and closed over by the search function. The
+planner supplies a query and at most a `documentId` hint. It cannot widen scope
+because there is no parameter through which to do so — an out-of-scope
+`documentId` reaches `retrieveDocumentChunks`, which filters on the same
+permitted set and returns nothing, indistinguishable from a document that does
+not exist.
+
+Resolved once per question rather than per tool call, so a multi-search question
+cannot end up with citations spanning two different notions of what was allowed.
+
+### Refusal is outside the loop
+
+The loop gathers evidence and reports why it stopped. It never composes prose
+and never decides to refuse. The caller short-circuits to the fixed refusal when
+nothing clears the floor.
+
+That placement is the whole guarantee: a model talked into ignoring its
+instructions still cannot produce an ungrounded answer, because with no
+retrieved context there is no drafting call to hijack.
+
+### Reference resolution, and a measurement that changed the design
+
+A follow-up like _"what about carrying it over?"_ has no subject, so embedded
+literally it retrieves badly. Both 0027 and the first draft of 0029 specified a
+**separate rewrite call** before retrieval. It was built, then measured:
+
+| Attempt                        | Result                                                           |
+| ------------------------------ | ---------------------------------------------------------------- |
+| Plain text, `max_tokens: 200`  | `finish_reason: length` — reasoning preamble truncated, no query |
+| Plain text, `max_tokens: 1500` | **53s**, still truncated, still no query                         |
+| Tool call, `max_tokens: 400`   | `finish_reason: length`, no tool call                            |
+| Tool call, `max_tokens: 1200`  | Correct — `{"query":"carrying over annual leave"}` — but **15s** |
+
+15s is the entire loop budget, spent before the first search. So the separate
+call was deleted and the **planner** now receives the recent turns and resolves
+the reference itself, inside a tool call that was going to happen anyway.
+Measured after the change: _"what about carrying it over?"_ →
+`"carrying over annual leave"` → staff-handbook p1 at 0.479, one search, **8.1s**.
+
+Two lessons worth keeping, because both were invisible until measured:
+
+**A timeout shorter than the thing it times is an off switch.** The rewrite had
+a 3s cap against a call with a 2.6–4.4s median. It fired on essentially every
+request. The fallback worked perfectly and hid the fact that the feature never
+ran once.
+
+**These are reasoning models.** With no `tools` array present the
+chain-of-thought streams into `content` and swamps the answer at any sane token
+budget. With `tools` present it is split into `reasoning_content` and the
+arguments come back clean. Native tool calling is therefore both the more
+reliable mechanism and the more token-budget-robust one — the reverse of what
+0027 assumed.
+
+### The risk it creates
+
+More attempts means more chances to clear a threshold by luck. Asked _"How much
+parental leave am I entitled to?"_ — which the corpus cannot answer — the loop
+tried three phrasings and surfaced a chunk at **0.358**, just above the 0.35
+floor. The fixed pipeline refuses that question outright.
+
+This is why citation verification exists, and why refusal accuracy is a hard
+gate rather than a number on a report.
+
+**It fired.** The first A/B put agentic refusal accuracy at **0.667** against a
+baseline of 1.000 — every other metric improved while the property the system
+exists to provide quietly degraded. Exactly the shape of regression this project
+has been bitten by before.
+
+Raising the flat floor would not fix it: true positives on this corpus score
+0.41–0.62, so any floor above the offending 0.421 discards real answers. The
+problem is not the threshold, it is that **N attempts get N chances at it**. So
+the floor rises with the number of searches (`RAG_AGENTIC_FLOOR_STEP`, 0.04 per
+extra attempt) and evidence found on the first search is judged exactly as the
+fixed pipeline judges it.
+
+### Measured: agentic vs the fixed pipeline
+
+`pnpm rag:eval --compare`, one uncontended run:
+
+| Metric                                   | Baseline       | Agentic                               | Δ          |
+| ---------------------------------------- | -------------- | ------------------------------------- | ---------- |
+| hit@1 / hit@3 / MRR _(single-hop, n=20)_ | 0.941          | 0.882                                 | −0.059     |
+| Refusal accuracy                         | 1.000          | 1.000                                 | ±0         |
+| Cross-KB leakage                         | 0              | 0                                     | ±0         |
+| Follow-up hit@1 _(n=3)_                  | 0.000          | 0.667                                 | **+0.667** |
+| Multi-hop full match _(n=2)_             | 0.000          | 1.000                                 | **+1.000** |
+| Multi-hop fact recall                    | 0.500          | 1.000                                 | **+0.500** |
+| Cost per question                        | ~1 search, ~1s | 1.44 searches, **11.1s**, 1617 tokens | —          |
+
+**The flag stays off by default**, and the reason is the trade rather than a
+failure: agentic retrieval is dramatically better at what it was built for —
+follow-ups and multi-hop questions — slightly worse on single-hop, and about
+**ten times slower**. Most questions in this corpus are single-hop, so the
+default favours the cheap path. Turn it on for conversational use where
+follow-ups dominate, and re-run the comparison on your own corpus first.
+
+Two caveats worth stating plainly. The follow-up and multi-hop slices are n=3
+and n=2; at that size one question moves a metric by a third or a half, so treat
+the direction as real and the magnitude as provisional. And two concurrent
+`--compare` runs against the same rate-limited key produced materially different
+numbers — run it alone, or you are measuring contention.
+
+### Streaming under a loop
+
+The loop is silent for seconds before any prose exists, so the stream carries
+`step` frames — `routing`, `searching` with an iteration number, `drafting`,
+`verifying` — and the client shows a phase label instead of bare dots. Bare dots
+for eight seconds read as "stuck" rather than "working".
+
+Verification runs **after** streaming and emits a `revision` frame if it strips
+anything. Verifying first would mean buffering the whole answer, which kills
+token streaming and makes time-to-first-token meaningless on every answer — a
+permanent regression to avoid a brief exposure the revision then removes. The
+persisted record is always the verified text.
 
 ## Known gaps
 

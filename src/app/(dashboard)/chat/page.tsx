@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 
 import { ChatView } from '@/components/chat/chat-view'
 import { getCurrentSession } from '@/lib/auth/session'
-import { listMyDocuments, ragStatus } from '@/lib/rag/actions'
+import { listMyKnowledgeBases } from '@/lib/rag/kb-actions'
+import { ragStatus } from '@/lib/rag/actions'
 
 export const metadata: Metadata = { title: 'Chat' }
 
@@ -12,15 +13,15 @@ export default async function NewChatPage() {
   const session = await getCurrentSession()
   if (!session?.user) redirect('/login')
 
-  const [documents, { configured }] = await Promise.all([
-    listMyDocuments(),
+  const [knowledgeBases, { configured }] = await Promise.all([
+    listMyKnowledgeBases(),
     ragStatus(),
   ])
 
   return (
     <ChatView
       configured={configured}
-      readyDocumentCount={documents.filter((d) => d.status === 'ready').length}
+      knowledgeBases={knowledgeBases}
       initialMessages={[]}
     />
   )

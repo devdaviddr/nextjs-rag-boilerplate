@@ -1,11 +1,11 @@
 'use server'
 
-import { count, desc, eq, sql } from 'drizzle-orm'
+import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { after } from 'next/server'
 import { headers } from 'next/headers'
 
 import { db } from '@/db'
-import { chunks, documents, files } from '@/db/schema'
+import { chunks, documents, files, knowledgeBases } from '@/db/schema'
 import type { DocumentStatus } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
 import { logger } from '@/lib/logger'
@@ -85,6 +85,24 @@ export async function uploadDocument(
     return { ok: false, error: 'No file provided.' }
   }
 
+  // A document lives in exactly one knowledge base, and the caller must say
+  // which. Verified against this user before anything is written: Postgres
+  // cannot express "document.owner must equal its KB's owner" without a
+  // trigger, so that invariant is upheld here, on every write path that
+  // assigns a KB (spec 0028).
+  const knowledgeBaseId = formData.get('knowledgeBaseId')
+  if (typeof knowledgeBaseId !== 'string' || !knowledgeBaseId) {
+    return { ok: false, error: 'Choose a knowledge base to upload into.' }
+  }
+  const kb = await db.query.knowledgeBases.findFirst({
+    where: eq(knowledgeBases.id, knowledgeBaseId),
+    columns: { id: true, ownerId: true },
+  })
+  // Same response whether missing or someone else's — no existence signal.
+  if (!kb || kb.ownerId !== userId) {
+    return { ok: false, error: 'Knowledge base not found.' }
+  }
+
   const mimeType = file.type || 'application/octet-stream'
   const usage = await currentUsageBytes(userId)
   const validation = validateUpload({ sizeBytes: file.size, mimeType }, usage, {
@@ -113,6 +131,7 @@ export async function uploadDocument(
     .insert(documents)
     .values({
       ownerId: userId,
+      knowledgeBaseId: kb.id,
       fileId: fileRow.id,
       title: file.name.replace(/\.pdf$/i, ''),
       status: 'pending',
@@ -139,8 +158,15 @@ export async function uploadDocument(
   }
 }
 
-/** List the signed-in user's documents, newest first, with chunk counts. */
-export async function listMyDocuments(): Promise<DocumentSummary[]> {
+/**
+ * List documents in one of the signed-in user's knowledge bases, newest first.
+ *
+ * `knowledgeBaseId` is required: there is no "all my documents" view any more,
+ * because every listing surface is now reached through a specific KB.
+ */
+export async function listMyDocuments(
+  knowledgeBaseId: string,
+): Promise<DocumentSummary[]> {
   const userId = await requireUserId()
 
   // A correlated subquery written as a raw `sql` fragment does NOT work here:
@@ -161,7 +187,12 @@ export async function listMyDocuments(): Promise<DocumentSummary[]> {
     })
     .from(documents)
     .leftJoin(chunks, eq(chunks.documentId, documents.id))
-    .where(eq(documents.ownerId, userId))
+    .where(
+      and(
+        eq(documents.ownerId, userId),
+        eq(documents.knowledgeBaseId, knowledgeBaseId),
+      ),
+    )
     .groupBy(documents.id)
     .orderBy(desc(documents.createdAt))
 

@@ -94,6 +94,10 @@ export async function ingestDocument(documentId: string): Promise<void> {
         pieces.map((piece, i) => ({
           documentId,
           ownerId: doc.ownerId,
+          // Denormalised from the document, never from the session: a chunk's
+          // KB must always be its document's KB, or retrieval filters on a
+          // value the document itself disagrees with.
+          knowledgeBaseId: doc.knowledgeBaseId,
           content: piece.content,
           heading: piece.heading,
           pageNumber: piece.pageNumber,

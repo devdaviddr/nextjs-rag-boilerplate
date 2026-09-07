@@ -170,3 +170,74 @@ export async function createChatStream(
 export function chatModelName(): string {
   return env.RAG_CHAT_MODEL
 }
+
+/** The planner model in use, for the trace. */
+export function plannerModelName(): string {
+  return env.RAG_PLANNER_MODEL
+}
+
+export interface CompletionChoice {
+  finish_reason?: string
+  message?: {
+    content?: string | null
+    tool_calls?: Array<{
+      function?: { name?: string; arguments?: string }
+    }> | null
+  }
+}
+
+interface CompletionResponse {
+  choices?: CompletionChoice[]
+  usage?: { total_tokens?: number }
+}
+
+export interface CompletionOptions {
+  /** Defaults to the chat model; the planner passes `RAG_PLANNER_MODEL`. */
+  model?: string
+  /** Advertise tools. With these present, reasoning models split their
+   *  chain-of-thought into `reasoning_content` and leave `content` clean —
+   *  which is why native tool calling tolerates a small token budget and the
+   *  JSON fallback does not. */
+  tools?: unknown[]
+  /** At least ~1500 when relying on a JSON reply with no `tools` present: the
+   *  reasoning preamble streams into `content` and a small budget truncates it
+   *  before any JSON appears. That truncation, not a broken model, is what
+   *  earlier probes misread as malformed output. */
+  maxTokens?: number
+  temperature?: number
+  signal?: AbortSignal
+}
+
+/**
+ * One non-streaming chat completion.
+ *
+ * Used for the planner, the query rewriter and citation verification — all of
+ * which need a whole answer to parse rather than tokens to forward. Streaming
+ * answers still go through `createChatStream`.
+ */
+export async function createChatCompletion(
+  messages: ChatMessage[],
+  options: CompletionOptions = {},
+): Promise<{ choice: CompletionChoice; tokens: number }> {
+  const body: Record<string, unknown> = {
+    model: options.model ?? env.RAG_CHAT_MODEL,
+    messages,
+    stream: false,
+    temperature: options.temperature ?? 0.2,
+    max_tokens: options.maxTokens ?? 1500,
+  }
+  if (options.tools?.length) {
+    body.tools = options.tools
+    body.tool_choice = 'auto'
+  }
+
+  const response = await post('/chat/completions', body, {
+    signal: options.signal,
+  })
+  const json = (await response.json()) as CompletionResponse
+
+  return {
+    choice: json.choices?.[0] ?? {},
+    tokens: json.usage?.total_tokens ?? 0,
+  }
+}

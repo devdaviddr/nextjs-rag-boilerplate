@@ -131,8 +131,12 @@ See [Usage & Development](usage.md) and [Deployment](deployment.md).
 
 ## RAG — knowledge base & document chat
 
-- PDF upload into a private, per-user knowledge base (reuses the MinIO storage,
-  quota and rate limits from file uploads)
+- **Multiple independent knowledge bases** per user — create, rename, delete,
+  and move a document between them without re-ingesting it
+- PDF upload into a chosen knowledge base (reuses the MinIO storage, quota and
+  rate limits from file uploads)
+- A conversation searches a chosen set of knowledge bases, fixed when the thread
+  is created so every message in it has one auditable scope
 - In-process extraction with `unpdf`; image-only PDFs are **rejected**, not
   half-ingested
 - Token-aware, page-bounded chunking so every citation resolves to an exact page
@@ -142,16 +146,24 @@ See [Usage & Development](usage.md) and [Deployment](deployment.md).
   channels fused with Reciprocal Rank Fusion, both in the same Postgres table
 - Chunks embed their document title and detected section heading alongside the
   content, while storing the original text for display
-- Owner-scoped retrieval enforced in the SQL `WHERE` clause, per channel
+- Owner- **and** knowledge-base-scoped retrieval enforced in the SQL `WHERE`
+  clause, per channel — never a join, never a filter applied to results
+  afterwards
 - Grounded answers: when nothing clears the similarity floor the chat model is
   **never called**
 - Two retrieval paths — similarity search for content questions, whole-document
   retrieval for summarise/overview requests
+- Optional **agentic retrieval** (`RAG_AGENTIC_ENABLED`, off by default) — the
+  model plans its own searches via a tool call, resolves conversational
+  references, and can search again when the first attempt is thin, inside hard
+  caps on searches, wall-clock and tokens; citation verification strips claims
+  their sources do not support
 - Streamed Markdown answers with clickable page-level citations that open the
   source PDF, conversation history, and per-answer generation metrics
 
 - Retrieval evaluation harness (`pnpm rag:eval`) over a ground-truth corpus,
-  reporting hit@k, MRR and refusal accuracy — so a retrieval change is measured
-  rather than assumed
+  reporting hit@k, MRR, refusal accuracy and **cross-knowledge-base leakage** —
+  so a retrieval change is measured rather than assumed. A refusal-accuracy
+  regression against a saved baseline fails the run outright
 
 Full walkthrough: **[RAG — how it works](rag.md)**.

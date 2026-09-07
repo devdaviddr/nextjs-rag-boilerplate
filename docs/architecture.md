@@ -20,14 +20,27 @@ The RAG layer is hybrid and lives entirely in Postgres: a dense channel
 (`pgvector` `halfvec(2048)`, HNSW cosine) and a lexical one (generated
 `tsvector`, GIN), fused with Reciprocal Rank Fusion. No additional service.
 
-Both channels filter on `owner_id` in their own `WHERE` clause — the tenant
-boundary is enforced per channel rather than trusted to fusion — and the
-decision to answer at all is gated on cosine similarity, so retrieval that
-finds nothing relevant never reaches the model.
+Both channels filter on `owner_id` **and** `knowledge_base_id` in their own
+`WHERE` clause — each boundary is enforced per channel rather than trusted to
+fusion — and the decision to answer at all is gated on cosine similarity, so
+retrieval that finds nothing relevant never reaches the model.
+
+Documents live in independent, user-owned knowledge bases, and a conversation
+searches a set of them fixed when it was created. The two boundaries are not the
+same kind of thing: `owner_id` isolates tenants, while `knowledge_base_id` is a
+scoping choice the account holder made about their own data. Both are enforced
+identically; only one is a defence against an adversary.
+
+An optional **agentic path** (`RAG_AGENTIC_ENABLED`, off by default) lets the
+model plan its own searches through a `search_documents` tool inside hard caps
+on searches, wall-clock and tokens. Scope is bound server-side once per
+question, and refusal stays a code path _around_ the loop — the model is never
+asked to decide whether to refuse.
 
 Changes here are measured rather than argued: `pnpm rag:eval` scores retrieval
-against a ground-truth corpus and reports hit@k, MRR and refusal accuracy. Full
-detail in **[RAG — how it works](rag.md)**.
+against a ground-truth corpus and reports hit@k, MRR, refusal accuracy and
+cross-knowledge-base leakage, and `--compare` scores both paths side by side.
+Full detail in **[RAG — how it works](rag.md)**.
 
 ### Request Flow
 
