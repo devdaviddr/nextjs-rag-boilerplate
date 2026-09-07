@@ -143,6 +143,7 @@ export function DocumentsPanel({
             ref={inputRef}
             type="file"
             accept="application/pdf"
+            aria-label="Upload a PDF"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]

@@ -64,7 +64,7 @@ async function sleep(ms: number): Promise<void> {
 async function post(
   path: string,
   body: unknown,
-  { stream = false }: { stream?: boolean } = {},
+  { stream = false, signal }: { stream?: boolean; signal?: AbortSignal } = {},
 ): Promise<Response> {
   const key = requireKey()
   const url = `${env.RAG_LLM_BASE_URL.replace(/\/$/, '')}${path}`
@@ -79,6 +79,7 @@ async function post(
         Accept: stream ? 'text/event-stream' : 'application/json',
       },
       body: JSON.stringify(body),
+      signal,
     })
 
     if (response.ok) return response
@@ -132,9 +133,17 @@ export interface ChatMessage {
   content: string
 }
 
-/** Open a streaming chat completion. Returns the raw SSE body. */
+/**
+ * Open a streaming chat completion. Returns the raw SSE body.
+ *
+ * `signal` should be the incoming request's signal: when the browser navigates
+ * away mid-answer, the upstream generation is cancelled too rather than being
+ * left to run — and to stop the aborted socket surfacing as an unhandled
+ * ECONNRESET.
+ */
 export async function createChatStream(
   messages: ChatMessage[],
+  signal?: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
   const response = await post(
     '/chat/completions',
@@ -144,7 +153,7 @@ export async function createChatStream(
       stream: true,
       temperature: 0.2,
     },
-    { stream: true },
+    { stream: true, signal },
   )
 
   if (!response.body) {

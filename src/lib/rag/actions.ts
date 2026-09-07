@@ -1,6 +1,6 @@
 'use server'
 
-import { desc, eq, sql } from 'drizzle-orm'
+import { count, desc, eq, sql } from 'drizzle-orm'
 import { after } from 'next/server'
 import { headers } from 'next/headers'
 
@@ -143,6 +143,12 @@ export async function uploadDocument(
 export async function listMyDocuments(): Promise<DocumentSummary[]> {
   const userId = await requireUserId()
 
+  // A correlated subquery written as a raw `sql` fragment does NOT work here:
+  // Drizzle renders interpolated columns unqualified inside one, so
+  // `WHERE ${chunks.documentId} = ${documents.id}` becomes
+  // `WHERE "document_id" = "id"` — both resolving to the subquery's own FROM,
+  // i.e. `chunks.document_id = chunks.id`. That is always false, so every
+  // document silently reported zero chunks. A join keeps the qualification.
   const rows = await db
     .select({
       id: documents.id,
@@ -151,12 +157,12 @@ export async function listMyDocuments(): Promise<DocumentSummary[]> {
       pageCount: documents.pageCount,
       error: documents.error,
       createdAt: documents.createdAt,
-      chunkCount: sql<number>`(
-        SELECT count(*) FROM ${chunks} WHERE ${chunks.documentId} = ${documents.id}
-      )`,
+      chunkCount: count(chunks.id),
     })
     .from(documents)
+    .leftJoin(chunks, eq(chunks.documentId, documents.id))
     .where(eq(documents.ownerId, userId))
+    .groupBy(documents.id)
     .orderBy(desc(documents.createdAt))
 
   return rows.map((r) => ({

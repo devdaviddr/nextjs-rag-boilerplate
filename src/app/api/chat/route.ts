@@ -87,41 +87,77 @@ export async function POST(request: Request) {
   // Owner-scoped in the SQL itself — see retrieve.ts.
   const retrieved = await retrieveForOwner(userId, question)
 
+  // The client can navigate away mid-answer. Enqueueing into a closed
+  // controller throws, and so does the error handler's own enqueue — which
+  // turned an ordinary disconnect into a logged error. Guard both, and treat
+  // a disconnect as unremarkable.
+  let closed = false
+  let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const send = (payload: unknown): void => {
+        if (closed) return
+        try {
+          controller.enqueue(line(payload))
+        } catch {
+          closed = true
+        }
+      }
+      const finish = (): void => {
+        if (closed) return
+        closed = true
+        try {
+          controller.close()
+        } catch {
+          // Already closed by the consumer; nothing to do.
+        }
+      }
+
+      // Next does not reliably call `cancel()` when the browser drops the
+      // socket mid-stream, so react to the request signal directly: stop the
+      // read loop and release the upstream generation. Without this the
+      // aborted socket surfaces as an uncaughtException in the server log.
+      request.signal.addEventListener('abort', () => {
+        closed = true
+        void upstreamReader?.cancel().catch(() => undefined)
+      })
+
       try {
-        controller.enqueue(
-          line({
-            type: 'citations',
-            citations: retrieved.map((chunk, i) => ({
-              index: i + 1,
-              chunkId: chunk.chunkId,
-              documentId: chunk.documentId,
-              documentTitle: chunk.documentTitle,
-              pageNumber: chunk.pageNumber,
-              similarity: Number(chunk.similarity.toFixed(4)),
-            })),
-          }),
-        )
+        send({
+          type: 'citations',
+          citations: retrieved.map((chunk, i) => ({
+            index: i + 1,
+            chunkId: chunk.chunkId,
+            documentId: chunk.documentId,
+            documentTitle: chunk.documentTitle,
+            pageNumber: chunk.pageNumber,
+            similarity: Number(chunk.similarity.toFixed(4)),
+          })),
+        })
 
         // Nothing relevant: answer without an inference call at all.
         if (retrieved.length === 0) {
-          controller.enqueue(line({ type: 'token', value: NO_CONTEXT_ANSWER }))
-          controller.enqueue(line({ type: 'done' }))
-          controller.close()
+          send({ type: 'token', value: NO_CONTEXT_ANSWER })
+          send({ type: 'done' })
+          finish()
           return
         }
 
-        const upstream = await createChatStream([
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserMessage(question, retrieved) },
-        ])
+        const upstream = await createChatStream(
+          [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: buildUserMessage(question, retrieved) },
+          ],
+          request.signal,
+        )
 
         const reader = upstream.getReader()
+        upstreamReader = reader
         const decoder = new TextDecoder()
         let buffer = ''
 
-        while (true) {
+        while (!closed) {
           const { done, value } = await reader.read()
           if (done) break
           buffer += decoder.decode(value, { stream: true })
@@ -141,7 +177,7 @@ export async function POST(request: Request) {
               }
               const token = parsed.choices?.[0]?.delta?.content
               if (token) {
-                controller.enqueue(line({ type: 'token', value: token }))
+                send({ type: 'token', value: token })
               }
             } catch {
               // A malformed frame is skipped rather than aborting the answer;
@@ -150,21 +186,32 @@ export async function POST(request: Request) {
           }
         }
 
-        controller.enqueue(line({ type: 'done' }))
-        controller.close()
+        send({ type: 'done' })
+        finish()
       } catch (error) {
-        logger.error('Chat stream failed', {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
+        // A disconnect is not a failure worth alerting on.
+        const aborted =
+          closed ||
+          request.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        if (!aborted) {
+          logger.error('Chat stream failed', {
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+        send({
+          type: 'error',
+          message: 'The answer could not be generated. Please try again.',
         })
-        controller.enqueue(
-          line({
-            type: 'error',
-            message: 'The answer could not be generated. Please try again.',
-          }),
-        )
-        controller.close()
+        finish()
       }
+    },
+    cancel() {
+      // The consumer went away: stop pulling from the upstream model so the
+      // connection (and its rate-limit budget) is released promptly.
+      closed = true
+      void upstreamReader?.cancel().catch(() => undefined)
     },
   })
 

@@ -95,3 +95,15 @@ own corpus in front of you.
 - No OCR, so scanned PDFs are rejected rather than half-ingested.
 - No reranking — no reranker is reachable on a free NIM account.
 - No evaluation harness yet; deliberately scoped to its own spec.
+- **An aborted chat stream logs `uncaughtException: Error: aborted` in dev.**
+  Closing the tab or navigating away mid-answer drops the socket while the
+  NDJSON response is open. The route guards its own writes and cancels the
+  upstream generation, so nothing leaks and no request fails — but Next still
+  logs the aborted socket. Non-streaming routes never hit this. Noise, not a
+  fault; documented so it is not mistaken for one.
+- **A process restart mid-ingestion strands a document.** Ingestion runs in an
+  `after()` callback with no queue, so if the server stops between
+  `pending`/`extracting`/`embedding` and `ready`, the document keeps that status
+  and the UI polls it indefinitely. Recovery today is manual: delete and
+  re-upload. A sweeper that fails documents left in a transient state past a
+  timeout — or a real job queue — is the fix, and belongs in its own change.
