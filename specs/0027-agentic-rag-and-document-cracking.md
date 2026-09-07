@@ -122,6 +122,22 @@ Metrics, reported per question and aggregated:
 | **Refusal accuracy**   | Does it refuse when it should, and _only_ then? Both directions matter.                              |
 | **Latency + tokens**   | Agentic loops multiply both. Track from day one or the trade is invisible.                           |
 
+Once Phase 3 exists, final-answer metrics stop being sufficient — a right answer
+reached by three wasteful searches is not the same result as a right answer
+reached by one:
+
+| Metric                      | Why                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| **Trajectory quality**      | Were the searches sensible, or did it flail and get lucky?                     |
+| **Tool-call validity**      | Malformed or hallucinated calls per run — the failure mode measured in 3a-bis. |
+| **Searches per answer**     | The cost of the loop, in the unit that is actually rate-limited.               |
+| **Termination correctness** | Did it stop when it had enough, and refuse when it did not?                    |
+
+**Record and replay.** An agentic loop is non-deterministic, which makes
+regressions hard to reproduce. Record model responses as fixtures and replay
+them in tests, so the orchestration — caps, dedup, refusal paths — is testable
+without a live endpoint, and a regression is reproducible rather than anecdotal.
+
 Run it offline against stored chunks so the deterministic parts are reproducible
 without an API key, exactly as the exemption rulebook was in Quire.
 
@@ -192,6 +208,21 @@ the index scan — so a tenant holding a small share of all chunks can silently
 receive fewer than `top_k` results. Not observed at demo scale; set
 `hnsw.iterative_scan = relaxed_order` (pgvector 0.8) and measure before it
 becomes a production surprise.
+
+### 1g. HyDE — hypothetical document embeddings
+
+Ask a cheap model to write the answer it _expects_, embed that, and search with
+it. A hypothetical answer sits in the same region of embedding space as the real
+passage; a bare question often does not.
+
+This targets the measured weakness directly. `summarise this document` scored
+**0.077** because an instruction shares almost no vocabulary with the prose it
+is about — but a hypothetical summary would. HyDE is arguably the principled fix
+for what [`0025`](0025-rag-knowledge-base-and-chat.md) patched with a regex in
+`scope.ts`.
+
+Costs one small generation per query. Evaluate against the regex path rather
+than assuming it wins: the deterministic path is free and currently works.
 
 ### 1f. Reranking — blocked, and worth stating why
 
@@ -311,6 +342,36 @@ turns, and retrieval runs on the rewrite.
 Fixes the most common failure in actual use. Costs one extra call per question,
 and can be skipped when the question is already standalone.
 
+### 3a-bis. The chat model cannot currently do this — verify before building
+
+**Phase 3 assumes the chat model emits reliable tool calls. The current default
+does not.** Probed on 2026-09-07 against the live endpoint:
+
+| Model                                                   | Tool calling                                              |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| `nvidia/nemotron-3-super-120b-a12b` _(current default)_ | **0 / 5** — HTTP 200 with **malformed JSON** every time   |
+| `nvidia/nemotron-3.5-lightning-30b-a3b`                 | **2 / 2** — `finish_reason: tool_calls`, correct function |
+
+The failure is not a transport error to retry around: the endpoint returns 200
+and the body is unparseable. That is consistent with the known structured-output
+weakness of the nemotron-3 family.
+
+Three ways forward, in preference order:
+
+1. **Switch `RAG_CHAT_MODEL` to `nemotron-3.5-lightning-30b-a3b` for the agentic
+   path.** One env var, verified working. Costs answer quality — evaluate the
+   trade with the harness rather than assuming it is free.
+2. **Do not use native tool calling.** Drive the loop with a structured JSON
+   response instead (`response_format`, which _does_ work on nemotron-3), and
+   dispatch server-side. More code, no model constraint, and the orchestration
+   stays deterministic.
+3. **Use different models for different jobs** — a tool-calling model to plan,
+   the stronger model to write the final answer. Best quality, most moving
+   parts.
+
+**Nothing in Phase 3 should be started before this is settled**, because it
+determines the shape of the whole loop.
+
 ### 3b. Retrieval as a tool, with a bounded loop
 
 Expose `search_documents(query, documentId?)` as a tool. The model may call it
@@ -325,6 +386,45 @@ up to `RAG_MAX_SEARCHES` (suggest 3) times before it must answer or refuse.
 - **The grounding guarantee is preserved as a code path**, not a prompt
   instruction: if every search returns nothing above the floor, the refusal is
   returned without asking the model to compose one.
+
+### 3b-bis. Decide whether to retrieve at all
+
+Not every turn needs retrieval. "Thanks", "what can you do?", "summarise what
+you just said" — the current design retrieves unconditionally, spending an
+embedding call and eight chunks of context to answer a question about the
+conversation itself.
+
+An adaptive router (retrieve / answer from context / refuse as out of scope) is
+cheap and reduces load on a rate-limited tier. It must **fail towards
+retrieval**: wrongly skipping retrieval produces an ungrounded answer, which is
+the one failure this system exists to prevent.
+
+### 3b-ter. Grade what came back, explicitly
+
+The loop diagram says "enough to answer?". That needs to be a real component,
+not a vibe — the CRAG/Self-RAG pattern. Grade each retrieved chunk as
+**relevant / partially relevant / irrelevant**, and let the grade drive the
+decision: answer, re-query with different terms, or refuse.
+
+Grading also produces the signal the harness needs: a run where every chunk
+grades irrelevant is a retrieval failure, distinguishable from a generation
+failure. Today those are indistinguishable.
+
+### 3b-quater. Loop hygiene
+
+Small things that decide whether the loop is usable:
+
+- **Deduplicate across iterations.** Successive searches return overlapping
+  chunks; without dedup the context fills with the same passage three times.
+- **Accumulate, do not replace.** Keep a running set of retrieved chunks with
+  their grades, so the answer draws on everything found, not just the last
+  search.
+- **Pack the context deliberately.** Order by grade, put the strongest evidence
+  at the beginning and end (models attend least to the middle), and enforce a
+  token budget rather than letting N searches overflow the window.
+- **Cache.** A semantic cache on query embeddings, and a per-conversation cache
+  of chunk lookups, both matter more here than in single-shot retrieval because
+  the loop repeats itself.
 
 ### 3c. Query decomposition
 
@@ -363,6 +463,10 @@ when the model does not call a tool at all; it is cheap and it works.
   search query_ is a new attack path that does not exist in single-shot
   retrieval. The owner-scoping invariant in 3b contains the blast radius;
   nothing else does.
+- **No per-user budget.** The caps in 3b are per request. A user asking twenty
+  questions can still exhaust a shared free-tier quota for everyone. A per-user
+  and per-deployment budget, with a visible degraded mode when exhausted, is
+  part of making the loop safe to expose.
 - **Complexity for its own sake.** If Phase 1 closes the gap, Phase 3 may not be
   worth its cost for a boilerplate. That is a legitimate outcome and the harness
   is what would reveal it.
@@ -376,8 +480,13 @@ when the model does not call a tool at all; it is cheap and it works.
 4. **2a/2b document cracking + bounding boxes** — one re-ingest, two payoffs
    (scanned documents, span-level citations).
 5. **3a query rewriting** — biggest real-world gain of the agentic work, and the
-   cheapest part of it.
-6. **3b/3c/3d the loop** — only if the numbers still show a gap worth closing.
+   cheapest part of it. Needs no tool calling, so it is unblocked today.
+6. **3a-bis settle the model question** — the loop's shape depends on it.
+7. **3b/3c/3d the loop** — only if the numbers still show a gap worth closing.
+
+1g (HyDE) can be evaluated at step 2 alongside contextual headers; it competes
+with the existing `scope.ts` regex rather than complementing it, so measure them
+against each other.
 
 Reranking (1f) re-enters at any point if a reranker becomes reachable.
 
