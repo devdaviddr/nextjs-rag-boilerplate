@@ -43,7 +43,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        # pgvector, not stock postgres: migration 0008 creates the `vector`
+        # extension for the RAG chunk embeddings, and the stock image does not
+        # ship it ("extension \"vector\" is not available"). Mirrors the db
+        # service in docker-compose.yml / docker-compose.prod.yml.
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

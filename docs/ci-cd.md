@@ -206,7 +206,7 @@ pnpm audit --audit-level=high   # continue-on-error: advisory, non-blocking
 
 #### `e2e` job
 
-Postgres runs as a GitHub Actions `services:` container (`postgres:17-alpine`,
+Postgres runs as a GitHub Actions `services:` container (`pgvector/pgvector:pg17` — the RAG migration needs the `vector` extension,
 health-checked). MinIO and Mailpit **cannot** be `services:` containers (that
 block supports only `image`/`env`/`ports`, and the `minio/minio` image needs a
 `server /data` command to run), so the workflow starts them explicitly with
