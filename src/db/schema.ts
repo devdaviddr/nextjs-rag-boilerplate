@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   bigint,
   boolean,
+  customType,
   index,
   integer,
   pgTable,
@@ -194,17 +195,141 @@ export const pushSubscriptions = pgTable(
   (table) => [index('push_subscriptions_user_id_idx').on(table.userId)],
 )
 
+/**
+ * pgvector's half-precision vector type (spec 0025).
+ *
+ * NOT a stylistic choice. The only embedding model reachable on a free NVIDIA
+ * NIM account is `nemotron-3-embed-1b`, whose output is fixed at 2048
+ * dimensions (it rejects `dimensions: 1024`). pgvector can only build an HNSW
+ * or IVFFlat index on a `vector` up to 2000 dimensions — so `vector(2048)`
+ * would store fine and then silently sequential-scan every query. `halfvec`
+ * indexes up to 4000 dimensions; the fp16 recall cost is negligible next to
+ * losing the index entirely.
+ *
+ * Drizzle has no built-in halfvec, so the wire format is handled here: the
+ * driver sends and receives pgvector's `[1,2,3]` text representation.
+ */
+const halfvec = customType<{
+  data: number[]
+  driverData: string
+  config: { dimensions: number }
+}>({
+  dataType(config) {
+    return `halfvec(${config?.dimensions ?? 0})`
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`
+  },
+  fromDriver(value: string): number[] {
+    return JSON.parse(value) as number[]
+  },
+})
+
+/** Ingestion states. `failed` always carries a human-readable `error`. */
+export const DOCUMENT_STATUSES = [
+  'pending',
+  'extracting',
+  'embedding',
+  'ready',
+  'failed',
+] as const
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number]
+
+export const documents = pgTable(
+  'documents',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // The stored PDF blob. `cascade` so removing the file row can never leave
+    // a document pointing at an object that no longer exists.
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    pageCount: integer('page_count'),
+    status: text('status').$type<DocumentStatus>().notNull().default('pending'),
+    // Populated only when status = 'failed'. User-facing, so it must stay
+    // readable — no stack traces.
+    error: text('error'),
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { mode: 'date' })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index('documents_owner_id_idx').on(table.ownerId),
+    index('documents_status_idx').on(table.status),
+  ],
+)
+
+export const chunks = pgTable(
+  'chunks',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    // Denormalised from `documents.ownerId` on purpose: every retrieval query
+    // filters on it, and a join would put tenant isolation one refactor away
+    // from being dropped. See spec 0025 NFR1.
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    // 1-based, matching what a reader sees in a PDF viewer. Chunks never span
+    // a page boundary, so a citation is always exact.
+    pageNumber: integer('page_number').notNull(),
+    chunkIndex: integer('chunk_index').notNull(),
+    tokenCount: integer('token_count').notNull(),
+    embedding: halfvec('embedding', { dimensions: 2048 }).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('chunks_owner_id_idx').on(table.ownerId),
+    index('chunks_document_id_idx').on(table.documentId),
+    // The HNSW index itself is created in the migration — drizzle-kit cannot
+    // express `halfvec_cosine_ops` for a custom type.
+  ],
+)
+
 // Drizzle relations — required for `db.query.*` relational queries with `with`.
 // These are ORM-only (no database migration).
 export const usersRelations = relations(users, ({ many }) => ({
   userRoles: many(userRoles),
   files: many(files),
+  documents: many(documents),
 }))
 
 export const filesRelations = relations(files, ({ one }) => ({
   owner: one(users, {
     fields: [files.ownerId],
     references: [users.id],
+  }),
+}))
+
+export const documentsRelations = relations(documents, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [documents.ownerId],
+    references: [users.id],
+  }),
+  file: one(files, {
+    fields: [documents.fileId],
+    references: [files.id],
+  }),
+  chunks: many(chunks),
+}))
+
+export const chunksRelations = relations(chunks, ({ one }) => ({
+  document: one(documents, {
+    fields: [chunks.documentId],
+    references: [documents.id],
   }),
 }))
 
@@ -233,3 +358,7 @@ export type FileRecord = typeof files.$inferSelect
 export type NewFileRecord = typeof files.$inferInsert
 export type PushSubscription = typeof pushSubscriptions.$inferSelect
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert
+export type DocumentRecord = typeof documents.$inferSelect
+export type NewDocumentRecord = typeof documents.$inferInsert
+export type ChunkRecord = typeof chunks.$inferSelect
+export type NewChunkRecord = typeof chunks.$inferInsert
