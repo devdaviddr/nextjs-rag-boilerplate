@@ -7,6 +7,17 @@ import { expect, test } from './fixtures'
 // Ingestion is out-of-band and calls a rate-limited inference endpoint, so
 // these are deliberately generous on timeouts rather than flaky-fast.
 
+// RAG needs a live inference endpoint. Without a key the feature reports
+// itself as unconfigured by design, so these self-skip rather than fail —
+// the same posture as the push and OAuth suites. CI passes the secret through
+// when one is configured; with none set, this whole file skips.
+test.beforeEach(() => {
+  test.skip(
+    !process.env.NVIDIA_API_KEY,
+    'NVIDIA_API_KEY is not set — RAG end-to-end tests skipped',
+  )
+})
+
 const FIXTURES = 'tests/e2e/fixtures'
 const INGEST_TIMEOUT = 120_000
 
