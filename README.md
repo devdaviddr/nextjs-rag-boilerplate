@@ -119,6 +119,23 @@ Full reference — see **[Usage & Development](docs/usage.md)** for details.
 (add `pnpm test:e2e` for the full suite — it needs Postgres, MinIO, and, for the
 email round-trips, Mailpit).
 
+## Architecture
+
+```mermaid
+flowchart LR
+    B["Browser"] --> APP["Next.js 16<br>RSC · Server Actions<br>the only public gateway"]
+    APP --> DB[("Postgres 17<br>+ pgvector")]
+    APP --> S3[("MinIO<br>PDFs")]
+    APP -.->|"the only outbound call"| NIM["NVIDIA NIM<br>or any OpenAI-compatible<br>endpoint"]
+
+    style NIM stroke-dasharray: 4 4
+```
+
+Postgres and MinIO have no public ingress. The one dashed edge is everything
+that leaves your machine — point `RAG_LLM_BASE_URL` at a local Ollama or
+llama.cpp and it disappears too. More in
+**[Architecture](docs/architecture.md)**.
+
 ## How the RAG works
 
 ```mermaid

@@ -29,6 +29,56 @@ is required, because a join is one refactor away from being dropped.
 
 ---
 
+## Architecture
+
+The flow diagram below shows _what happens_; this shows _where it lives_. Each
+box is a module, and the boundaries are deliberate: everything in the pure
+column can be unit-tested without a database, a network or a PDF.
+
+```mermaid
+flowchart TB
+    subgraph ui["UI — src/components/chat, src/app/(dashboard)"]
+        KB["Knowledge base<br>upload · status · delete"]
+        CH["Chat<br>streaming · citations · source panel"]
+    end
+
+    subgraph api["Entry points"]
+        AC["actions.ts<br>Server Actions<br>quota · rate limit · ownership"]
+        RT["api/chat/route.ts<br>streaming · persistence · metrics"]
+        SRC["api/documents/[id]/source<br>inline PDF, ownership-checked"]
+    end
+
+    subgraph pure["Pure — no I/O, unit-tested in isolation"]
+        CHK["chunk.ts<br>token-aware, page-bounded"]
+        SCP["scope.ts<br>content question vs<br>whole-document request"]
+        PRM["prompt.ts<br>fenced context block"]
+        MET["chat/metrics.ts<br>tok/s, TTFT"]
+    end
+
+    subgraph io["I/O — server-only"]
+        EXT["extract.ts<br>unpdf"]
+        EMB["embed.ts<br>embedPassages / embedQuery"]
+        ING["ingest.ts<br>state machine"]
+        RET["retrieve.ts<br>owner-scoped kNN"]
+        CLI["client.ts<br>retries · backoff · usage"]
+    end
+
+    DB[("Postgres + pgvector")]
+    OBJ[("MinIO")]
+    NIM["Inference endpoint"]
+
+    KB --> AC --> ING
+    CH --> RT
+    CH --> SRC --> OBJ
+    ING --> EXT --> CHK --> EMB --> CLI
+    ING --> DB
+    RT --> SCP --> RET --> DB
+    RT --> PRM --> CLI --> NIM
+    RT --> MET
+    EMB --> CLI
+    EXT --> OBJ
+```
+
 ## The pipeline
 
 ```mermaid
@@ -274,6 +324,51 @@ Three details that are not incidental:
 > index scan, so at large scale a tenant holding a small share of all chunks can
 > get fewer than `top_k` results. Not observed at demo scale, and pgvector 0.8's
 > `hnsw.iterative_scan` is the lever if it ever bites.
+
+### A question, end to end
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Browser
+    participant R as /api/chat
+    participant D as Postgres
+    participant N as Inference endpoint
+
+    U->>R: POST question + conversationId?
+    R->>D: verify ownership / create conversation
+    R->>D: INSERT user message
+    Note over R,D: Persisted BEFORE the model is called,<br>so a question is never lost
+
+    R->>R: resolveScope(question, documents)
+    alt Whole-document request
+        R->>D: chunks for that document, in reading order
+    else Content question
+        R->>N: embed question (input_type: query)
+        N-->>R: 2048-dim vector
+        R->>D: kNN WHERE owner_id = me, ORDER BY <=>
+    end
+    D-->>R: candidate chunks
+
+    alt Nothing above the similarity floor
+        R-->>U: fixed refusal
+        Note over R,N: The chat model is never called
+    else Grounded
+        R->>N: system prompt + fenced context + question
+        loop streamed tokens
+            N-->>R: delta
+            R-->>U: {"type":"token"}
+        end
+        N-->>R: usage frame (real token counts)
+        R->>D: INSERT assistant message + citations + metrics
+        R-->>U: metrics, done
+    end
+```
+
+Note step ordering: the answer is committed **before** the final frames are
+sent, and the same commit runs if the client disconnects mid-stream — a
+conversation showing a question with no answer is a worse failure than a
+truncated one.
 
 ### Answering
 
