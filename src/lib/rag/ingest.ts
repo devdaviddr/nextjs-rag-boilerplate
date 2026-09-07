@@ -8,7 +8,7 @@ import type { DocumentStatus } from '@/db/schema'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
-import { chunkPages } from './chunk'
+import { buildEmbeddingText, chunkPages } from './chunk'
 import { embedPassages } from './embed'
 import { ExtractionError, extractPdf } from './extract'
 
@@ -74,7 +74,17 @@ export async function ingestDocument(documentId: string): Promise<void> {
 
     await setStatus(documentId, 'embedding', { pageCount })
 
-    const vectors = await embedPassages(pieces.map((p) => p.content))
+    // Embed the composed text (title + heading + content), store the original.
+    // A citation must show the document's own words, not this preamble.
+    const vectors = await embedPassages(
+      pieces.map((piece) =>
+        buildEmbeddingText({
+          documentTitle: doc.title,
+          heading: piece.heading,
+          content: piece.content,
+        }),
+      ),
+    )
 
     // Delete-then-insert inside one transaction makes re-ingesting a failed
     // document idempotent — a retry can never double up chunks (NFR5).
@@ -85,6 +95,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
           documentId,
           ownerId: doc.ownerId,
           content: piece.content,
+          heading: piece.heading,
           pageNumber: piece.pageNumber,
           chunkIndex: piece.chunkIndex,
           tokenCount: piece.tokenCount,

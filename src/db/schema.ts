@@ -1,4 +1,4 @@
-import { relations, sql } from 'drizzle-orm'
+import { type SQL, relations, sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
   bigint,
@@ -226,6 +226,16 @@ const halfvec = customType<{
   },
 })
 
+/**
+ * Postgres `tsvector`. Drizzle has no built-in type for it, and the column is
+ * generated, so nothing ever writes to it from application code.
+ */
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return 'tsvector'
+  },
+})
+
 /** Ingestion states. `failed` always carries a human-readable `error`. */
 export const DOCUMENT_STATUSES = [
   'pending',
@@ -284,6 +294,15 @@ export const chunks = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     content: text('content').notNull(),
+    // Detected section heading for the page (spec 0027, 1a). Prefixed to the
+    // EMBEDDED text, never to the displayed text, so a citation shows the
+    // document's own words.
+    heading: text('heading'),
+    // Lexical half of hybrid retrieval (spec 0027, 1b). Generated, so it can
+    // never drift from `content`.
+    contentTsv: tsvector('content_tsv').generatedAlwaysAs(
+      (): SQL => sql`to_tsvector('english', ${chunks.content})`,
+    ),
     // 1-based, matching what a reader sees in a PDF viewer. Chunks never span
     // a page boundary, so a citation is always exact.
     pageNumber: integer('page_number').notNull(),
@@ -295,6 +314,7 @@ export const chunks = pgTable(
   (table) => [
     index('chunks_owner_id_idx').on(table.ownerId),
     index('chunks_document_id_idx').on(table.documentId),
+    index('chunks_content_tsv_idx').using('gin', table.contentTsv),
     // The HNSW index itself is created in the migration — drizzle-kit cannot
     // express `halfvec_cosine_ops` for a custom type.
   ],

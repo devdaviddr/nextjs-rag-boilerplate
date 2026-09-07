@@ -1,7 +1,7 @@
 ---
 id: 0027
 title: Agentic RAG, document cracking and the evaluation that makes both provable
-status: Proposed
+status: In Progress
 release: '—'
 created: 2026-09-07
 updated: 2026-09-07
@@ -93,6 +93,57 @@ model instead, and a good illustration of the gap this spec addresses.
   _retrieval_; it never gets a tool that writes, sends or deletes.
 
 ---
+
+## Implementation status
+
+| Item                                       | Status                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------- |
+| **0** Evaluation harness                   | **Shipped** — `pnpm rag:eval`, 20 questions, 3 documents with distractors |
+| **1a** Contextual chunk headers            | **Shipped**                                                               |
+| **1b** Hybrid retrieval (RRF)              | **Shipped**, with one sub-decision reversed — see below                   |
+| 1c Structure-aware / parent–child chunking | Not started                                                               |
+| 1d Real tokenizer                          | Not started                                                               |
+| 1e HNSW / filtered-ANN tuning              | Not started                                                               |
+| 1f Reranking                               | Blocked — no reranker on this account                                     |
+| 1g HyDE                                    | Not started                                                               |
+| Phase 2 Document cracking                  | Not started                                                               |
+| Phase 3 Agentic loop                       | Not started — blocked on 3a-bis                                           |
+
+Measured effect of 1a + 1b together, against the dense-only baseline:
+
+| Metric           | Baseline | 1a + 1b   |           |
+| ---------------- | -------- | --------- | --------- |
+| hit@1            | 0.824    | **0.941** | +0.117    |
+| hit@3            | 0.882    | **0.941** | +0.059    |
+| MRR              | 0.853    | **0.941** | +0.088    |
+| Refusal accuracy | 1.000    | **1.000** | unchanged |
+
+### What implementation changed about this spec
+
+**Two things in 1b were wrong as written, and the harness caught both.**
+
+_The lexical query must OR its terms, not AND them._ `websearch_to_tsquery`
+ANDs, so _"What does POL-HR-014 cover?"_ required the passage to contain
+"cover" as well as the identifier, and matched nothing at all. Question-shaped
+input is full of words that never appear in the passage answering it.
+
+_A strong lexical hit cannot be allowed to bypass the similarity floor_ — the
+mechanism this spec proposed for rescuing exact identifiers. On the evaluation
+corpus **no lexical-rank threshold separates true from false positives**: the
+unanswerable _"How much parental leave am I entitled to?"_ scores **0.60** on
+`leave`, above every genuine identifier query at **0.30**. With the bypass
+enabled, retrieval reached hit@3 1.000 and MRR 0.971 — and **refusal accuracy
+fell from 1.000 to 0.000**. It was removed rather than tuned; a threshold fitted
+to a dozen chunks is over-fitting, not a fix.
+
+So the lexical channel improves **ordering**, which is safe and measurable, and
+does not decide what is relevant enough to answer from. Rescuing a
+below-floor identifier needs reranking (1f, blocked) or IDF-aware gating
+validated on a larger corpus.
+
+**This is the argument for Recommendation 0 in miniature.** Both errors looked
+reasonable in the spec, both would have shipped, and the second would have
+silently destroyed the property the whole system is built around.
 
 ## Recommendation 0 — Build the evaluation harness first
 

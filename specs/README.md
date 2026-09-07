@@ -68,7 +68,7 @@ other — one isn't a substitute for the other.
 | [0024](0024-faster-time-to-deploy.md)             | Faster time-to-deploy                             | Shipped     | v0.17.0         |
 | [0025](0025-rag-knowledge-base-and-chat.md)       | PDF knowledge base & document chat                | In Progress | —               |
 | [0026](0026-chat-first-ux-and-history.md)         | Rag Boilerplate: chat-first UX, history & sources | In Progress | —               |
-| [0027](0027-agentic-rag-and-document-cracking.md) | Agentic RAG, document cracking & evaluation       | Proposed    | —               |
+| [0027](0027-agentic-rag-and-document-cracking.md) | Agentic RAG, document cracking & evaluation       | In Progress | —               |
 
 > Specs 0001–0004 were written retroactively to document the decisions behind
 > the existing releases; SDD is the going-forward process (0005 onward).

@@ -165,6 +165,25 @@ that is what it is.
 Env validation rejects an overlap ≥ the chunk size at boot, because that
 combination makes the chunker unable to make progress.
 
+### 2b. What actually gets embedded
+
+The text sent to the embedding model is **not** the text stored for display:
+
+```
+staff handbook — STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+The annual leave entitlement is 20 working days per calendar year.
+```
+
+The document title and detected section heading are prefixed so a question that
+names a document or section has something to match. The original `content` is
+stored separately and is what a citation shows, so the synthetic preamble never
+reaches the user.
+
+Heading detection is deliberately conservative — a short first line that is not
+a sentence. Missing a heading loses a little context; promoting a _sentence_ to
+a heading prepends it to every chunk on that page and pollutes their embeddings,
+so the detector prefers to miss.
+
 ### 3. Embed
 
 `src/lib/rag/embed.ts` — batched (`RAG_EMBED_BATCH`, 32) and pooled
@@ -297,6 +316,36 @@ Scoping is deliberately conservative: an ambiguous "summarise this" across
 several documents falls back to similarity search rather than guessing which
 document you meant.
 
+### Hybrid retrieval — dense and lexical, fused
+
+Two channels run per question and are combined with **Reciprocal Rank Fusion**:
+
+```mermaid
+flowchart LR
+    Q["Question"] --> V["Dense<br>embed as query<br>cosine kNN"]
+    Q --> L["Lexical<br>tsvector<br>ts_rank_cd"]
+    V --> F["RRF fusion<br>1/(k + rank) summed"]
+    L --> F
+    F --> G{"cosine ≥ floor?"}
+    G -->|no| R["Refuse"]
+    G -->|yes| A["Answer"]
+```
+
+RRF combines **ranks**, not scores. Cosine similarity and `ts_rank_cd` are not
+on comparable scales, and normalising them against each other is the fragile
+part of naive hybrid search; RRF sidesteps it. Both channels filter on
+`owner_id` in their own `WHERE` clause — the tenant boundary is not something
+fusion is trusted to preserve.
+
+**The lexical query ORs its terms.** `websearch_to_tsquery` ANDs them, which is
+wrong for question-shaped input: _"What does POL-HR-014 cover?"_ becomes
+`'pol-hr' <-> 'pol' <-> 'hr' <-> '014' & 'cover'`, and the passage holding the
+identifier is rejected because it does not also contain "cover". Questions are
+full of verbs and filler that never appear in the passage answering them.
+
+**The gate stays on cosine alone**, and that is a measured decision rather than
+a conservative default — see Known gaps.
+
 ### The query itself
 
 ```sql
@@ -308,6 +357,9 @@ WHERE c.owner_id = $owner            -- tenant boundary, in the query
 ORDER BY c.embedding <=> $query::halfvec
 LIMIT $top_k
 ```
+
+(The dense channel, shown alone for clarity; the live query fuses it with the
+lexical one as above.)
 
 Three details that are not incidental:
 
@@ -452,6 +504,50 @@ you.
 
 ---
 
+## Upgrading an existing knowledge base
+
+Chunks embedded before contextual headers existed were embedded from their raw
+content, so they sit slightly differently in vector space from chunks embedded
+after. Retrieval still works — it degrades rather than breaks — but a mixed
+corpus is not measurable against the harness.
+
+**Re-ingest existing documents** to get the full benefit: delete and re-upload,
+or set `status = 'failed'` and use Retry, which re-runs extraction and embedding
+and replaces the chunks in one transaction.
+
+## Evaluation
+
+`pnpm rag:eval` ingests `eval/corpus/` for a dedicated evaluation user and runs
+`eval/questions.json` through the same retrieval path the app uses, reporting
+whether the right passage came back.
+
+It measures **retrieval, not generation**. Everything downstream is capped by
+recall, and unlike answer quality this needs no model to score.
+
+```bash
+pnpm rag:corpus                 # regenerate the corpus PDFs
+pnpm rag:eval                   # run, print a report
+pnpm rag:eval --label hybrid    # save results for comparison
+pnpm rag:eval --no-ingest       # reuse what is already indexed
+```
+
+The corpus is three documents that deliberately overlap: the handbook's fire
+assembly point and the facilities guide's staff parking are both on Wellington
+Street, and both the handbook and the contract discuss notice. A corpus without
+distractors measures nothing.
+
+### Measured
+
+Contextual headers plus hybrid retrieval, against the previous dense-only
+implementation:
+
+| Metric           | Dense only | Hybrid + headers |               |
+| ---------------- | ---------- | ---------------- | ------------- |
+| hit@1            | 0.824      | **0.941**        | +0.117        |
+| hit@3            | 0.882      | **0.941**        | +0.059        |
+| MRR              | 0.853      | **0.941**        | +0.088        |
+| Refusal accuracy | 1.000      | **1.000**        | no regression |
+
 ## Known gaps
 
 Named rather than hidden.
@@ -459,6 +555,15 @@ Named rather than hidden.
 - **No OCR.** Scanned PDFs are rejected, not half-ingested.
 - **No reranking.** No cross-encoder reranker is reachable on a free NIM
   account, so retrieval quality rests on chunking and `top_k`.
+- **An exact identifier below the similarity floor still refuses.** A lexical
+  hit is not allowed to admit a chunk on its own, because on the evaluation
+  corpus **no lexical-rank threshold separates true from false positives**:
+  _"How much parental leave am I entitled to?"_ — which the corpus cannot
+  answer — scores **0.60** on `leave`, higher than every genuine identifier
+  query at **0.30**. Enabling that bypass took refusal accuracy from 1.0 to
+  **0.0**. The principled fixes are reranking or IDF-aware gating validated on
+  a corpus larger than a dozen chunks; a tuned threshold here would be
+  over-fitting.
 - **No evaluation harness.** Deliberately scoped to its own spec so it does not
   get skipped under feature pressure. Until it exists, "retrieval is good" is an
   opinion.

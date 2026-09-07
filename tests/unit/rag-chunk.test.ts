@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { chunkPages, estimateTokens, type PageText } from '@/lib/rag/chunk'
+import {
+  buildEmbeddingText,
+  chunkPages,
+  detectHeading,
+  estimateTokens,
+  type PageText,
+} from '@/lib/rag/chunk'
 
 const OPTS = { chunkTokens: 100, overlapTokens: 20 }
 
@@ -93,5 +99,77 @@ describe('chunkPages', () => {
     expect(() =>
       chunkPages([page(1, 'text')], { chunkTokens: 10, overlapTokens: 10 }),
     ).toThrow(/smaller than/)
+  })
+})
+
+describe('detectHeading', () => {
+  it('detects an all-caps section heading', () => {
+    expect(
+      detectHeading('STAFF HANDBOOK - SECTION 2 - EXPENSES\nClaims...'),
+    ).toBe('STAFF HANDBOOK - SECTION 2 - EXPENSES')
+  })
+
+  it('detects a title-case heading', () => {
+    expect(detectHeading('Notice And Termination\nAfter probation...')).toBe(
+      'Notice And Termination',
+    )
+  })
+
+  it('refuses a sentence, however short', () => {
+    // Promoting a sentence to a heading prepends it to every chunk on the page
+    // and pollutes their embeddings, so the detector prefers to miss.
+    expect(detectHeading('The building is open from 6am.')).toBeNull()
+    expect(detectHeading('Leave must be approved:')).toBeNull()
+  })
+
+  it('refuses an over-long first line', () => {
+    expect(detectHeading('A '.repeat(60))).toBeNull()
+  })
+
+  it('handles empty and symbol-only pages', () => {
+    expect(detectHeading('')).toBeNull()
+    expect(detectHeading('   \n  ')).toBeNull()
+    expect(detectHeading('--- ***')).toBeNull()
+  })
+})
+
+describe('buildEmbeddingText', () => {
+  it('prefixes the document title so a title mention has something to match', () => {
+    const text = buildEmbeddingText({
+      documentTitle: 'staff-handbook',
+      heading: 'SECTION 1 - ANNUAL LEAVE',
+      content: 'The entitlement is 20 days.',
+    })
+    expect(text).toContain('staff handbook')
+    expect(text).toContain('SECTION 1 - ANNUAL LEAVE')
+    expect(text).toContain('The entitlement is 20 days.')
+  })
+
+  it('normalises separators in the title', () => {
+    expect(
+      buildEmbeddingText({
+        documentTitle: 'q3_financial-report',
+        heading: null,
+        content: 'x',
+      }),
+    ).toContain('q3 financial report')
+  })
+
+  it('omits the heading when there is none', () => {
+    const text = buildEmbeddingText({
+      documentTitle: 'doc',
+      heading: null,
+      content: 'body',
+    })
+    expect(text).toBe('doc\nbody')
+  })
+
+  it('never mutates the content itself', () => {
+    // The stored content is what a citation shows; the preamble is only ever
+    // part of the embedded text.
+    const content = 'Original wording, unchanged.'
+    expect(
+      buildEmbeddingText({ documentTitle: 'd', heading: 'H', content }),
+    ).toContain(content)
   })
 })
