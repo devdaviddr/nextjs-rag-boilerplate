@@ -64,6 +64,18 @@ test.describe('knowledge base', () => {
     // The leave policy is on page 1 of the fixture.
     await expect(page.getByText(/handbook — page 1/i).first()).toBeVisible()
 
+    // Regression: "summarise <doc>" has no semantic anchor in the content, so
+    // similarity search scored it ~0.17 and the answer was refused even though
+    // the document was indexed. Whole-document requests retrieve by document.
+    await page.getByLabel('Question').fill('summarise handbook')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(page.getByText('Sources').last()).toBeVisible({
+      timeout: 60_000,
+    })
+    await expect(
+      page.getByText("I couldn't find anything about that in your documents."),
+    ).toHaveCount(0)
+
     // FR8: delete removes it from the knowledge base.
     await page.goto('/documents')
     await page.getByRole('button', { name: /Delete handbook/i }).click()

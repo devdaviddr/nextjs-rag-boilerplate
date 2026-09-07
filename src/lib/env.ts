@@ -178,6 +178,14 @@ const envSchema = z
       .nonnegative()
       .optional()
       .default(50),
+    // How many chunks a whole-document request may send to the model. Bounds
+    // both cost and context length when someone asks to summarise a long PDF.
+    RAG_DOC_SCOPE_MAX_CHUNKS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(24),
     RAG_MAX_DOCUMENT_PAGES: z.coerce
       .number()
       .int()

@@ -2,13 +2,19 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 import { getCurrentSession } from '@/lib/auth/session'
+import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { RAG_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
 import { createChatStream, isRagConfigured } from '@/lib/rag/client'
 import { NO_CONTEXT_ANSWER } from '@/lib/rag/constants'
 import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
-import { retrieveForOwner } from '@/lib/rag/retrieve'
+import {
+  listReadyDocuments,
+  retrieveDocumentChunks,
+  retrieveForOwner,
+} from '@/lib/rag/retrieve'
+import { resolveScope } from '@/lib/rag/scope'
 
 /**
  * Grounded document chat (spec 0025 FR10/FR11).
@@ -84,8 +90,20 @@ export async function POST(request: Request) {
     )
   }
 
-  // Owner-scoped in the SQL itself — see retrieve.ts.
-  const retrieved = await retrieveForOwner(userId, question)
+  // Two retrieval paths. Similarity search answers "which passage is about
+  // X", but cannot serve "summarise this document" — that request has no
+  // semantic anchor in the content, so it scores near zero and would be
+  // refused. A whole-document request therefore retrieves BY DOCUMENT
+  // instead. Both paths are owner-scoped in the SQL itself (see retrieve.ts).
+  const scope = resolveScope(question, await listReadyDocuments(userId))
+  const retrieved =
+    scope.mode === 'document'
+      ? await retrieveDocumentChunks(
+          userId,
+          scope.documentId,
+          env.RAG_DOC_SCOPE_MAX_CHUNKS,
+        )
+      : await retrieveForOwner(userId, question)
 
   // The client can navigate away mid-answer. Enqueueing into a closed
   // controller throws, and so does the error handler's own enqueue — which

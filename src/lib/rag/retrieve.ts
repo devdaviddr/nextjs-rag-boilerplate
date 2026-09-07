@@ -1,8 +1,9 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/db'
+import { chunks, documents } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
 
@@ -78,4 +79,47 @@ export async function retrieveForOwner(
       similarity: Number(r.similarity),
     }))
     .filter((r) => r.similarity >= minSimilarity)
+}
+
+/** The caller's indexed documents, for query scoping. */
+export async function listReadyDocuments(
+  ownerId: string,
+): Promise<Array<{ id: string; title: string }>> {
+  return db
+    .select({ id: documents.id, title: documents.title })
+    .from(documents)
+    .where(and(eq(documents.ownerId, ownerId), eq(documents.status, 'ready')))
+}
+
+/**
+ * Retrieve a whole document in reading order, for summarise/overview requests
+ * that similarity search structurally cannot serve (see scope.ts).
+ *
+ * Owner-scoped exactly as the kNN path is — the `ownerId` predicate is on
+ * `chunks`, not inferred from the document, so this cannot become a way to
+ * read someone else's file by guessing an id.
+ */
+export async function retrieveDocumentChunks(
+  ownerId: string,
+  documentId: string,
+  limit: number,
+): Promise<RetrievedChunk[]> {
+  const rows = await db
+    .select({
+      chunkId: chunks.id,
+      documentId: chunks.documentId,
+      documentTitle: documents.title,
+      content: chunks.content,
+      pageNumber: chunks.pageNumber,
+    })
+    .from(chunks)
+    .innerJoin(documents, eq(documents.id, chunks.documentId))
+    .where(and(eq(chunks.ownerId, ownerId), eq(chunks.documentId, documentId)))
+    .orderBy(asc(chunks.chunkIndex))
+    .limit(limit)
+
+  // Similarity is not meaningful here — the whole document was requested, not
+  // the passages nearest a query. Reported as 1 so the citation shape is
+  // identical for the UI.
+  return rows.map((r) => ({ ...r, similarity: 1 }))
 }
