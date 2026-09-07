@@ -90,6 +90,11 @@ Those are the parts worth getting right once. This spec builds them on top of
 - **FR9** — Retrieval: embed the question with **`input_type: "query"`**, then
   cosine-distance search over `chunks` filtered to `ownerId = session.user.id`,
   returning top `RAG_TOP_K` (default 8) above `RAG_MIN_SIMILARITY` (default 0.35).
+- **FR9a** — Query scoping: a whole-document request (summarise / overview /
+  "what is in X") retrieves the named document in reading order instead of by
+  similarity, because such a request has no semantic anchor in the content and
+  scores near zero. Ambiguous requests fall back to similarity search rather
+  than guessing a document.
 - **FR10** — `POST /api/chat`: streams a grounded answer from
   `nvidia/nemotron-3-super-120b-a12b`, given only the retrieved chunks as
   context. If retrieval returns nothing above threshold, it returns a fixed

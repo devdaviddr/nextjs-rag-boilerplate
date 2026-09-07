@@ -19,7 +19,8 @@ question → embed → kNN search → grounded answer      (retrieval)
 | Chunk    | `src/lib/rag/chunk.ts`           | Token-aware, paragraph-preferring, never spans a page boundary                                 |
 | Embed    | `src/lib/rag/embed.ts`           | Batched + pooled, with backoff on 429                                                          |
 | Store    | `chunks.embedding halfvec(2048)` | HNSW index, cosine                                                                             |
-| Retrieve | `src/lib/rag/retrieve.ts`        | Owner-scoped kNN in SQL                                                                        |
+| Scope    | `src/lib/rag/scope.ts`           | Content question, or whole-document request?                                                   |
+| Retrieve | `src/lib/rag/retrieve.ts`        | Owner-scoped kNN, or the whole document in reading order                                       |
 | Answer   | `src/app/api/chat/route.ts`      | Streams NDJSON: citations, then tokens                                                         |
 
 ## Setup
@@ -59,6 +60,17 @@ as a query is only ~0.785 cosine-similar. `embed.ts` therefore exports
 `embedPassages()` and `embedQuery()` and deliberately **no** generic `embed()`,
 so a call site cannot quietly pick the wrong one.
 
+**Similarity search cannot answer "summarise this".** Measured on a 3-page
+handbook: real content questions scored 0.48-0.55, but `summarise <title>`
+scored **0.172** and `summarise this document` **0.077** — near noise, because
+such a request has no semantic anchor in the content. It is an instruction
+_about_ the document, not a question whose answer sits in a passage. Lowering
+the floor would admit junk rather than fix it, so `scope.ts` routes
+whole-document requests to retrieval **by document** (in reading order, capped
+by `RAG_DOC_SCOPE_MAX_CHUNKS`) and leaves everything else to kNN. Scoping is
+deliberately conservative: an ambiguous "summarise this" across several
+documents falls back to search rather than guessing.
+
 **Refusal is a code path, not a prompt instruction.** If nothing clears
 `RAG_MIN_SIMILARITY`, the chat model is never called and a fixed response is
 returned. An empty knowledge base cannot produce a confident hallucination, and
@@ -74,6 +86,7 @@ costs nothing.
 | `RAG_MIN_SIMILARITY`                        | 0.35    | Below this, the question is answered as "not in your documents" |
 | `RAG_EMBED_BATCH` / `RAG_EMBED_CONCURRENCY` | 32 / 4  | Ingestion throughput vs rate limits                             |
 | `RAG_MAX_DOCUMENT_PAGES`                    | 200     | Bounds worst-case ingestion cost                                |
+| `RAG_DOC_SCOPE_MAX_CHUNKS`                  | 24      | How much of a document a summary request may send               |
 
 Measured against a 3-page synthetic handbook: on-topic questions scored
 0.41–0.62 and an off-topic question scored 0.13. The 0.35 default sits in that
