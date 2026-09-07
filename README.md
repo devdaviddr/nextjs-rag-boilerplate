@@ -1,8 +1,10 @@
 <div align="center">
 
-# Next.js Full-Stack Boilerplate
+# Rag Boilerplate
 
-A production-grade starting point for full-stack web apps — authentication, database, PWA, Docker, and CI wired up and tested, so you can start building features on day one.
+Upload a PDF knowledge base and chat with your documents — answers grounded in
+your own files, with a citation for every claim. Built on a production-grade
+Next.js foundation: auth, database, storage, PWA and Docker already wired up.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-20232a?logo=react&logoColor=61dafb)
@@ -10,6 +12,8 @@ A production-grade starting point for full-stack web apps — authentication, da
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169e1?logo=postgresql&logoColor=white)
 ![Auth.js](https://img.shields.io/badge/Auth.js-v5-000000?logo=auth0&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss&logoColor=white)
+![pgvector](https://img.shields.io/badge/pgvector-HNSW-4169e1?logo=postgresql&logoColor=white)
+![NVIDIA NIM](https://img.shields.io/badge/NVIDIA_NIM-nemotron--3-76b900?logo=nvidia&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-ready-5a0fc8?logo=pwa&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
@@ -26,7 +30,7 @@ An opinionated, batteries-included template built on **Next.js 16** (App Router,
 - 🧑‍⚖️ **Role-based access control** — roles on the JWT, edge + server guards, admin user-management, invite-based account claim
 - 🗄️ **PostgreSQL + Drizzle ORM** — type-safe schema (see the **[ERD](docs/database.md#entity-relationship-diagram)**), committed migrations
 - 📁 **File uploads** — self-hosted, S3-compatible object storage (MinIO), size/type validation, per-user quota
-- 🧠 **[RAG document chat](docs/rag.md)** — upload a PDF knowledge base, `pgvector` retrieval, answers grounded in your own documents with page-level citations
+- 🧠 **[RAG document chat](docs/rag.md)** — PDF knowledge base, `pgvector` + HNSW retrieval, answers grounded in your own documents, clickable page-level citations, conversation history, and per-answer generation metrics
 - 📱 **PWA + responsive app shell** — installable, offline-resilient, **[Web Push](docs/push.md)**, light/dark theming, mobile-to-desktop layout
 - 🔎 **SEO** — OpenGraph/Twitter cards, `robots.txt` + `sitemap.xml`
 - 💾 **[Automated backups](docs/backups.md)** — nightly Postgres + MinIO, doctor script, tested restore runbook
@@ -115,29 +119,60 @@ Full reference — see **[Usage & Development](docs/usage.md)** for details.
 (add `pnpm test:e2e` for the full suite — it needs Postgres, MinIO, and, for the
 email round-trips, Mailpit).
 
+## How the RAG works
+
+```mermaid
+flowchart LR
+    U["PDF"] --> X["Extract<br>per page"] --> C["Chunk<br>page-bounded"] --> E["Embed<br>passage"] --> S[("pgvector<br>halfvec(2048) + HNSW")]
+    Q["Question"] --> EQ["Embed<br>query"] --> K["Owner-scoped kNN"]
+    S -.-> K
+    K --> F{"above the<br>similarity floor?"}
+    F -->|no| R["Refuse — model not called"]
+    F -->|yes| A["Grounded answer<br>+ page citations"]
+```
+
+Three things that are load-bearing rather than incidental:
+
+- **The model is never called when retrieval finds nothing.** Refusal is a code
+  path, so an empty knowledge base cannot produce a confident hallucination.
+- **Ownership is enforced in the SQL `WHERE` clause**, not after the fact, so a
+  question can only ever reach your own documents.
+- **The vector column is `halfvec(2048)`, not `vector(2048)`** — pgvector cannot
+  index a `vector` above 2000 dimensions, and the embedding model emits exactly
+  2048, so the obvious choice would silently sequential-scan every query.
+
+The full walkthrough — chunking algorithm, index shape, the passage/query
+asymmetry, the two retrieval paths, measured similarity numbers and the known
+gaps — is in **[RAG — how it works](docs/rag.md)**.
+
 ## Tech stack
 
-| Layer      | Choice                                                                         |
-| ---------- | ------------------------------------------------------------------------------ |
-| Framework  | Next.js 16 · React 19 · TypeScript 5.9 (strict)                                |
-| Auth       | Auth.js (NextAuth) v5 — Credentials + GitHub/Google OAuth, JWT, Argon2id, RBAC |
-| Email      | Optional SMTP via nodemailer — off by default, any provider                    |
-| Database   | PostgreSQL 17 · Drizzle ORM + drizzle-kit                                      |
-| Storage    | MinIO (S3-compatible) · @aws-sdk/client-s3                                     |
-| UI         | Tailwind CSS v4 · shadcn/ui · lucide-react                                     |
-| Validation | Zod (shared client/server schemas)                                             |
-| Testing    | Vitest + Testing Library · Playwright (Mailpit for email)                      |
-| Tooling    | ESLint (flat) · Prettier · Husky · lint-staged                                 |
-| Delivery   | Multi-stage Docker (standalone, non-root) · GitHub Actions                     |
+| Layer      | Choice                                                                            |
+| ---------- | --------------------------------------------------------------------------------- |
+| Framework  | Next.js 16 · React 19 · TypeScript 5.9 (strict)                                   |
+| Auth       | Auth.js (NextAuth) v5 — Credentials + GitHub/Google OAuth, JWT, Argon2id, RBAC    |
+| Email      | Optional SMTP via nodemailer — off by default, any provider                       |
+| Database   | PostgreSQL 17 · Drizzle ORM + drizzle-kit                                         |
+| Storage    | MinIO (S3-compatible) · @aws-sdk/client-s3                                        |
+| Retrieval  | pgvector `halfvec(2048)` + HNSW (cosine) · owner-scoped kNN                       |
+| Extraction | unpdf (in-process, per-page text) — no OCR sidecar                                |
+| Inference  | Any OpenAI-compatible endpoint — NVIDIA NIM by default, or local Ollama/llama.cpp |
+| UI         | Tailwind CSS v4 · shadcn/ui · lucide-react                                        |
+| Validation | Zod (shared client/server schemas)                                                |
+| Testing    | Vitest + Testing Library · Playwright (Mailpit for email)                         |
+| Tooling    | ESLint (flat) · Prettier · Husky · lint-staged                                    |
+| Delivery   | Multi-stage Docker (standalone, non-root) · GitHub Actions                        |
 
 ## Project structure
 
 ```
 src/
-├── app/            # App Router: (auth) + (dashboard) groups, api/ (incl. files/[id]), PWA manifest & offline
+├── app/            # App Router: (auth) + (dashboard) groups, api/ (chat, documents/[id]/source,
+│                   # files/[id]), PWA manifest & offline
 ├── components/     # auth · files · push · pwa · settings · shell · theme · ui (shadcn)
 ├── db/             # Drizzle schema, client, migrate & seed scripts
-├── lib/            # auth (config/actions/rbac/oauth/tokens/recovery), email, push, storage (S3/MinIO), shell/nav, validations, env
+├── lib/            # rag (extract/chunk/embed/retrieve/scope/ingest), chat (history/metrics),
+│                   # auth, email, push, storage (S3/MinIO), shell/nav, validations, env
 ├── types/          # shared TypeScript types
 └── proxy.ts        # edge route protection + role gating (Next 16 "proxy" convention)
 ```

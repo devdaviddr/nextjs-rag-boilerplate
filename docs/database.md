@@ -17,6 +17,12 @@ erDiagram
     users ||--o{ push_subscriptions : "devices"
     users ||--o{ authenticators : "passkeys"
     users ||..o{ verification_tokens : "by email (not FK)"
+    users ||--o{ documents : "knowledge base"
+    users ||--o{ chunks : "owns (denormalised)"
+    users ||--o{ conversations : "owns"
+    files ||--|| documents : "stored PDF"
+    documents ||--o{ chunks : "cascade"
+    conversations ||--o{ messages : "cascade"
 
     users {
         text id PK
@@ -75,6 +81,40 @@ erDiagram
         text p256dh
         text auth
     }
+    documents {
+        text id PK
+        text owner_id FK
+        text file_id FK
+        text title
+        int page_count
+        text status "pending|extracting|embedding|ready|failed"
+        text error "user-readable, only when failed"
+    }
+    chunks {
+        text id PK
+        text document_id FK
+        text owner_id FK "denormalised: every retrieval filters on it"
+        text content
+        int page_number "1-based, citations resolve to this"
+        int chunk_index
+        int token_count
+        halfvec embedding "2048 dims, HNSW cosine index"
+    }
+    conversations {
+        text id PK
+        text owner_id FK
+        text title "derived from the first message"
+        timestamp updated_at "Recents is ordered by this"
+    }
+    messages {
+        text id PK
+        text conversation_id FK
+        text owner_id FK
+        text role "user | assistant"
+        text content
+        jsonb citations "as resolved at answer time"
+        jsonb metrics "tokens, tok/s, latency, model"
+    }
 ```
 
 ### Schema Tables
@@ -90,6 +130,10 @@ erDiagram
 | `user_roles`          | Many-to-many users ↔ roles                                |
 | `files`               | Uploaded file metadata + S3 storage                       |
 | `push_subscriptions`  | Web Push subscriptions per device                         |
+| `documents`           | A PDF in a user's knowledge base + its ingestion status   |
+| `chunks`              | Indexed passages with `halfvec(2048)` embeddings          |
+| `conversations`       | Chat threads, ordered in Recents by `updated_at`          |
+| `messages`            | Turns, with stored citations and generation metrics       |
 
 ### Migration Workflow
 
