@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 As this project is pre-1.0, minor versions may introduce breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- **RAG knowledge base and document chat** ([spec 0025](specs/0025-rag-knowledge-base-and-chat.md),
+  [docs](docs/rag.md)). Upload PDFs into a private per-user knowledge base and
+  ask questions answered only from your own documents, with a page-level
+  citation for every source. Retrieval runs on `pgvector` inside the existing
+  Postgres — no new service — and inference goes to any OpenAI-compatible
+  endpoint (NVIDIA NIM by default, or a local Ollama/llama.cpp for a fully
+  offline deployment). New `/documents` and `/chat` pages.
+
+### Changed
+
+- The `db` service image is now `pgvector/pgvector:pg17` (was
+  `postgres:17-alpine`). The stock image does not ship the `vector` extension.
+  Existing volumes keep working; the extension is created by migration `0008`.
+
 ## [0.19.0] - 2026-07-16
 
 ### Added

@@ -37,6 +37,12 @@ export const UPLOAD_LIMITS = {
   upload: { limit: 20, windowMs: 10 * 60_000 },
 } as const
 
+// Document chat spends a finite free-tier inference quota, so it is limited
+// per user in the same way uploads are (spec 0025 NFR3).
+export const RAG_LIMITS = {
+  chat: { limit: 30, windowMs: 10 * 60_000 },
+} as const
+
 /** Disable in environments (e.g. certain test runs) via env. */
 const DISABLED = process.env.RATE_LIMIT_DISABLED === 'true'
 

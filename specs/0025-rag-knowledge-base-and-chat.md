@@ -1,7 +1,7 @@
 ---
 id: 0025
 title: PDF knowledge base & document chat (RAG)
-status: Proposed
+status: In Progress
 release: '—'
 created: 2026-09-07
 updated: 2026-09-07
@@ -158,10 +158,10 @@ keep working unchanged because it is still a plain Postgres volume.
 
 Measured on the same sentence embedded both ways:
 
-| Pair | Cosine |
-| --- | --- |
+| Pair                                        | Cosine    |
+| ------------------------------------------- | --------- |
 | `passage(t)` vs `query(t)` — identical text | **0.785** |
-| `passage(t)` vs `query(question about t)` | 0.611 |
+| `passage(t)` vs `query(question about t)`   | 0.611     |
 
 An identical string embedded as a passage and as a query is only 0.78 similar.
 Embedding chunks and questions the same way therefore measurably degrades

@@ -59,6 +59,21 @@ export async function getObjectStream(key: string): Promise<{
   }
 }
 
+/**
+ * Returns the whole object in memory. Used by PDF ingestion (spec 0025),
+ * which needs random access across the file and so cannot stream — the
+ * upload size cap is what keeps this bounded.
+ */
+export async function getObjectBuffer(key: string): Promise<Buffer> {
+  const result = await client.send(
+    new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+  )
+  if (!result.Body) {
+    throw new Error(`Object body missing for key: ${key}`)
+  }
+  return Buffer.from(await result.Body.transformToByteArray())
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await client.send(
     new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),

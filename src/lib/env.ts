@@ -115,6 +115,76 @@ const envSchema = z
       .optional()
       .default('image/png,image/jpeg,image/webp,image/gif,application/pdf'),
 
+    // --- RAG / NVIDIA NIM (spec 0025) --------------------------------------
+    // Opt-in, same posture as OAuth/email/push: absent -> the knowledge-base
+    // and chat features report themselves as unconfigured rather than the app
+    // refusing to boot. That keeps `pnpm build` and CI green without secrets.
+    //
+    // The base URL is any OpenAI-compatible endpoint, so pointing it at a
+    // local Ollama or llama.cpp gives a fully offline deployment.
+    NVIDIA_API_KEY: optionalStr,
+    RAG_LLM_BASE_URL: z
+      .string()
+      .url('RAG_LLM_BASE_URL must be a valid URL')
+      .optional()
+      .default('https://integrate.api.nvidia.com/v1'),
+    // Measured 2026-09-07: this is the only embedding model reachable on a
+    // free NIM account, and it is fixed at 2048 dimensions (`dimensions: 1024`
+    // is rejected). Changing it almost certainly requires a schema migration —
+    // see EMBEDDING_DIMENSIONS in src/lib/rag/constants.ts.
+    RAG_EMBED_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('nvidia/nemotron-3-embed-1b'),
+    RAG_CHAT_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('nvidia/nemotron-3-super-120b-a12b'),
+    RAG_CHUNK_TOKENS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(512),
+    RAG_CHUNK_OVERLAP_TOKENS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .default(64),
+    RAG_EMBED_BATCH: z.coerce.number().int().positive().optional().default(32),
+    RAG_EMBED_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(4),
+    RAG_TOP_K: z.coerce.number().int().positive().optional().default(8),
+    // Cosine similarity floor. Below this, retrieval is treated as a miss and
+    // the chat model is never called (spec 0025 FR10).
+    RAG_MIN_SIMILARITY: z.coerce
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .default(0.35),
+    // Average extractable characters per page below which a PDF is treated as
+    // image-only and rejected rather than partially ingested.
+    RAG_MIN_CHARS_PER_PAGE: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .default(50),
+    RAG_MAX_DOCUMENT_PAGES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(200),
+
     // --- Build identity (baked into the image at CI build time) ------------
     // ci.yml passes these as Docker build-args (APP_VERSION=git ref name,
     // APP_GIT_SHA=commit sha); the Dockerfile persists them as ENV. Surfaced
@@ -124,6 +194,16 @@ const envSchema = z
     APP_GIT_SHA: optionalStr,
   })
   .superRefine((val, ctx) => {
+    // A chunk overlap >= the chunk size makes the chunker loop forever.
+    if (val.RAG_CHUNK_OVERLAP_TOKENS >= val.RAG_CHUNK_TOKENS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['RAG_CHUNK_OVERLAP_TOKENS'],
+        message:
+          'RAG_CHUNK_OVERLAP_TOKENS must be smaller than RAG_CHUNK_TOKENS',
+      })
+    }
+
     // If email is toggled on, a provider MUST be configured — fail fast at boot
     // rather than silently dropping mail (or throwing on first send).
     if (!val.EMAIL_ENABLED) return
