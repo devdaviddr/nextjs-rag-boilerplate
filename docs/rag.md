@@ -744,8 +744,46 @@ tried three phrasings and surfaced a chunk at **0.358**, just above the 0.35
 floor. The fixed pipeline refuses that question outright.
 
 This is why citation verification exists, and why refusal accuracy is a hard
-gate rather than a number on a report. Run `pnpm rag:eval --compare` before
-turning the flag on anywhere.
+gate rather than a number on a report.
+
+**It fired.** The first A/B put agentic refusal accuracy at **0.667** against a
+baseline of 1.000 — every other metric improved while the property the system
+exists to provide quietly degraded. Exactly the shape of regression this project
+has been bitten by before.
+
+Raising the flat floor would not fix it: true positives on this corpus score
+0.41–0.62, so any floor above the offending 0.421 discards real answers. The
+problem is not the threshold, it is that **N attempts get N chances at it**. So
+the floor rises with the number of searches (`RAG_AGENTIC_FLOOR_STEP`, 0.04 per
+extra attempt) and evidence found on the first search is judged exactly as the
+fixed pipeline judges it.
+
+### Measured: agentic vs the fixed pipeline
+
+`pnpm rag:eval --compare`, one uncontended run:
+
+| Metric                                   | Baseline       | Agentic                               | Δ          |
+| ---------------------------------------- | -------------- | ------------------------------------- | ---------- |
+| hit@1 / hit@3 / MRR _(single-hop, n=20)_ | 0.941          | 0.882                                 | −0.059     |
+| Refusal accuracy                         | 1.000          | 1.000                                 | ±0         |
+| Cross-KB leakage                         | 0              | 0                                     | ±0         |
+| Follow-up hit@1 _(n=3)_                  | 0.000          | 0.667                                 | **+0.667** |
+| Multi-hop full match _(n=2)_             | 0.000          | 1.000                                 | **+1.000** |
+| Multi-hop fact recall                    | 0.500          | 1.000                                 | **+0.500** |
+| Cost per question                        | ~1 search, ~1s | 1.44 searches, **11.1s**, 1617 tokens | —          |
+
+**The flag stays off by default**, and the reason is the trade rather than a
+failure: agentic retrieval is dramatically better at what it was built for —
+follow-ups and multi-hop questions — slightly worse on single-hop, and about
+**ten times slower**. Most questions in this corpus are single-hop, so the
+default favours the cheap path. Turn it on for conversational use where
+follow-ups dominate, and re-run the comparison on your own corpus first.
+
+Two caveats worth stating plainly. The follow-up and multi-hop slices are n=3
+and n=2; at that size one question moves a metric by a third or a half, so treat
+the direction as real and the magnitude as provisional. And two concurrent
+`--compare` runs against the same rate-limited key produced materially different
+numbers — run it alone, or you are measuring contention.
 
 ### Streaming under a loop
 

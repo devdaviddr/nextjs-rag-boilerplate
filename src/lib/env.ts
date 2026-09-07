@@ -237,6 +237,24 @@ const envSchema = z
       .positive()
       .optional()
       .default(15000),
+    // How much the similarity floor rises per EXTRA search (spec 0029).
+    //
+    // Measured: with a flat floor the agentic path's refusal accuracy fell
+    // 1.000 -> 0.667, because searching three times for something the corpus
+    // cannot answer eventually turned up a chunk at 0.421 — above the 0.35
+    // floor purely by persistence. Every other metric improved, which is
+    // precisely the shape of regression this project has been bitten by before.
+    //
+    // Raising the flat floor instead would not work: true positives on this
+    // corpus score 0.41-0.62, so a floor above 0.421 discards real answers.
+    // The problem is not the threshold, it is that N attempts get N chances at
+    // it. So the bar rises with the number of attempts, and evidence found on
+    // the first search is judged exactly as before.
+    RAG_AGENTIC_FLOOR_STEP: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .default(0.04),
     // Prompt + completion across every planning call in one question.
     RAG_MAX_LOOP_TOKENS: z.coerce
       .number()

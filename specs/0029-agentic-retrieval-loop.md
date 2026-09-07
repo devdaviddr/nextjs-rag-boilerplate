@@ -280,7 +280,7 @@ unable to ship a regression by accident.
 
 - [ ] A `followup` question retrieves the passage its standalone form retrieves.
       **Measured:** _"what about carrying it over?"_ → `"carrying over annual
-  leave"` → staff-handbook p1 @ 0.479, one search, 8.1s.
+leave"` → staff-handbook p1 @ 0.479, one search, 8.1s.
 - [ ] A planner that fails, times out or returns something unparseable leaves
       the loop with whatever it had, and the request still succeeds.
 - [ ] The persisted user message is the text the user typed, not the resolved
@@ -295,8 +295,12 @@ unable to ship a regression by accident.
 - [ ] Citation verification strips an unsupported sentence; stripping everything
       yields the fixed refusal, not an empty answer.
 - [ ] `step` frames arrive for every phase; no gap exceeds one planner call.
-- [ ] `pnpm rag:eval --compare baseline agentic` prints both tables.
-- [ ] The eval run **exits non-zero** when refusal accuracy regresses.
+- [x] `pnpm rag:eval --compare` prints both tables. **Measured:** single-hop
+      0.941 → 0.882, refusal 1.000 → 1.000, follow-up 0 → 0.667, multi-hop
+      0 → 1.000, at 11.1s and 1617 tokens per question.
+- [x] The eval run **exits non-zero** when refusal accuracy regresses. It did:
+      the first A/B measured 0.667 against a baseline of 1.000, which is why
+      `RAG_AGENTIC_FLOOR_STEP` exists.
 - [ ] With `RAG_AGENTIC_ENABLED=false` the existing path is byte-identical.
 - [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass.
 

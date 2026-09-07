@@ -1,8 +1,9 @@
 {
-  "$comment": "Ground truth for the retrieval harness (spec 0027, Recommendation 0). Each question names the document and page that answers it. `answerable: false` means the corpus does not contain the answer and the system must refuse. `hard` labels why a case is included, so a regression report says what kind of retrieval broke.",
+  "$comment": "Ground truth for the retrieval harness (spec 0027, Recommendation 0; spec 0029 Evaluation). Each question names the document and page that answers it. `answerable: false` means the corpus does not contain the answer and the system must refuse. `hard` labels why a case is included, so a regression report says what kind of retrieval broke. `type` is 'single-hop' (default, the original 20 — untouched, so the recorded baseline stays comparable), 'followup' (a two-turn fixture whose `turns` are prior conversation; the standalone `question` is a pronoun-bearing reference that only retrieves correctly once resolved — spec 0029's whole reason for existing), or 'multi-hop' (the answer needs facts from two documents, given as `answerDocuments`; a single `document`/`page` cannot express it).",
   "questions": [
     {
       "id": "leave-entitlement",
+      "type": "single-hop",
       "question": "How many days of annual leave do I get?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -11,6 +12,7 @@
     },
     {
       "id": "leave-carryover",
+      "type": "single-hop",
       "question": "Can I carry unused leave into next year?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -19,6 +21,7 @@
     },
     {
       "id": "expense-deadline",
+      "type": "single-hop",
       "question": "What is the deadline for submitting travel expenses?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -27,6 +30,7 @@
     },
     {
       "id": "expense-approval",
+      "type": "single-hop",
       "question": "Who approves a claim over 500 dollars?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -35,6 +39,7 @@
     },
     {
       "id": "mileage-rate",
+      "type": "single-hop",
       "question": "What is the mileage reimbursement rate?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -43,6 +48,7 @@
     },
     {
       "id": "fire-assembly",
+      "type": "single-hop",
       "question": "Where is the fire assembly point?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -52,6 +58,7 @@
     },
     {
       "id": "password-length",
+      "type": "single-hop",
       "question": "How long do passwords need to be?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -60,6 +67,7 @@
     },
     {
       "id": "policy-code-hr",
+      "type": "single-hop",
       "question": "What does POL-HR-014 cover?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -69,6 +77,7 @@
     },
     {
       "id": "policy-code-fin",
+      "type": "single-hop",
       "question": "Which policy is POL-FIN-022?",
       "document": "staff-handbook",
       "knowledgeBase": "HR & Employment",
@@ -78,6 +87,7 @@
     },
     {
       "id": "notice-period",
+      "type": "single-hop",
       "question": "What is the notice period after probation?",
       "document": "employment-contract",
       "knowledgeBase": "HR & Employment",
@@ -87,6 +97,7 @@
     },
     {
       "id": "probation-length",
+      "type": "single-hop",
       "question": "How long is the probation period?",
       "document": "employment-contract",
       "knowledgeBase": "HR & Employment",
@@ -95,6 +106,7 @@
     },
     {
       "id": "salary-review",
+      "type": "single-hop",
       "question": "When is salary reviewed?",
       "document": "employment-contract",
       "knowledgeBase": "HR & Employment",
@@ -103,6 +115,7 @@
     },
     {
       "id": "overtime",
+      "type": "single-hop",
       "question": "Is overtime paid?",
       "document": "employment-contract",
       "knowledgeBase": "HR & Employment",
@@ -111,6 +124,7 @@
     },
     {
       "id": "staff-parking",
+      "type": "single-hop",
       "question": "Where do staff park?",
       "document": "facilities-guide",
       "knowledgeBase": "Facilities & Operations",
@@ -120,6 +134,7 @@
     },
     {
       "id": "building-hours",
+      "type": "single-hop",
       "question": "What time does the building open?",
       "document": "facilities-guide",
       "knowledgeBase": "Facilities & Operations",
@@ -128,6 +143,7 @@
     },
     {
       "id": "boardroom-capacity",
+      "type": "single-hop",
       "question": "How many people does the boardroom seat?",
       "document": "facilities-guide",
       "knowledgeBase": "Facilities & Operations",
@@ -136,6 +152,7 @@
     },
     {
       "id": "catering-notice",
+      "type": "single-hop",
       "question": "How far ahead must catering be ordered?",
       "document": "facilities-guide",
       "knowledgeBase": "Facilities & Operations",
@@ -144,21 +161,108 @@
     },
     {
       "id": "no-answer-parental",
+      "type": "single-hop",
       "question": "How much parental leave am I entitled to?",
       "answerable": false,
       "hard": "plausible and adjacent to real content — the corpus covers annual leave only"
     },
     {
       "id": "no-answer-bonus",
+      "type": "single-hop",
       "question": "What is the annual bonus scheme?",
       "answerable": false,
       "hard": "adjacent to the remuneration section, which says nothing about bonuses"
     },
     {
       "id": "no-answer-tungsten",
+      "type": "single-hop",
       "question": "What is the melting point of tungsten?",
       "answerable": false,
       "hard": "clearly outside the corpus — the easy refusal case"
+    },
+    {
+      "id": "followup-leave-carryover",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How many days of annual leave do I get?"
+        },
+        {
+          "role": "assistant",
+          "content": "You get 20 working days of annual leave per calendar year."
+        }
+      ],
+      "question": "Can I carry it over to next year?",
+      "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
+      "page": 1,
+      "answerable": true,
+      "hard": "pronoun 'it' must resolve to annual leave from the prior turn — embedded literally, the question has no subject at all"
+    },
+    {
+      "id": "followup-fire-assembly-street",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "Where is the fire assembly point?"
+        },
+        {
+          "role": "assistant",
+          "content": "The fire assembly point is the grassed area on Wellington Street."
+        }
+      ],
+      "question": "What street is it on?",
+      "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
+      "page": 3,
+      "answerable": true,
+      "hard": "the corpus's built-in distractor, aimed straight at the reference: 'it' must resolve to the fire assembly point, not staff parking — both the handbook and the facilities guide put something on Wellington Street, so an unresolved pronoun is a coin flip between the two knowledge bases"
+    },
+    {
+      "id": "followup-overtime-salary",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "When is salary reviewed?"
+        },
+        {
+          "role": "assistant",
+          "content": "Salary is reviewed annually in July."
+        }
+      ],
+      "question": "Is overtime included in that?",
+      "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
+      "page": 3,
+      "answerable": true,
+      "hard": "'that' must resolve to the salary review process — embedded literally the question names no topic at all"
+    },
+    {
+      "id": "multi-hop-overtime-expenses",
+      "type": "multi-hop",
+      "question": "Is overtime paid as cash under my contract, and separately, how many days do I have to submit a travel expense claim under the handbook?",
+      "answerDocuments": [
+        { "document": "employment-contract", "page": 3 },
+        { "document": "staff-handbook", "page": 2 }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "needs the contract's overtime clause (page 3) AND the handbook's expense deadline (page 2) — a single search over one document is not enough"
+    },
+    {
+      "id": "multi-hop-probation-leave-notice",
+      "type": "multi-hop",
+      "question": "Which requires more advance notice: ending my employment during probation, or booking a day of annual leave?",
+      "answerDocuments": [
+        { "document": "employment-contract", "page": 1 },
+        { "document": "staff-handbook", "page": 1 }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "requires comparing the contract's probation notice (page 1) against the handbook's leave-approval notice (page 1) — genuinely two documents, not a paraphrase of one"
     }
   ]
 }

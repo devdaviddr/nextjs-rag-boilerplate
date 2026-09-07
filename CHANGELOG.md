@@ -19,7 +19,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   something the model is asked to honour. Citation verification strips claims
   their sources do not support. A separate query-rewriting call was built,
   measured at 15s, and folded into the planner instead. `step` frames report the
-  current phase so the client is never silent without a heartbeat.
+  current phase so the client is never silent without a heartbeat. The
+  similarity floor rises with each extra search, because N attempts get N
+  chances to clear it by luck — without that, refusal accuracy fell from 1.000
+  to 0.667 while every other metric improved. `pnpm rag:eval --compare` scores
+  both paths side by side and fails on a refusal regression.
 
 - **Independent knowledge bases**
   ([spec 0028](specs/0028-independent-knowledge-bases.md)). A user can create,

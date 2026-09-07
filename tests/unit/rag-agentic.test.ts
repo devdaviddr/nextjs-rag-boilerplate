@@ -4,6 +4,7 @@ import {
   type LoopBudget,
   type LoopDeps,
   accumulate,
+  effectiveFloor,
   runAgenticLoop,
 } from '@/lib/rag/agentic'
 import type { RetrievedChunk } from '@/lib/rag/retrieve'
@@ -245,5 +246,36 @@ describe('runAgenticLoop — planner failure', () => {
       'tokensUsed',
       'elapsedMs',
     ])
+  })
+})
+
+describe('effectiveFloor', () => {
+  /**
+   * One attempt is judged exactly as the fixed pipeline judges it — the whole
+   * point is that persistence, not relevance, is what gets penalised.
+   */
+  it('leaves a single search at the base floor', () => {
+    expect(effectiveFloor(0.35, 1, 0.04)).toBeCloseTo(0.35)
+    expect(effectiveFloor(0.35, 0, 0.04)).toBeCloseTo(0.35)
+  })
+
+  it('raises the bar once per EXTRA search', () => {
+    expect(effectiveFloor(0.35, 2, 0.04)).toBeCloseTo(0.39)
+    expect(effectiveFloor(0.35, 3, 0.04)).toBeCloseTo(0.43)
+  })
+
+  /**
+   * The measured regression: three searches for an unanswerable question
+   * surfaced a chunk at 0.421, above the flat 0.35 floor. At three attempts the
+   * bar is 0.43, so it is correctly excluded — while a true positive found on
+   * the FIRST search at 0.41 still clears the unchanged 0.35.
+   */
+  it('excludes the chunk that caused the refusal regression', () => {
+    expect(0.421).toBeLessThan(effectiveFloor(0.35, 3, 0.04))
+    expect(0.41).toBeGreaterThan(effectiveFloor(0.35, 1, 0.04))
+  })
+
+  it('is a no-op when the step is zero', () => {
+    expect(effectiveFloor(0.35, 5, 0)).toBeCloseTo(0.35)
   })
 })

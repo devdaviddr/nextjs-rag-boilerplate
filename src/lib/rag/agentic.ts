@@ -95,6 +95,25 @@ export interface LoopDeps {
 }
 
 /**
+ * The similarity floor for evidence gathered over `searches` attempts.
+ *
+ * One search is judged at the base floor, exactly as the fixed pipeline judges
+ * it. Each additional attempt raises the bar, because each additional attempt
+ * is another chance to clear it by luck rather than by relevance — the same
+ * reason you tighten a threshold when you take more samples.
+ *
+ * Measured: without this, three searches for an unanswerable question surfaced
+ * a chunk at 0.421 and refusal accuracy fell from 1.000 to 0.667.
+ */
+export function effectiveFloor(
+  baseFloor: number,
+  searches: number,
+  step: number,
+): number {
+  return baseFloor + step * Math.max(0, searches - 1)
+}
+
+/**
  * Merge new results into the accumulator, keeping the best score per chunk.
  *
  * Two searches routinely return overlapping passages. Without dedup the same

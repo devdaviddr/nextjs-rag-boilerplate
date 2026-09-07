@@ -2,7 +2,7 @@ import 'server-only'
 
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
-import { type LoopStep, runAgenticLoop } from './agentic'
+import { type LoopStep, effectiveFloor, runAgenticLoop } from './agentic'
 import { createChatCompletion } from './client'
 import {
   type PlannerDecision,
@@ -159,6 +159,16 @@ export async function runAgenticRetrieval(input: {
   const effectiveQuery = outcome.steps[0]?.query ?? question
   const rewritten = effectiveQuery.trim() !== question.trim()
 
+  // Apply the attempt-scaled floor to everything the loop gathered. Done here,
+  // once, rather than inside the loop: the loop must still SEE weak results so
+  // its planner can judge that a second phrasing is worth trying.
+  const floor = effectiveFloor(
+    env.RAG_MIN_SIMILARITY,
+    outcome.searches,
+    env.RAG_AGENTIC_FLOOR_STEP,
+  )
+  const kept = outcome.chunks.filter((c) => c.similarity >= floor)
+
   logger.info('Agentic retrieval', {
     userId,
     rewritten,
@@ -166,11 +176,12 @@ export async function runAgenticRetrieval(input: {
     termination: outcome.termination,
     tokensUsed: tokens,
     elapsedMs: outcome.elapsedMs,
-    chunkCount: outcome.chunks.length,
+    chunkCount: kept.length,
+    floor,
   })
 
   return {
-    chunks: outcome.chunks,
+    chunks: kept,
     query: effectiveQuery,
     rewritten,
     skippedRetrieval: false,
