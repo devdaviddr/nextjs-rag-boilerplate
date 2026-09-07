@@ -153,6 +153,11 @@ See [Usage & Development](usage.md) and [Deployment](deployment.md).
   **never called**
 - Two retrieval paths — similarity search for content questions, whole-document
   retrieval for summarise/overview requests
+- Optional **agentic retrieval** (`RAG_AGENTIC_ENABLED`, off by default) — the
+  model plans its own searches via a tool call, resolves conversational
+  references, and can search again when the first attempt is thin, inside hard
+  caps on searches, wall-clock and tokens; citation verification strips claims
+  their sources do not support
 - Streamed Markdown answers with clickable page-level citations that open the
   source PDF, conversation history, and per-answer generation metrics
 

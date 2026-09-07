@@ -647,6 +647,119 @@ refusal accuracy from 1.000 to **0.000** — every headline number improved whil
 the property the system exists to provide disappeared. Measuring it was not
 enough; the gate is what stops it shipping by accident.
 
+## The agentic path
+
+Everything above describes the **fixed pipeline**: a regular expression picks
+the strategy, one hybrid search runs, and the model only writes prose. Spec 0029
+adds a second path where the model directs retrieval instead.
+
+It is behind `RAG_AGENTIC_ENABLED` and **off by default**. With the flag off the
+fixed pipeline runs unchanged.
+
+```mermaid
+flowchart TB
+    Q["Question + conversation"] --> RT{"Route<br>deterministic allowlist"}
+    RT -->|"filler"| ANS["Answer, no search"]
+    RT -->|"anything else"| LOOP
+
+    subgraph LOOP["Bounded loop — 3 searches, 15s, 8k tokens"]
+        direction TB
+        PL["Plan<br>tool call, sees recent turns"] --> SR["search_documents<br>owner + KB set SERVER-BOUND"]
+        SR --> ACC["Accumulate + dedup"]
+        ACC --> EN{"Enough to answer?"}
+        EN -->|"no, budget left"| PL
+        EN -->|"no, budget spent"| REF["REFUSE"]
+        EN -->|yes| DRAFT
+    end
+
+    DRAFT["Draft + stream"] --> VER{"Verify citations"}
+    VER -->|"unsupported found"| STRIP["Strip those sentences<br>emit a revision"]
+    VER -->|"all supported"| DONE["Done"]
+    STRIP --> CHK{"Anything left?"}
+    CHK -->|no| REF
+    CHK -->|yes| DONE
+```
+
+### Where the boundary lives
+
+`userId` and the permitted knowledge bases are bound **once per question**, from
+the session and the conversation, and closed over by the search function. The
+planner supplies a query and at most a `documentId` hint. It cannot widen scope
+because there is no parameter through which to do so — an out-of-scope
+`documentId` reaches `retrieveDocumentChunks`, which filters on the same
+permitted set and returns nothing, indistinguishable from a document that does
+not exist.
+
+Resolved once per question rather than per tool call, so a multi-search question
+cannot end up with citations spanning two different notions of what was allowed.
+
+### Refusal is outside the loop
+
+The loop gathers evidence and reports why it stopped. It never composes prose
+and never decides to refuse. The caller short-circuits to the fixed refusal when
+nothing clears the floor.
+
+That placement is the whole guarantee: a model talked into ignoring its
+instructions still cannot produce an ungrounded answer, because with no
+retrieved context there is no drafting call to hijack.
+
+### Reference resolution, and a measurement that changed the design
+
+A follow-up like _"what about carrying it over?"_ has no subject, so embedded
+literally it retrieves badly. Both 0027 and the first draft of 0029 specified a
+**separate rewrite call** before retrieval. It was built, then measured:
+
+| Attempt                        | Result                                                           |
+| ------------------------------ | ---------------------------------------------------------------- |
+| Plain text, `max_tokens: 200`  | `finish_reason: length` — reasoning preamble truncated, no query |
+| Plain text, `max_tokens: 1500` | **53s**, still truncated, still no query                         |
+| Tool call, `max_tokens: 400`   | `finish_reason: length`, no tool call                            |
+| Tool call, `max_tokens: 1200`  | Correct — `{"query":"carrying over annual leave"}` — but **15s** |
+
+15s is the entire loop budget, spent before the first search. So the separate
+call was deleted and the **planner** now receives the recent turns and resolves
+the reference itself, inside a tool call that was going to happen anyway.
+Measured after the change: _"what about carrying it over?"_ →
+`"carrying over annual leave"` → staff-handbook p1 at 0.479, one search, **8.1s**.
+
+Two lessons worth keeping, because both were invisible until measured:
+
+**A timeout shorter than the thing it times is an off switch.** The rewrite had
+a 3s cap against a call with a 2.6–4.4s median. It fired on essentially every
+request. The fallback worked perfectly and hid the fact that the feature never
+ran once.
+
+**These are reasoning models.** With no `tools` array present the
+chain-of-thought streams into `content` and swamps the answer at any sane token
+budget. With `tools` present it is split into `reasoning_content` and the
+arguments come back clean. Native tool calling is therefore both the more
+reliable mechanism and the more token-budget-robust one — the reverse of what
+0027 assumed.
+
+### The risk it creates
+
+More attempts means more chances to clear a threshold by luck. Asked _"How much
+parental leave am I entitled to?"_ — which the corpus cannot answer — the loop
+tried three phrasings and surfaced a chunk at **0.358**, just above the 0.35
+floor. The fixed pipeline refuses that question outright.
+
+This is why citation verification exists, and why refusal accuracy is a hard
+gate rather than a number on a report. Run `pnpm rag:eval --compare` before
+turning the flag on anywhere.
+
+### Streaming under a loop
+
+The loop is silent for seconds before any prose exists, so the stream carries
+`step` frames — `routing`, `searching` with an iteration number, `drafting`,
+`verifying` — and the client shows a phase label instead of bare dots. Bare dots
+for eight seconds read as "stuck" rather than "working".
+
+Verification runs **after** streaming and emits a `revision` frame if it strips
+anything. Verifying first would mean buffering the whole answer, which kills
+token streaming and makes time-to-first-token meaningless on every answer — a
+permanent regression to avoid a brief exposure the revision then removes. The
+persisted record is always the verified text.
+
 ## Known gaps
 
 Named rather than hidden.

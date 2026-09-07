@@ -219,3 +219,52 @@ test.describe('with an indexed document', () => {
     expect(pageHeaders['x-frame-options']).toBe('DENY')
   })
 })
+
+/**
+ * Two questions back to back in a new thread.
+ *
+ * The first message in a NEW thread adopts its URL with `history.replaceState`
+ * and ends with `router.refresh()` so Recents updates. That refresh re-fetches
+ * props for the newly adopted URL, so `initialConversationId` arrives as the
+ * new id — which does not match the `undefined` this view mounted with, which
+ * would fire the "router swapped threads" re-sync and wipe local state. The
+ * view therefore advances its own baseline when it adopts a thread.
+ *
+ * HONEST LIMITATION: this test passes both with and without that guard, so it
+ * does not prove the guard is load-bearing. A dropped-second-message race was
+ * reported here and could not be reproduced locally — it may need timing this
+ * suite does not produce. The guard is kept because the re-sync firing on a
+ * conversation this view adopted itself is wrong on its own terms, and this
+ * test at least pins the back-to-back path against future regressions.
+ */
+test('a second question sent immediately is not swallowed by the post-answer refresh', async ({
+  page,
+}) => {
+  test.skip(!process.env.NVIDIA_API_KEY, 'NVIDIA_API_KEY is not set')
+  await register(page, 'refresh-race')
+  // No knowledge base, so both questions take the instant refusal path with no
+  // model streaming — which is the tightest version of the race.
+  await createKnowledgeBase(page, 'Race KB')
+  await page.goto('/chat')
+
+  await page.getByRole('textbox', { name: 'Question' }).fill('first question')
+  await page.getByRole('textbox', { name: 'Question' }).press('Enter')
+  await expect(page.getByText('first question')).toBeVisible()
+  await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}/, { timeout: 60_000 })
+  // Wait only for the first answer to finish — NOT for the refresh it triggers
+  // to settle. That gap is the race; waiting it out is what hid the bug.
+  await expect(page.getByRole('textbox', { name: 'Question' })).toBeEnabled({
+    timeout: 60_000,
+  })
+
+  await page.getByRole('textbox', { name: 'Question' }).fill('second question')
+  await page.getByRole('textbox', { name: 'Question' }).press('Enter')
+
+  await expect(page.getByText('second question')).toBeVisible({
+    timeout: 60_000,
+  })
+  // The composer must come back; a durably disabled Send was the symptom.
+  await expect(page.getByRole('textbox', { name: 'Question' })).toBeEnabled({
+    timeout: 60_000,
+  })
+})

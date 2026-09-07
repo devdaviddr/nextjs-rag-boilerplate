@@ -162,6 +162,14 @@ export function ChatView({
   // Re-sync when the router swaps to a different conversation. Adjusting
   // state during render is React's recommended alternative to a
   // setState-in-effect, and is the pattern the app shell already uses.
+  //
+  // `lastConversationId` must also be advanced when THIS view adopts a new
+  // thread mid-stream (see the 'conversation' frame below). Without that, the
+  // `router.refresh()` at the end of a request re-fetches props for the URL
+  // just adopted via replaceState, `initialConversationId` arrives as the new
+  // id, it does not match the `undefined` this view mounted with, and the
+  // branch below fires — wiping messages, including one the user has already
+  // sent. The server persists that message; the DOM simply never shows it.
   const [lastConversationId, setLastConversationId] = useState(
     initialConversationId,
   )
@@ -285,6 +293,9 @@ export function ChatView({
           if (event.type === 'conversation' && event.conversationId) {
             if (!conversationId) {
               setConversationId(event.conversationId)
+              // Adopt it as the baseline too, so the refresh below is not
+              // mistaken for the router swapping threads underneath us.
+              setLastConversationId(event.conversationId)
               // The scope is locked in the instant the thread exists — the
               // picker below switches to a read-only label from here on.
               setLockedKbIds(selectedIdsFor(selection, knowledgeBases))
