@@ -206,22 +206,22 @@ src/app/api/chat/route.ts  streaming grounded chat
 
 ## Acceptance criteria
 
-- [ ] `docker compose up` starts Postgres with the `vector` extension available.
-- [ ] Uploading a born-digital PDF moves it `pending → ready` unattended, and the
+- [x] `docker compose up` starts Postgres with the `vector` extension available.
+- [x] Uploading a born-digital PDF moves it `pending → ready` unattended, and the
       `/documents` list reflects each transition.
-- [ ] Uploading an image-only PDF sets `failed` with a message naming OCR as the
+- [x] Uploading an image-only PDF sets `failed` with a message naming OCR as the
       reason, and creates zero chunks.
-- [ ] `chunks.embedding` is `halfvec(2048)` with an HNSW index, verified by
+- [x] `chunks.embedding` is `halfvec(2048)` with an HNSW index, verified by
       `EXPLAIN` showing an index scan rather than a sequential scan.
-- [ ] Asking a question answerable from an uploaded document returns a streamed
+- [x] Asking a question answerable from an uploaded document returns a streamed
       answer citing the correct document and page.
-- [ ] Asking a question unrelated to any uploaded document returns the fixed
+- [x] Asking a question unrelated to any uploaded document returns the fixed
       "not in your documents" response, with no chat-model call in the logs.
-- [ ] An automated test proves user B cannot retrieve user A's chunks.
-- [ ] Deleting a document removes its chunks, its `files` row and its MinIO
+- [x] An automated test proves user B cannot retrieve user A's chunks.
+- [x] Deleting a document removes its chunks, its `files` row and its MinIO
       object, leaving no orphans.
-- [ ] Re-ingesting a `failed` document produces no duplicate chunks.
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` all pass.
+- [x] Re-ingesting a `failed` document produces no duplicate chunks.
+- [x] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` all pass.
 
 ## Security & privacy
 
