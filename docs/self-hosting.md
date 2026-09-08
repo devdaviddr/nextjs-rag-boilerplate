@@ -12,7 +12,7 @@ make setup
 
 This guide is the **journey** (clone → live). For per-command reference and the
 individual `make tunnel-*` targets, see [deployment.md](deployment.md); for the
-CI pipeline see [ci-cd.md](ci-cd.md); for day-2 data safety see
+former CI pipeline (removed; kept as a record) see [ci-cd.md](ci-cd.md); for day-2 data safety see
 [backups.md](backups.md); for the full loop from a feature branch to a deploy
 on this box, see [Feature → Production](workflow.md).
 
@@ -160,23 +160,26 @@ and let the agent trigger it.
 ## Continuous deployment
 
 `make setup` gets you live the first time; **continuous deployment** keeps a
-running box up to date as you push new code. CI already builds a production image
-on every green run — CD just ships it. Because the box is **outbound-only** (the
-tunnel opens no inbound ports), both paths below are **pull-based**: the box
-reaches out for the new image; nothing reaches in.
+running box up to date as you push new code. Because the box is
+**outbound-only** (the tunnel opens no inbound ports), both paths below are
+**pull-based**: the box reaches out for the new image; nothing reaches in.
 
-On merge to `main`, [`ci.yml`](../.github/workflows/ci.yml) publishes two images to
-the GitHub Container Registry, **only after `quality` + `e2e` pass**:
-
-- `ghcr.io/<owner>/<repo>` — the app (production `runner` image).
-- `ghcr.io/<owner>/<repo>/migrate` — the migrator (`builder` image; the app image
-  can't run migrations itself).
-
-A `v*` **release tag does not rebuild** — it re-tags the image `main` already built
-for that commit with the semver **and moves the floating `stable` tag** (~30s),
-applying the deployed version at runtime from `APP_TAG`. For the fastest release, push the tag **after** `main`'s CI is green
-(see [docs/ci-cd.md → Release fast-path](ci-cd.md#release-fast-path--a-v-tag-re-tags-it-does-not-rebuild)
-and [spec 0024](../specs/0024-faster-time-to-deploy.md)).
+> **The image-publishing pipeline was removed from this fork.** `ci.yml` used to
+> publish `ghcr.io/<owner>/<repo>` (the app) and `.../migrate` (the migrator —
+> the app image can't run migrations itself) on every green merge, and a `v*`
+> tag re-tagged that image as `stable` in ~30s. None of that runs now. Both
+> deploy tiers below still work exactly as described, but **you build and push
+> the two images yourself** before the box has anything to pull:
+>
+> ```bash
+> docker build --target runner  -t ghcr.io/<owner>/<repo>:stable .
+> docker build --target builder -t ghcr.io/<owner>/<repo>/migrate:stable .
+> docker push ghcr.io/<owner>/<repo>:stable
+> docker push ghcr.io/<owner>/<repo>/migrate:stable
+> ```
+>
+> What the pipeline did, and how to restore it, is recorded in
+> [CI/CD](ci-cd.md) and [spec 0024](../specs/0024-faster-time-to-deploy.md).
 
 ### Tier B (recommended) — pull with `make deploy`
 

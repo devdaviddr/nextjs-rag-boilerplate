@@ -34,7 +34,7 @@ An opinionated, batteries-included template built on **Next.js 16** (App Router,
 - 📱 **PWA + responsive app shell** — installable, offline-resilient, **[Web Push](docs/push.md)**, light/dark theming, mobile-to-desktop layout
 - 🔎 **SEO** — OpenGraph/Twitter cards, `robots.txt` + `sitemap.xml`
 - 💾 **[Automated backups](docs/backups.md)** — nightly Postgres + MinIO, doctor script, tested restore runbook
-- 🧪 **Tested** — Vitest units + Playwright E2E, green in CI
+- 🧪 **Tested** — Vitest units + Playwright E2E, gated locally before every push
 - 🐳 **Docker + CI** — multi-stage image, GitHub Actions pipeline
 - 🛡️ **Strict TypeScript**, ESLint, Prettier, and pre-commit hooks
 
@@ -142,27 +142,40 @@ llama.cpp and it disappears too. More in
 
 ```mermaid
 flowchart LR
-    U["PDF"] --> X["Extract<br>per page"] --> C["Chunk<br>page-bounded"] --> E["Embed<br>passage"] --> S[("pgvector<br>halfvec(2048) + HNSW")]
-    Q["Question"] --> EQ["Embed<br>query"] --> K["Owner-scoped kNN"]
+    U["PDF → one<br>knowledge base"] --> X["Extract<br>per page"] --> C["Chunk<br>page-bounded"] --> E["Embed<br>title + heading + text"] --> S[("pgvector halfvec + HNSW<br>tsvector + GIN")]
+    Q["Question"] --> R{"Fixed pipeline<br>or agentic loop?"}
+    R -->|"default"| K["Hybrid search, RRF<br>WHERE owner AND kb IN (set)"]
+    R -->|"RAG_AGENTIC_ENABLED"| L["Planner calls search_documents<br>up to 3×, floor rises per attempt"]
     S -.-> K
+    S -.-> L
     K --> F{"above the<br>similarity floor?"}
-    F -->|no| R["Refuse — model not called"]
-    F -->|yes| A["Grounded answer<br>+ page citations"]
+    L --> F
+    F -->|no| N["Refuse — model not called"]
+    F -->|yes| A["Grounded answer<br>page citations · verified"]
 ```
 
-Three things that are load-bearing rather than incidental:
+Four things that are load-bearing rather than incidental:
 
 - **The model is never called when retrieval finds nothing.** Refusal is a code
-  path, so an empty knowledge base cannot produce a confident hallucination.
-- **Ownership is enforced in the SQL `WHERE` clause**, not after the fact, so a
-  question can only ever reach your own documents.
+  path, so an empty knowledge base cannot produce a confident hallucination —
+  and on the agentic path it sits _around_ the loop, so the model is never asked
+  to decide whether to refuse.
+- **Ownership and knowledge-base scope are enforced in the SQL `WHERE` clause**,
+  in every retrieval channel, never as a filter on results. A conversation
+  searches the knowledge bases chosen when it was created and cannot reach
+  outside them — including through a tool call.
 - **The vector column is `halfvec(2048)`, not `vector(2048)`** — pgvector cannot
   index a `vector` above 2000 dimensions, and the embedding model emits exactly
   2048, so the obvious choice would silently sequential-scan every query.
+- **Changes are measured, not argued.** `pnpm rag:eval` scores retrieval
+  against a ground-truth corpus and fails the run on a refusal-accuracy
+  regression. That gate fired once during development and caught a change that
+  improved every other number.
 
-The full walkthrough — chunking algorithm, index shape, the passage/query
-asymmetry, the two retrieval paths, measured similarity numbers and the known
-gaps — is in **[RAG — how it works](docs/rag.md)**.
+The agentic loop is **off by default**. Measured against the fixed pipeline it
+is dramatically better on follow-ups and multi-hop questions and about ten times
+slower — the trade, the numbers, and everything that went wrong turning it on
+are in **[RAG — how it works](docs/rag.md)**.
 
 ## Tech stack
 
@@ -174,14 +187,14 @@ gaps — is in **[RAG — how it works](docs/rag.md)**.
 | Database   | PostgreSQL 17 · Drizzle ORM + drizzle-kit                                                      |
 | Storage    | MinIO (S3-compatible) · @aws-sdk/client-s3                                                     |
 | Retrieval  | Hybrid — pgvector `halfvec(2048)` + HNSW (cosine) fused with Postgres `tsvector` + GIN via RRF |
-| Evaluation | `pnpm rag:eval` — ground-truth corpus, hit@k · MRR · refusal accuracy                          |
+| Evaluation | `pnpm rag:eval` — hit@k · MRR · refusal accuracy · cross-KB leakage · `--compare` agentic A/B  |
 | Extraction | unpdf (in-process, per-page text) — no OCR sidecar                                             |
 | Inference  | Any OpenAI-compatible endpoint — NVIDIA NIM by default, or local Ollama/llama.cpp              |
 | UI         | Tailwind CSS v4 · shadcn/ui · lucide-react                                                     |
 | Validation | Zod (shared client/server schemas)                                                             |
 | Testing    | Vitest + Testing Library · Playwright (Mailpit for email)                                      |
 | Tooling    | ESLint (flat) · Prettier · Husky · lint-staged                                                 |
-| Delivery   | Multi-stage Docker (standalone, non-root) · GitHub Actions                                     |
+| Delivery   | Multi-stage Docker (standalone, non-root) · opt-in tag-triggered self-hosted deploy            |
 
 ## Project structure
 
@@ -229,6 +242,11 @@ not scaled across a cluster. Specs live in [`specs/`](specs/README.md).
 - [x] Email verification & password reset
 - [x] Web Push notifications
 - [x] Automated backups — nightly Postgres + MinIO, documented restore path
+- [x] RAG document chat — page-bounded chunking, `halfvec` + HNSW, grounded refusal
+- [x] Chat-first UX — history, clickable citations that open the PDF, generation metrics
+- [x] Hybrid retrieval (RRF) · contextual chunk headers · evaluation harness
+- [x] Independent knowledge bases — per-conversation scope, enforced in SQL
+- [x] Agentic retrieval loop — bounded, verified, measured; off by default
 
 **Explicit non-goals** (not planned for the single-box portfolio model):
 internationalisation (i18n), third-party error tracking, and shared-store

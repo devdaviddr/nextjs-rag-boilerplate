@@ -4,7 +4,7 @@
 
 One connected playbook for taking a change from a feature branch to a live
 update on your box — the git workflow ([CONTRIBUTING.md](../CONTRIBUTING.md)),
-the CI/CD mechanics ([CI/CD](ci-cd.md)), and the deploy target this repo is
+what the removed CI/CD used to do ([CI/CD](ci-cd.md)), and the deploy target this repo is
 built for, a **Mac mini (or any always-on box) behind a Cloudflare Tunnel**
 ([Self-hosting](self-hosting.md)) — stitched into one ordered walkthrough. Each
 step links back to the doc that owns the detail; this page is the map, not a
@@ -58,19 +58,28 @@ See [Usage & Development](usage.md).
 
 ## 3 — Open a PR into `main`
 
-CI ([`ci.yml`](../.github/workflows/ci.yml)) runs `quality` and `e2e` on the
-PR, and builds (but never pushes) the Docker image on both architectures.
-Merge once it's green. There's no `develop` branch to target — PRs go
-straight into `main`.
+There is no CI in this fork. The gate is the pre-commit hook plus this, run
+locally before every push:
 
-## 4 — `main` builds and publishes
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
 
-On merge, `quality` and `e2e` run again; once both are green **and** the
-per-arch `docker` builds are done, `docker-merge` publishes two multi-arch
-images to GHCR (`ghcr.io/<owner>/<repo>` and `.../migrate`), tagged
-`sha-<short>` and `latest`. Nothing is deployed yet — this just makes the
-image available. Full mechanics: [CI/CD → How a merge becomes a live
-deploy](ci-cd.md#how-a-merge-becomes-a-live-deploy).
+Merge once that is green. There's no `develop` branch to target — PRs go
+straight into `main`. What the pipeline used to run, job by job, is kept as a
+record in [CI/CD](ci-cd.md) and is the starting point if it is ever restored.
+
+## 4 — `main` is merged
+
+Nothing is built or published on merge. The `docker`/`docker-merge` jobs that
+pushed `ghcr.io/<owner>/<repo>` and `.../migrate` went with `ci.yml`, so
+**there is currently no image for a deploy to pull**. Build one yourself when
+you need it:
+
+```bash
+docker build -t ghcr.io/<owner>/<repo>:sha-$(git rev-parse --short HEAD) .
+docker push ghcr.io/<owner>/<repo>:sha-$(git rev-parse --short HEAD)
+```
 
 ## 5 — Cut a release
 
@@ -81,14 +90,17 @@ git tag -a vX.Y.Z -m "short title"
 git push origin main --tags
 ```
 
-Push the tag **after** `main`'s CI has gone green for that commit — the
-`release` job re-tags the already-published image with the semver and moves
-the floating `stable` tag in ~30s (no rebuild) and creates the GitHub Release
-entry. Push it before, and the same job just waits for `main`'s build first —
-still correct, just not the ~30s fast path. Detail: [CI/CD → Release
-fast-path](ci-cd.md#release-fast-path--a-v-tag-re-tags-it-does-not-rebuild).
+The tag is what defines the release, and it is what moves the shipped specs to
+`Shipped`. It no longer triggers anything: the `release` job that re-tagged the
+image and moved the floating `stable` tag was part of `ci.yml`. `deploy.yml`
+still listens for `v*` tags but is gated behind the repo variable
+`SELF_HOSTED_DEPLOY` (currently `false`), and even enabled it would look for an
+image nobody built. Restore an image-publishing job before turning it on.
 
 ## 6 — The box picks it up
+
+> Depends on an image existing under the `stable` tag — see step 4. Until an
+> image-publishing job is restored, tag it yourself after `docker push`.
 
 A Mac mini (or any host) running the recommended **Tier B** pull timer
 notices the moved `stable` tag on its next poll (≤60s) and runs `make deploy`
@@ -139,12 +151,12 @@ make deploy
 
 ## Where things live, at a glance
 
-| Concern                               | Doc                                                                        |
-| ------------------------------------- | -------------------------------------------------------------------------- |
-| Branching, commits, PR process        | [CONTRIBUTING.md](../CONTRIBUTING.md)                                      |
-| What CI actually runs, job by job     | [CI/CD](ci-cd.md)                                                          |
-| Cloudflare Tunnel setup, `make setup` | [Self-hosting](self-hosting.md)                                            |
-| Mac mini boot persistence & sizing    | [Self-hosting → Mac mini](self-hosting.md#running-on-a-mac-mini-always-on) |
-| Terraform / dashboard tunnel commands | [Deployment](deployment.md)                                                |
-| Nightly backups & restore             | [Backups](backups.md)                                                      |
-| Troubleshooting a stuck deploy        | [Self-hosting → Troubleshooting](self-hosting.md#troubleshooting)          |
+| Concern                                         | Doc                                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------------------- |
+| Branching, commits, PR process                  | [CONTRIBUTING.md](../CONTRIBUTING.md)                                      |
+| What CI used to run (removed, kept as a record) | [CI/CD](ci-cd.md)                                                          |
+| Cloudflare Tunnel setup, `make setup`           | [Self-hosting](self-hosting.md)                                            |
+| Mac mini boot persistence & sizing              | [Self-hosting → Mac mini](self-hosting.md#running-on-a-mac-mini-always-on) |
+| Terraform / dashboard tunnel commands           | [Deployment](deployment.md)                                                |
+| Nightly backups & restore                       | [Backups](backups.md)                                                      |
+| Troubleshooting a stuck deploy                  | [Self-hosting → Troubleshooting](self-hosting.md#troubleshooting)          |

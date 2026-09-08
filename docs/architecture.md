@@ -83,6 +83,57 @@ The session is checked **twice on purpose**: once at the edge so unauthenticated
 requests never reach application code, and again server-side because the edge
 check alone is a single point of failure.
 
+#### A question, with the agentic path on
+
+The one request that is not a page render. Everything below the first frame
+happens inside the response stream, so the client is never silent without a
+heartbeat.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Browser
+    participant R as /api/chat
+    participant D as Postgres
+    participant N as Inference endpoint
+
+    U->>R: question, conversationId?
+    R->>D: verify ownership · read the thread's KB set
+    R->>D: INSERT user message
+    Note over R,D: Persisted before any model call
+    R-->>U: conversation — URL + sidebar update now
+
+    R->>R: route: filler? whole-document?
+    loop bounded: 3 searches · 15s · 8k tokens
+        R-->>U: step: searching (n)
+        R->>N: plan — tool call, sees recent turns
+        N-->>R: search_documents(query)
+        R->>N: embed query
+        R->>D: hybrid kNN + lexical, RRF<br>WHERE owner AND kb IN (set)
+    end
+    R->>R: attempt-scaled floor
+
+    alt nothing survives
+        R-->>U: fixed refusal · done
+        Note over R,N: Model never drafts
+    else
+        R-->>U: citations
+        R-->>U: step: drafting
+        R->>N: system + fenced context + question
+        N-->>R: tokens (one retry if empty)
+        R-->>U: token …
+        R-->>U: step: verifying
+        R->>N: do the sources support the claims?
+        R-->>U: revision, if anything was stripped
+        R->>D: INSERT answer + citations + metrics
+        R-->>U: metrics · done
+    end
+```
+
+The owner id and the permitted knowledge-base set are bound **once**, at the
+top, from the session and the thread. The planner supplies a query and at most
+a document hint; there is no parameter through which it could widen scope.
+
 ### Container Topology
 
 #### Production Stack (`docker-compose.prod.yml`)

@@ -160,6 +160,9 @@ See [Usage & Development](usage.md) and [Deployment](deployment.md).
   their sources do not support
 - Streamed Markdown answers with clickable page-level citations that open the
   source PDF, conversation history, and per-answer generation metrics
+- Resilient to a flaky free tier: retries on 429/5xx and on bodiless 404s, one
+  retry for a draft that streams nothing, an explicit error rather than a blank
+  bubble when it still fails, and answers persisted even if you navigate away
 
 - Retrieval evaluation harness (`pnpm rag:eval`) over a ground-truth corpus,
   reporting hit@k, MRR, refusal accuracy and **cross-knowledge-base leakage** —

@@ -184,8 +184,8 @@ pnpm docker:db && pnpm docker:minio && pnpm docker:mail && \
 
 ### GitHub Actions Configuration
 
-The full source of truth is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-and [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml). The
+The full source of truth is `ci.yml` _(deleted)_
+and `codeql.yml` _(deleted)_. The
 summary below describes what each job actually does — consult the workflow
 files for the authoritative YAML.
 
@@ -411,7 +411,7 @@ box running the new code:
 
 ### How to add a new CI check
 
-1. Add the command to the relevant job in [`ci.yml`](../.github/workflows/ci.yml)
+1. Add the command to the relevant job in `ci.yml` _(deleted)_
    — most checks belong in `quality` (fast, blocking) alongside
    `format:check`/`lint`/`typecheck`/`test:coverage`.
 2. If it's exploratory or has a high false-positive rate (like `pnpm audit`

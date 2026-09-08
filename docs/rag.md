@@ -519,10 +519,32 @@ the sources it was actually answered from.
 | NIM client: retries, backoff, usage frame  | `src/lib/rag/client.ts`     |
 | Ingestion state machine                    | `src/lib/rag/ingest.ts`     |
 | Content question vs whole-document request | `src/lib/rag/scope.ts`      |
-| Owner-scoped retrieval                     | `src/lib/rag/retrieve.ts`   |
+| Owner- and KB-scoped retrieval             | `src/lib/rag/retrieve.ts`   |
 | Prompt construction and fencing            | `src/lib/rag/prompt.ts`     |
 | Upload / list / delete / retry actions     | `src/lib/rag/actions.ts`    |
-| Streaming, persistence, metrics            | `src/app/api/chat/route.ts` |
+| Knowledge base CRUD and `moveDocument`     | `src/lib/rag/kb-actions.ts` |
+| Permitted-KB resolution (`server-only`)    | `src/lib/rag/kb-scope.ts`   |
+| Streaming, persistence, metrics, retries   | `src/app/api/chat/route.ts` |
+
+The agentic path (spec 0029) adds:
+
+| Concern                                         | File                          |
+| ----------------------------------------------- | ----------------------------- |
+| Deterministic router — retrieve, or filler?     | `src/lib/rag/route-intent.ts` |
+| `PlannerDecision`, tool schema, both adapters   | `src/lib/rag/planner.ts`      |
+| The bounded loop, budgets, attempt-scaled floor | `src/lib/rag/agentic.ts`      |
+| Wiring: scope, planner calls, search, verify    | `src/lib/rag/agentic-run.ts`  |
+| Citation verification — sentence stripping      | `src/lib/rag/verify.ts`       |
+| Conversation-turn type and context window size  | `src/lib/rag/rewrite.ts`      |
+
+`kb-scope.ts` is deliberately not inside `kb-actions.ts`: every export of a
+`'use server'` module is a browser-reachable endpoint, and the resolver takes
+an owner id as an argument. Exported from there, anyone could enumerate another
+user's knowledge bases. `server-only` makes importing it from a client component
+a build error instead.
+
+`rewrite.ts` is a stub on purpose — it once held a standalone rewrite call. See
+_Reference resolution_ under the agentic path for why that was removed.
 
 ---
 
@@ -543,28 +565,145 @@ unconfigured, and the RAG test suites self-skip.
 ```bash
 RAG_LLM_BASE_URL=http://host.docker.internal:11434/v1
 RAG_CHAT_MODEL=gpt-oss
+RAG_PLANNER_MODEL=gpt-oss   # only matters with RAG_AGENTIC_ENABLED=true
 ```
+
+The planner needs a model that emits **native tool calls** reliably. On Ollama
+that is `gpt-oss`; coder GGUFs leak tool calls as text.
 
 The embedding side is the catch: a local model must produce **2048-dimension**
 vectors to match the column, or you need a migration and a full re-ingest.
 
 ### Tuning
 
-| Variable                                    | Default | Effect                                 |
-| ------------------------------------------- | ------- | -------------------------------------- |
-| `RAG_CHUNK_TOKENS`                          | 512     | Context per hit vs retrieval precision |
-| `RAG_CHUNK_OVERLAP_TOKENS`                  | 64      | Guards facts split across a boundary   |
-| `RAG_TOP_K`                                 | 8       | Chunks fed to the model                |
-| `RAG_MIN_SIMILARITY`                        | 0.35    | Below this, "not in your documents"    |
-| `RAG_DOC_SCOPE_MAX_CHUNKS`                  | 24      | Cap on a whole-document request        |
-| `RAG_EMBED_BATCH` / `RAG_EMBED_CONCURRENCY` | 32 / 4  | Ingestion throughput vs rate limits    |
-| `RAG_MIN_CHARS_PER_PAGE`                    | 50      | Image-only rejection threshold         |
-| `RAG_MAX_DOCUMENT_PAGES`                    | 200     | Bounds worst-case ingestion cost       |
+| Variable                                    | Default | Effect                                              |
+| ------------------------------------------- | ------- | --------------------------------------------------- |
+| `RAG_CHUNK_TOKENS`                          | 512     | Context per hit vs retrieval precision              |
+| `RAG_CHUNK_OVERLAP_TOKENS`                  | 64      | Guards facts split across a boundary                |
+| `RAG_TOP_K`                                 | 8       | Chunks fed to the model                             |
+| `RAG_MIN_SIMILARITY`                        | 0.35    | Below this, "not in your documents"                 |
+| `RAG_DOC_SCOPE_MAX_CHUNKS`                  | 24      | Cap on a whole-document request                     |
+| `RAG_EMBED_BATCH` / `RAG_EMBED_CONCURRENCY` | 32 / 4  | Ingestion throughput vs rate limits                 |
+| `RAG_MIN_CHARS_PER_PAGE`                    | 50      | Image-only rejection threshold                      |
+| `RAG_MAX_DOCUMENT_PAGES`                    | 200     | Bounds worst-case ingestion cost                    |
+| `RAG_HYBRID_CANDIDATES`                     | 20      | Per-channel pool before RRF, scaled by selected KBs |
+| `RAG_RRF_K`                                 | 60      | RRF damping constant; not sensitive                 |
 
 On the corpus above, true positives scored **0.41–0.62** and an off-topic
 question **0.13**. The 0.35 default sits in that gap but nearer the true
 positives than is comfortable — raise it only with your own corpus in front of
 you.
+
+#### Agentic path
+
+| Variable                 | Default                                 | Effect                                                          |
+| ------------------------ | --------------------------------------- | --------------------------------------------------------------- |
+| `RAG_AGENTIC_ENABLED`    | `false`                                 | Off: the fixed pipeline runs byte-identically                   |
+| `RAG_PLANNER_MODEL`      | `nvidia/nemotron-3.5-lightning-30b-a3b` | Plans and calls tools; measured 10/10 native tool calls         |
+| `RAG_MAX_SEARCHES`       | 3                                       | Hard cap on `search_documents` calls per question               |
+| `RAG_MAX_LOOP_MS`        | 15000                                   | Wall-clock for the loop, excluding answer streaming             |
+| `RAG_MAX_LOOP_TOKENS`    | 8000                                    | Prompt + completion across every planning call                  |
+| `RAG_AGENTIC_FLOOR_STEP` | 0.04                                    | Similarity floor rises by this per **extra** search — see below |
+
+Planning and prose are separate roles because they were measured separately.
+The probe scored structural reliability — did the model emit a valid tool
+call — not answer quality, so `RAG_CHAT_MODEL` still writes the prose. Collapse
+them into one model if your own eval says they are interchangeable.
+
+---
+
+## Rate limits, and what they cost you
+
+A free NIM key allows roughly **40 requests a minute**. That number is worth
+translating into questions, because the two paths spend it very differently.
+
+| Path    | Upstream calls per question                                    | Questions per minute, roughly |
+| ------- | -------------------------------------------------------------- | ----------------------------- |
+| Fixed   | 1 embedding + 1 chat stream                                    | ~20                           |
+| Agentic | 1–3 planner calls + 1 embedding per search + 1 chat + 1 verify | **~5–8**                      |
+
+Two consequences follow. Running the E2E suite with the agentic path on
+**must** use `--workers=1`; parallel workers blow straight through the ceiling,
+and what you then measure is contention, not the product. And the retry wrapper
+amplifies a throttled request rather than shortening it — four attempts with
+0.5s, 1s and 2s back-offs — so a single planner call under a 429 can stretch to
+30s or more. That is the correct behaviour (a 429 means "wait", not "stop"),
+but it is why a slow answer under load is not the same thing as a hung one.
+
+---
+
+## The stream protocol
+
+`POST /api/chat` answers with newline-delimited JSON. One object per line, so
+the client acts on each as it arrives.
+
+| Frame          | When                               | Payload                                   |
+| -------------- | ---------------------------------- | ----------------------------------------- |
+| `conversation` | First, always                      | `conversationId`, `title`                 |
+| `step`         | Each phase change _(agentic only)_ | `phase`, `iteration`                      |
+| `citations`    | Once evidence is gathered          | `citations[]`, before any prose           |
+| `token`        | Per streamed delta                 | `value`                                   |
+| `revision`     | If verification stripped anything  | `value` — the full corrected answer       |
+| `metrics`      | After the stream                   | tokens, tok/s, time to first token, model |
+| `error`        | Instead of an answer               | `message`                                 |
+| `done`         | Last, always                       | —                                         |
+
+`step` phases are `routing`, `searching` (with an iteration number),
+`drafting` and `verifying`. The client shows them as a label on the thinking
+indicator — _"Searching your documents (2)…"_ — because ten seconds of bare dots
+reads as "stuck" rather than "working".
+
+The `conversation` frame is sent **before** retrieval runs, so the thread's
+URL and sidebar entry appear at ~400ms rather than after the answer. That
+ordering is what makes the first-chat transition feel instant despite an
+8–20s answer.
+
+---
+
+## When things go wrong
+
+Every failure below was observed on a live endpoint, not imagined. Each is
+handled at the narrowest point that fixes it.
+
+**A 429 or 5xx from the endpoint.** Retried up to four times with back-off, in
+`client.ts`. A 429 on a free tier means "wait", and the retry set is
+deliberately small — a 400 or 401 is a bug in our request and must fail fast.
+
+**A 404 with an empty body.** Observed once: `HTTP 404`, no body, and the
+byte-identical request succeeded moments later. A genuine not-found explains
+itself in JSON; a blank one is an infrastructure blip. So a bodiless 404 is
+retried and a bodied one is not — a misconfigured `RAG_CHAT_MODEL` still fails
+immediately rather than hiding behind four slow retries.
+
+**A draft that streams nothing.** The endpoint occasionally returns a 200 SSE
+body with no frames at all — no content, no reasoning, not even a
+`finish_reason` — in ~200ms, while the same request by hand succeeds 5 of 5.
+Drafting retries once. If it is still empty, the user sees an explicit error
+rather than a blank bubble, and the log carries the first 600 bytes off the
+wire so it can be diagnosed rather than inferred.
+
+**Reasoning that swamps the answer.** These are reasoning models. With no
+`tools` array present the chain-of-thought streams into `content`; with one
+present it is split into `reasoning_content` and `content` stays clean. The
+stream parser reads both — reasoning is never rendered, but seeing it is what
+distinguishes "the model was thinking" from "the model said nothing".
+
+**The user navigates away mid-answer.** The stream's `cancel()` persists
+whatever was generated, because a thread showing a question with no answer is
+worse than a truncated one. The persistence latch is checked _after_ the empty
+test, not before — set first, an early cancel during retrieval (when the answer
+is still `''`) burned the latch and silently discarded the real save moments
+later. That one was found by turning the agentic path on: it widened the window
+from ~1s to 10–20s, and the answer vanished on most requests.
+
+**A refresh that aborts the next request.** The client refreshes Recents when
+an answer completes. Fire that while a _newer_ request is streaming and the
+server sees `ResponseAborted` mid-planner. The refresh is deferred and
+re-checked against a monotonic request id, and a new request cancels a pending
+one. Refreshing _immediately_ on thread creation was tried and measured worse
+— E2E 11 passed to 8 — so it stays deferred, and the sidebar can lag a readable
+answer by the length of citation verification. That trade is recorded rather
+than hidden.
 
 ---
 
@@ -658,26 +797,32 @@ fixed pipeline runs unchanged.
 
 ```mermaid
 flowchart TB
-    Q["Question + conversation"] --> RT{"Route<br>deterministic allowlist"}
-    RT -->|"filler"| ANS["Answer, no search"]
-    RT -->|"anything else"| LOOP
+    Q["Question + recent turns"] --> RT{"Route<br>deterministic allowlist"}
+    RT -->|"filler: thanks, hi"| ANS["Answer, no search"]
+    RT -->|"anything else"| SC{"Whole-document intent?<br>resolveScope, same as the fixed path"}
+    SC -->|"summarise X"| WD["Retrieve that document<br>in reading order"]
+    SC -->|"content question"| LOOP
 
     subgraph LOOP["Bounded loop — 3 searches, 15s, 8k tokens"]
         direction TB
-        PL["Plan<br>tool call, sees recent turns"] --> SR["search_documents<br>owner + KB set SERVER-BOUND"]
+        PL["Plan<br>tool call, sees recent turns"] --> D{"Decision"}
+        D -->|"search"| SR["search_documents<br>owner + KB set SERVER-BOUND"]
+        D -->|"answer, no evidence yet"| FORCE["Forced first search<br>with the original question"]
+        FORCE --> SR
         SR --> ACC["Accumulate + dedup"]
-        ACC --> EN{"Enough to answer?"}
-        EN -->|"no, budget left"| PL
-        EN -->|"no, budget spent"| REF["REFUSE"]
-        EN -->|yes| DRAFT
+        ACC --> PL
+        D -->|"answer, with evidence"| OUT
+        D -->|"refuse / budget spent"| OUT
     end
 
-    DRAFT["Draft + stream"] --> VER{"Verify citations"}
+    OUT["Attempt-scaled floor<br>0.35 + 0.04 per extra search"] --> GATE{"Anything left?"}
+    WD --> GATE
+    GATE -->|no| REF["REFUSE — code path,<br>model never drafts"]
+    GATE -->|yes| DRAFT["Draft + stream<br>one retry if empty"]
+    DRAFT --> VER{"Verify citations"}
     VER -->|"unsupported found"| STRIP["Strip those sentences<br>emit a revision"]
     VER -->|"all supported"| DONE["Done"]
-    STRIP --> CHK{"Anything left?"}
-    CHK -->|no| REF
-    CHK -->|yes| DONE
+    STRIP --> DONE
 ```
 
 ### Where the boundary lives
@@ -702,6 +847,34 @@ nothing clears the floor.
 That placement is the whole guarantee: a model talked into ignoring its
 instructions still cannot produce an ungrounded answer, because with no
 retrieved context there is no drafting call to hijack.
+
+### Why the loop stopped
+
+Every exit is named in the trace, never swallowed:
+
+| Termination           | Meaning                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `planner-answered`    | The planner judged the evidence sufficient                                                                                                                                           |
+| `planner-refused`     | The planner said the corpus cannot answer this                                                                                                                                       |
+| `search-budget`       | `RAG_MAX_SEARCHES` reached — answer from what was found, or refuse                                                                                                                   |
+| `time-budget`         | `RAG_MAX_LOOP_MS` reached — never a partial ungrounded answer                                                                                                                        |
+| `token-budget`        | `RAG_MAX_LOOP_TOKENS` reached                                                                                                                                                        |
+| `planner-unavailable` | The planning call threw or returned nothing usable; the loop stops rather than retries, because retrying a planner that just emitted nothing is how a bounded loop becomes unbounded |
+| `whole-document`      | `resolveScope` fired; the loop was skipped                                                                                                                                           |
+| `no-scope`            | The conversation has no permitted knowledge bases                                                                                                                                    |
+
+Budgets are checked **before** each expensive call, never after — checking
+afterwards lets each bound be exceeded by exactly one call.
+
+### The first pass always searches
+
+Observed live: `planner-answered` with zero searches and zero chunks, which the
+caller can only turn into a refusal. The router has already decided this turn
+needs retrieval, and that decision is deliberately biased towards searching. A
+planner that then answers from nothing re-opens the ungrounded-answer hole one
+layer down. So an "answer" decision with no evidence is overridden into a search
+using the original question; the planner may decide it has enough from the
+second call onwards, when there is evidence to judge.
 
 ### Reference resolution, and a measurement that changed the design
 
@@ -801,6 +974,16 @@ persisted record is always the verified text.
 ## Known gaps
 
 Named rather than hidden.
+
+- **The agentic path is ~10× slower.** Median 9–11s per question against ~1s,
+  because every planner call is a round trip to a reasoning model. The label on
+  the thinking indicator is what stops that reading as a hang.
+- **The sidebar can lag a readable answer** by the length of citation
+  verification, because refreshing Recents under a live stream aborts it. See
+  _When things go wrong_.
+- **The follow-up and multi-hop evaluation slices are n=3 and n=2.** One
+  question moves those metrics by a third or a half. Direction real, magnitude
+  provisional.
 
 - **No OCR.** Scanned PDFs are rejected, not half-ingested.
 - **No reranking.** No cross-encoder reranker is reachable on a free NIM
