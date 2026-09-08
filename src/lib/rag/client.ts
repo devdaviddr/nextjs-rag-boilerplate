@@ -85,7 +85,22 @@ async function post(
     if (response.ok) return response
 
     lastDetail = (await response.text()).slice(0, 300)
-    if (!RETRYABLE.has(response.status) || attempt === MAX_ATTEMPTS - 1) {
+
+    // A 404 with an EMPTY body is an infrastructure blip, not "no such model".
+    //
+    // Observed live: a chat completion failed with `HTTP 404` and no body,
+    // killing the answer outright because 404 is not retryable. The identical
+    // request — same URL, same model, same payload — returned 200 with a full
+    // answer moments later. A real not-found comes back with a JSON error body
+    // explaining itself; this did not. Narrow on purpose: a genuine 404 (a
+    // misconfigured RAG_CHAT_MODEL) still fails immediately rather than
+    // retrying four times and hiding a config error behind a slow failure.
+    const transientNotFound = response.status === 404 && lastDetail.length === 0
+
+    if (
+      (!RETRYABLE.has(response.status) && !transientNotFound) ||
+      attempt === MAX_ATTEMPTS - 1
+    ) {
       throw new RagUpstreamError(response.status, lastDetail)
     }
 

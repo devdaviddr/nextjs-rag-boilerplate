@@ -396,6 +396,8 @@ export async function POST(request: Request) {
         const decoder = new TextDecoder()
         let buffer = ''
         let firstTokenAt: number | null = null
+        let reasoningChars = 0
+        let finishReason: string | null = null
         let promptTokens: number | null = null
         let completionTokens: number | null = null
 
@@ -414,7 +416,18 @@ export async function POST(request: Request) {
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data) as {
-                choices?: Array<{ delta?: { content?: string } }>
+                choices?: Array<{
+                  finish_reason?: string | null
+                  delta?: {
+                    content?: string
+                    // Reasoning models split their chain-of-thought out of
+                    // `content`. We never render it — it is not the answer —
+                    // but seeing it tells us the model was working rather than
+                    // silent, which is the difference between "no prose yet"
+                    // and "no prose at all".
+                    reasoning_content?: string
+                  }
+                }>
                 usage?: {
                   prompt_tokens?: number
                   completion_tokens?: number
@@ -423,6 +436,13 @@ export async function POST(request: Request) {
               if (parsed.usage) {
                 promptTokens = parsed.usage.prompt_tokens ?? null
                 completionTokens = parsed.usage.completion_tokens ?? null
+              }
+              if (parsed.choices?.[0]?.finish_reason) {
+                finishReason = parsed.choices[0].finish_reason ?? null
+              }
+              if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                reasoningChars +=
+                  parsed.choices[0].delta.reasoning_content.length
               }
               const token = parsed.choices?.[0]?.delta?.content
               if (token) {
@@ -435,6 +455,33 @@ export async function POST(request: Request) {
               // nemotron models are known to emit occasional bad JSON.
             }
           }
+        }
+
+        // A completion that produced no prose is a failure, not an answer.
+        //
+        // These are reasoning models: they stream chain-of-thought into
+        // `reasoning_content` and the answer into `content`. Observed live —
+        // 837ms of drafting, one retrieved source, and ZERO content tokens.
+        // Persisting that wrote nothing (an empty answer is correctly skipped),
+        // so the thread showed a question, a Sources row and no answer at all.
+        //
+        // Better to say so than to render a blank bubble.
+        if (!answer.trim()) {
+          logger.error('Drafting produced no answer text', {
+            userId,
+            conversationId,
+            finishReason,
+            reasoningChars,
+            sourceCount: citations.length,
+          })
+          send({
+            type: 'error',
+            message:
+              'The model returned an empty answer. Please try again — this is usually transient.',
+          })
+          send({ type: 'done' })
+          finish()
+          return
         }
 
         // Verify citations before the answer is committed (spec 0029 FR6).
