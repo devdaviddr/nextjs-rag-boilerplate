@@ -1,10 +1,10 @@
 ---
 id: 0027
 title: Agentic RAG, document cracking and the evaluation that makes both provable
-status: In Progress
-release: '—'
+status: Shipped
+release: 'v0.20.0'
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # 0027 — Agentic RAG, document cracking, and the evaluation that makes both provable

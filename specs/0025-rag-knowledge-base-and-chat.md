@@ -1,10 +1,10 @@
 ---
 id: 0025
 title: PDF knowledge base & document chat (RAG)
-status: In Progress
-release: '—'
+status: Shipped
+release: 'v0.20.0'
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # 0025 — PDF knowledge base & document chat (RAG)

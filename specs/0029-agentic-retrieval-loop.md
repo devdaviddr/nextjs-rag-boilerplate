@@ -1,8 +1,8 @@
 ---
 id: 0029
 title: Agentic retrieval loop
-status: In Progress
-release: '—'
+status: Shipped
+release: 'v0.20.0'
 created: 2026-09-08
 updated: 2026-09-08
 ---

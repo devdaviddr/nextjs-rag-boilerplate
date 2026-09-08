@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-08
+
 ### Added
 
 - **Agentic retrieval loop**

@@ -1,10 +1,10 @@
 ---
 id: 0026
 title: Rag Boilerplate — chat-first UX, history and source viewing
-status: In Progress
-release: '—'
+status: Shipped
+release: 'v0.20.0'
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 # 0026 — Rag Boilerplate: chat-first UX, history and source viewing
