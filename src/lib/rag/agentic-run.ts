@@ -174,10 +174,20 @@ export async function runAgenticRetrieval(input: {
       },
       fallbackQuery: question,
       onPlanFailure: (reason, error) => {
+        // Capture the SHAPE, not just `.message`. An empty message told us
+        // nothing, and this failure silently degrades an answer to a refusal —
+        // it has to be diagnosable from the log alone.
         logger.warn('Agentic planner unavailable', {
           userId,
           reason,
-          error: error instanceof Error ? error.message : undefined,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorCtor: error?.constructor?.name,
+          status:
+            error && typeof error === 'object' && 'status' in error
+              ? (error as { status: unknown }).status
+              : undefined,
+          aborted: signal.aborted,
         })
       },
       search: async (searchQuery, documentId) =>

@@ -158,6 +158,19 @@ export function ChatView({
     initialKnowledgeBaseIds,
   )
   const endRef = useRef<HTMLDivElement>(null)
+  /**
+   * Monotonic id for each ask(), so a finishing request can tell whether it is
+   * still the newest one.
+   *
+   * `router.refresh()` below re-renders the server tree, and doing that while a
+   * NEWER request is streaming aborts it — the server sees `ResponseAborted`
+   * and the answer is lost. Measured directly: the planner call for question 2
+   * died with `errorName: ResponseAborted, aborted: true`, caused by question
+   * 1's refresh. Refresh is only needed so Recents picks up the new thread, and
+   * that can always wait for the last request to finish.
+   */
+  const requestSeq = useRef(0)
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Re-sync when the router swaps to a different conversation. Adjusting
   // state during render is React's recommended alternative to a
@@ -239,6 +252,12 @@ export function ChatView({
     ])
     setIsStreaming(true)
     setPhase(undefined)
+    const seq = ++requestSeq.current
+    // A refresh queued by an earlier answer must not land during this one.
+    if (refreshTimer.current) {
+      clearTimeout(refreshTimer.current)
+      refreshTimer.current = null
+    }
 
     const applyToLast = (
       update: (m: ConversationMessage) => ConversationMessage,
@@ -348,7 +367,23 @@ export function ChatView({
       setIsStreaming(false)
       setPhase(undefined)
       // Refresh so the new conversation (and its title) appears in Recents.
-      router.refresh()
+      //
+      // Deferred and re-checked, not fired immediately. `router.refresh()`
+      // re-renders the server tree, and when that lands mid-stream it tears
+      // down the in-flight request — the server sees `ResponseAborted` and the
+      // answer is lost. Measured: question 2's planner call died with
+      // `errorName: ResponseAborted, aborted: true`.
+      //
+      // The delay is not the guarantee (the fetch is async and could still
+      // land late); the seq check at fire time is, and `ask()` cancels a
+      // pending timer outright. Recents being a moment stale is invisible;
+      // losing an answer is not.
+      if (seq === requestSeq.current) {
+        refreshTimer.current = setTimeout(() => {
+          refreshTimer.current = null
+          if (seq === requestSeq.current) router.refresh()
+        }, 400)
+      }
     }
   }
 
