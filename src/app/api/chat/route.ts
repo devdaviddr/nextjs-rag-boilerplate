@@ -230,6 +230,9 @@ export async function POST(request: Request) {
         userId,
         permittedKbIds,
         question,
+        // Whole-document intent ("summarise the handbook") is still resolved
+        // deterministically inside, against this KB-scoped list.
+        documents: await listReadyDocuments(userId, permittedKbIds),
         turns,
         onStep: emit,
         signal: request.signal,
@@ -268,8 +271,15 @@ export async function POST(request: Request) {
     metrics: MessageMetrics | null = null,
   ): Promise<void> => {
     if (persisted) return
-    persisted = true
+    // Order matters. An EMPTY answer must not burn the once-only latch: the
+    // latch exists to stop a double write, and there is no write to dedupe
+    // when there is nothing to save. Setting it first meant a cancel during
+    // retrieval — when `answer` is still '' — permanently silenced the real
+    // save that came moments later, and the answer was lost with no error
+    // anywhere. The fixed pipeline hid this behind a ~1s window; the agentic
+    // loop widens it to 10-20s, so it fired on most requests.
     if (content.length === 0) return
+    persisted = true
     try {
       await db.insert(messages).values({
         conversationId,

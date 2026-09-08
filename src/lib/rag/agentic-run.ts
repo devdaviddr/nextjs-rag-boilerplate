@@ -16,6 +16,7 @@ import {
   retrieveForOwner,
 } from './retrieve'
 import { routeTurn } from './route-intent'
+import { resolveScope } from './scope'
 import { VERIFY_SYSTEM_PROMPT, parseVerdict } from './verify'
 
 export type AgenticPhase = 'routing' | 'searching' | 'drafting' | 'verifying'
@@ -89,11 +90,14 @@ export async function runAgenticRetrieval(input: {
   userId: string
   permittedKbIds: readonly string[]
   question: string
+  /** Ready documents in scope, for whole-document intent resolution. */
+  documents: readonly { id: string; title: string }[]
   turns: readonly RewriteTurn[]
   onStep: (phase: AgenticPhase, iteration?: number) => void
   signal: AbortSignal
 }): Promise<AgenticResult> {
-  const { userId, permittedKbIds, question, turns, onStep, signal } = input
+  const { userId, permittedKbIds, question, documents, turns, onStep, signal } =
+    input
 
   const empty = (over: Partial<AgenticResult> = {}): AgenticResult => ({
     chunks: [],
@@ -117,7 +121,30 @@ export async function runAgenticRetrieval(input: {
     return empty({ skippedRetrieval: true })
   }
 
-  // 2. The bounded loop. Reference resolution happens INSIDE it, not as a
+  // 2. Whole-document intent is still resolved deterministically, BEFORE the
+  //    loop. "summarise the handbook" is an instruction ABOUT a document, not a
+  //    question whose answer sits in a passage — measured at 0.077 similarity,
+  //    which is noise. Handing that to the planner throws away a correct,
+  //    free answer in exchange for hoping the model reinvents it; when the
+  //    planner is briefly unavailable it degrades to a refusal instead.
+  //
+  //    So the fixed pipeline's scope resolution runs first and, when it fires,
+  //    short-circuits the loop entirely (spec 0025 behaviour, preserved).
+  const scope = resolveScope(question, documents)
+  if (scope.mode === 'document') {
+    const chunks = await retrieveDocumentChunks(
+      userId,
+      scope.documentId,
+      permittedKbIds,
+    )
+    return empty({
+      chunks,
+      query: question,
+      termination: 'whole-document',
+    })
+  }
+
+  // 3. The bounded loop. Reference resolution happens INSIDE it, not as a
   //    separate call — see the note on `effectiveQuery` below.
   let tokens = 0
   const outcome = await runAgenticLoop(
@@ -144,6 +171,14 @@ export async function runAgenticRetrieval(input: {
         tokens += used
         const decision: PlannerDecision | null = parseToolCallDecision(choice)
         return { decision, tokens: used }
+      },
+      fallbackQuery: question,
+      onPlanFailure: (reason, error) => {
+        logger.warn('Agentic planner unavailable', {
+          userId,
+          reason,
+          error: error instanceof Error ? error.message : undefined,
+        })
       },
       search: async (searchQuery, documentId) =>
         documentId

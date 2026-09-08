@@ -279,3 +279,74 @@ describe('effectiveFloor', () => {
     expect(effectiveFloor(0.35, 5, 0)).toBeCloseTo(0.35)
   })
 })
+
+describe('runAgenticLoop — the planner may not answer before searching', () => {
+  /**
+   * The router already decided this turn needs retrieval, and that decision is
+   * deliberately biased towards searching. A planner that then answers with no
+   * evidence re-opens the ungrounded-answer hole one layer down — measured on a
+   * live endpoint, several questions came back planner-answered with zero
+   * searches and zero chunks, which can only become a refusal.
+   */
+  it('forces one search when the planner answers with no evidence', async () => {
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 10 })
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 10 })
+    const search = vi.fn().mockResolvedValue([chunk('a', 0.6)])
+    const onPlanFailure = vi.fn()
+
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({
+        plan,
+        search,
+        fallbackQuery: 'the original question',
+        onPlanFailure,
+      }),
+      signal,
+    )
+    expect(search).toHaveBeenCalledWith('the original question', undefined)
+    expect(out.searches).toBe(1)
+    expect(out.chunks).toHaveLength(1)
+    expect(onPlanFailure).toHaveBeenCalledWith(
+      'planner answered before searching; forcing one search',
+    )
+  })
+
+  it('accepts an answer once evidence exists', async () => {
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        decision: { action: 'search', query: 'leave' },
+        tokens: 10,
+      })
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 10 })
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({
+        plan,
+        search: vi.fn().mockResolvedValue([chunk('a', 0.6)]),
+        fallbackQuery: 'q',
+      }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-answered')
+    expect(out.searches).toBe(1)
+  })
+
+  it('still honours an explicit refusal', async () => {
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({
+        plan: vi.fn().mockResolvedValue({
+          decision: { action: 'refuse' },
+          tokens: 5,
+        }),
+        fallbackQuery: 'q',
+      }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-refused')
+  })
+})

@@ -90,6 +90,30 @@ export interface LoopDeps {
    * even if the planner asks it to (spec 0028 boundary).
    */
   search: (query: string, documentId?: string) => Promise<RetrievedChunk[]>
+  /**
+   * Called when a planning attempt fails or returns nothing usable.
+   *
+   * The loop treats both as "stop", which is correct — retrying a planner that
+   * just emitted nothing usable is how a bounded loop becomes unbounded. But
+   * swallowing the REASON made a genuine upstream failure indistinguishable
+   * from a deliberate decision in the logs. It must be reportable.
+   */
+  onPlanFailure?: (reason: string, error?: unknown) => void
+  /**
+   * Query to search with if the planner tries to answer before it has searched
+   * even once. Normally the user's question.
+   *
+   * The router has ALREADY decided this turn needs retrieval — that decision is
+   * deliberately biased towards searching, because the alternative is an
+   * ungrounded answer. Letting the planner then skip the search re-opens
+   * exactly that hole one layer down, and it happens in practice: measured on
+   * a live endpoint, several questions came back `planner-answered` with zero
+   * searches and zero chunks, which the caller can only turn into a refusal.
+   *
+   * So the first pass always retrieves something. The planner may decide it has
+   * enough from the second call onwards, when there is evidence to judge.
+   */
+  fallbackQuery?: string
   /** Injected for deterministic tests. */
   now?: () => number
 }
@@ -165,23 +189,41 @@ export async function runAgenticLoop(
     let result: PlanResult
     try {
       result = await deps.plan(steps, signal)
-    } catch {
+    } catch (error) {
       // The planner failing is not the request failing. Whatever was gathered
       // so far still stands, and the caller decides whether it is enough.
+      deps.onPlanFailure?.('planner call threw', error)
       return finish('planner-unavailable')
     }
     tokensUsed += result.tokens
 
-    const decision = result.decision
+    let decision = result.decision
     // A null decision means the response carried no usable instruction. Treated
     // as "stop", not "retry": retrying a planner that just emitted nothing
     // usable is how a bounded loop quietly becomes an unbounded one.
-    if (!decision) return finish('planner-unavailable')
-    if (decision.action === 'answer') return finish('planner-answered')
+    if (!decision) {
+      deps.onPlanFailure?.('no usable decision in the response')
+      return finish('planner-unavailable')
+    }
+    if (decision.action === 'answer') {
+      // Answering before any evidence exists is not a decision the planner is
+      // allowed to make — see `fallbackQuery`.
+      if (searches === 0 && chunks.length === 0 && deps.fallbackQuery) {
+        deps.onPlanFailure?.(
+          'planner answered before searching; forcing one search',
+        )
+        decision = { action: 'search', query: deps.fallbackQuery }
+      } else {
+        return finish('planner-answered')
+      }
+    }
     if (decision.action === 'refuse') return finish('planner-refused')
 
     const query = decision.query?.trim()
-    if (!query) return finish('planner-unavailable')
+    if (!query) {
+      deps.onPlanFailure?.('search decision carried no query')
+      return finish('planner-unavailable')
+    }
 
     searches += 1
     const found = await deps.search(query, decision.documentId)

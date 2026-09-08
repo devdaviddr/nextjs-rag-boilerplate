@@ -447,6 +447,7 @@ async function agenticRetrieve(
   q: Question,
   ownerId: string,
   kbIds: readonly string[],
+  documents: readonly { id: string; title: string }[],
 ): Promise<{
   chunks: RetrievedChunk[]
   searches: number
@@ -464,6 +465,7 @@ async function agenticRetrieve(
   try {
     const outcome = await runAgenticRetrieval({
       userId: ownerId,
+      documents,
       permittedKbIds: kbIds,
       question: q.question,
       turns,
@@ -879,7 +881,15 @@ async function main(): Promise<void> {
   if (compare) {
     console.log('\nAgentic (spec 0029 loop) — per question:')
     for (const q of questions) {
-      const outcome = await agenticRetrieve(q, EVAL_USER_ID, allKbIds)
+      // Same KB-scoped list the chat route builds, so whole-document intent
+      // resolves here exactly as it does in the product.
+      const agenticDocs = await listReadyDocuments(EVAL_USER_ID, allKbIds)
+      const outcome = await agenticRetrieve(
+        q,
+        EVAL_USER_ID,
+        allKbIds,
+        agenticDocs,
+      )
       const result = buildResult(q, outcome.chunks, titleById, {
         searches: outcome.searches,
         latencyMs: outcome.latencyMs,
