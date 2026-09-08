@@ -383,78 +383,106 @@ export async function POST(request: Request) {
 
         send({ type: 'step', phase: 'drafting' })
         const startedAt = Date.now()
-        const upstream = await createChatStream(
-          [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: buildUserMessage(question, retrieved) },
-          ],
-          request.signal,
-        )
-
-        const reader = upstream.getReader()
-        upstreamReader = reader
-        const decoder = new TextDecoder()
-        let buffer = ''
+        // Hoisted above the retry loop so a second attempt overwrites them
+        // rather than shadowing, and so the empty-answer diagnostic below can
+        // still see what the last attempt produced.
         let firstTokenAt: number | null = null
         let reasoningChars = 0
         let finishReason: string | null = null
+        let rawSample = ''
         let promptTokens: number | null = null
         let completionTokens: number | null = null
 
-        while (!closed) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
+        // Draft, with ONE retry on an empty stream.
+        //
+        // Measured: the upstream intermittently returns a 200 SSE body that
+        // yields no frames at all — no content, no reasoning, not even a
+        // finish_reason — in ~200ms, while the identical request by hand
+        // succeeds 5 times out of 5. Retrying once converts that transient
+        // into an answer instead of an apology.
+        //
+        // Bounded at two attempts, and skipped entirely when the client has
+        // gone away: retrying into a closed connection just burns a request
+        // against a 40/min ceiling.
+        for (let draft = 0; draft < 2; draft++) {
+          if (draft > 0) {
+            if (closed || request.signal.aborted) break
+            logger.warn('Drafting returned nothing; retrying once', {
+              userId,
+              conversationId,
+            })
+          }
+          const upstream = await createChatStream(
+            [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: buildUserMessage(question, retrieved) },
+            ],
+            request.signal,
+          )
 
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
+          const reader = upstream.getReader()
+          upstreamReader = reader
+          const decoder = new TextDecoder()
+          let buffer = ''
 
-          for (const raw of lines) {
-            const trimmed = raw.trim()
-            if (!trimmed.startsWith('data:')) continue
-            const data = trimmed.slice(5).trim()
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data) as {
-                choices?: Array<{
-                  finish_reason?: string | null
-                  delta?: {
-                    content?: string
-                    // Reasoning models split their chain-of-thought out of
-                    // `content`. We never render it — it is not the answer —
-                    // but seeing it tells us the model was working rather than
-                    // silent, which is the difference between "no prose yet"
-                    // and "no prose at all".
-                    reasoning_content?: string
+          while (!closed) {
+            const { done, value } = await reader.read()
+            if (done) break
+            const decoded = decoder.decode(value, { stream: true })
+            if (rawSample.length < 600) rawSample += decoded
+            buffer += decoded
+
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+
+            for (const raw of lines) {
+              const trimmed = raw.trim()
+              if (!trimmed.startsWith('data:')) continue
+              const data = trimmed.slice(5).trim()
+              if (data === '[DONE]') continue
+              try {
+                const parsed = JSON.parse(data) as {
+                  choices?: Array<{
+                    finish_reason?: string | null
+                    delta?: {
+                      content?: string
+                      // Reasoning models split their chain-of-thought out of
+                      // `content`. We never render it — it is not the answer —
+                      // but seeing it tells us the model was working rather than
+                      // silent, which is the difference between "no prose yet"
+                      // and "no prose at all".
+                      reasoning_content?: string
+                    }
+                  }>
+                  usage?: {
+                    prompt_tokens?: number
+                    completion_tokens?: number
                   }
-                }>
-                usage?: {
-                  prompt_tokens?: number
-                  completion_tokens?: number
                 }
+                if (parsed.usage) {
+                  promptTokens = parsed.usage.prompt_tokens ?? null
+                  completionTokens = parsed.usage.completion_tokens ?? null
+                }
+                if (parsed.choices?.[0]?.finish_reason) {
+                  finishReason = parsed.choices[0].finish_reason ?? null
+                }
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  reasoningChars +=
+                    parsed.choices[0].delta.reasoning_content.length
+                }
+                const token = parsed.choices?.[0]?.delta?.content
+                if (token) {
+                  firstTokenAt ??= Date.now()
+                  answer += token
+                  send({ type: 'token', value: token })
+                }
+              } catch {
+                // A malformed frame is skipped rather than aborting the answer;
+                // nemotron models are known to emit occasional bad JSON.
               }
-              if (parsed.usage) {
-                promptTokens = parsed.usage.prompt_tokens ?? null
-                completionTokens = parsed.usage.completion_tokens ?? null
-              }
-              if (parsed.choices?.[0]?.finish_reason) {
-                finishReason = parsed.choices[0].finish_reason ?? null
-              }
-              if (parsed.choices?.[0]?.delta?.reasoning_content) {
-                reasoningChars +=
-                  parsed.choices[0].delta.reasoning_content.length
-              }
-              const token = parsed.choices?.[0]?.delta?.content
-              if (token) {
-                firstTokenAt ??= Date.now()
-                answer += token
-                send({ type: 'token', value: token })
-              }
-            } catch {
-              // A malformed frame is skipped rather than aborting the answer;
-              // nemotron models are known to emit occasional bad JSON.
             }
           }
+          if (answer.trim()) break
         }
 
         // A completion that produced no prose is a failure, not an answer.
@@ -473,6 +501,8 @@ export async function POST(request: Request) {
             finishReason,
             reasoningChars,
             sourceCount: citations.length,
+            elapsedMs: Date.now() - startedAt,
+            rawSample: rawSample.slice(0, 600),
           })
           send({
             type: 'error',
