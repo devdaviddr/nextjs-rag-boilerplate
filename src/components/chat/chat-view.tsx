@@ -312,19 +312,32 @@ export function ChatView({
           if (event.type === 'conversation' && event.conversationId) {
             if (!conversationId) {
               setConversationId(event.conversationId)
-              // Adopt it as the baseline too, so the refresh below is not
-              // mistaken for the router swapping threads underneath us.
-              setLastConversationId(event.conversationId)
-              // The scope is locked in the instant the thread exists — the
-              // picker below switches to a read-only label from here on.
-              setLockedKbIds(selectedIdsFor(selection, knowledgeBases))
+              // Deliberately NOT advancing `lastConversationId` here.
+              //
+              // It mirrors the PROP, and the prop is undefined on /chat. Setting
+              // it to the new id made `initialConversationId !== lastConversationId`
+              // permanently true, so the "router swapped threads" branch fired on
+              // the very next render and reset `messages` to the server's copy —
+              // empty. Measured: the thinking indicator vanished at 520ms and the
+              // screen stayed blank for the remaining ~29s.
               // Adopt the new thread's URL without a navigation, so the
               // in-flight stream and local state survive.
+              //
+              // This was briefly deferred to the end of the stream, on the
+              // theory that it was remounting the component. It was not — the
+              // remount came from advancing `lastConversationId` here, which
+              // made the re-sync branch fire and wipe `messages`. Deferring it
+              // also pushed the URL and Recents update behind citation
+              // verification, which is another model call: the answer was
+              // readable for 5-15s while the sidebar still showed nothing.
               window.history.replaceState(
                 null,
                 '',
                 `/chat/${event.conversationId}`,
               )
+              // The scope is locked in the instant the thread exists — the
+              // picker below switches to a read-only label from here on.
+              setLockedKbIds(selectedIdsFor(selection, knowledgeBases))
             }
           } else if (event.type === 'revision' && event.value !== undefined) {
             // Citation verification removed a claim its source did not support
