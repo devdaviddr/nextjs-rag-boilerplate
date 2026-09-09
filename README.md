@@ -25,45 +25,29 @@ with an optional agentic retrieval loop.**
 
 ## What this is
 
-An opinionated application template, not a library. Clone it, point it at a
-language-model endpoint, and you have a working multi-user document-chat
-product: users register, upload PDFs into private knowledge bases they own, and
-hold conversations answered only from those documents, with a page-level
-citation for every claim.
+An application template, not a library. Clone it, point it at a language-model
+endpoint, and you have a working document-chat product: users register, upload
+PDFs into private knowledge bases, and ask questions answered only from those
+documents — with a page citation for every claim.
 
-The technique underneath is **retrieval-augmented generation** (RAG). A
-language model only knows what was in its training data, and your documents
-were not in there — ask it about your staff handbook and it will answer anyway,
-fluently and wrongly. RAG is the repair: search your own documents first, hand
-the model only the handful of passages you found, and let it write the answer
-from those. You do not need to know any of this yet.
-**[RAG — how it works](docs/rag.md)** builds every term up from nothing, and
-the **[Tutorial](docs/tutorial.md)** walks you through it with this app in
+It does that with **retrieval-augmented generation** (RAG): search your own
+documents first, then hand the model only the passages you found. New to RAG?
+The **[Tutorial](docs/tutorial.md)** builds it up from nothing with this app in
 front of you.
 
 Auth, PostgreSQL + pgvector, object storage, PWA, Docker and a retrieval
-evaluation harness are already wired together. Two properties are enforced in
-ordinary code rather than left to the model:
+evaluation harness are already wired together. Two guarantees are enforced in
+ordinary code rather than asked of the model:
 
-1. **An answer is grounded, or there is no answer.** If retrieval finds nothing
-   close enough to your question, the chat model is never called at all and a
-   fixed refusal comes back. This matters because the characteristic failure of
-   a document chatbot is not silence — it is a confident, fluent, invented
-   answer. Asking a model nicely not to make things up does not prevent that.
-   Not calling it does.
-2. **You can only retrieve your own documents.** Ownership and knowledge-base
-   scope live in the SQL `WHERE` clause of every retrieval channel — not as a
-   filter applied to results afterwards, and not as an instruction to the
-   model. This matters because everything else in a RAG system is text a model
-   reads, and text can be argued with. A `WHERE` clause cannot. There is no
-   phrasing of a question that widens what it can see.
+- **Grounded, or no answer.** If retrieval finds nothing close enough to the
+  question, the chat model is never called and a fixed refusal comes back. It
+  cannot invent an answer it was never asked for.
+- **You only ever retrieve your own documents.** Ownership and knowledge-base
+  scope live in the SQL `WHERE` clause of every query, not in a prompt — so no
+  phrasing of a question widens what it can see.
 
 Retrieval quality is measured, not asserted: `pnpm rag:eval` scores hit@k, MRR,
-refusal accuracy and cross-knowledge-base leakage against a ground-truth
-corpus. See **[Features](docs/features.md)** for the full inventory,
-**[RAG](docs/rag.md)** for how retrieval works, and
-**[Architecture](docs/architecture.md)** for the request flow and security
-model.
+refusal accuracy and cross-knowledge-base leakage against a ground-truth corpus.
 
 ---
 
