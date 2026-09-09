@@ -125,6 +125,6 @@ nonce={...}>` so the anti-flash script is nonce-authorized rather than
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - [next-themes](https://github.com/pacocoursey/next-themes).
 - Existing token definitions: `src/app/globals.css`.

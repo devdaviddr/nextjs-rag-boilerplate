@@ -2,19 +2,55 @@
 
 [← Back to README](../README.md)
 
-Take this boilerplate from a fresh clone to a live app on **your own domain** —
-served over HTTPS through a **Cloudflare Tunnel**, with no open ports, no reverse
-proxy, and no certificate management. One command does the whole thing:
+**What this covers:** taking a fresh clone to a live app on your own domain, and
+keeping that machine up to date afterwards.
+
+Self-hosting here means one machine you control — a Mac mini under a desk, a
+Linux box, a cheap VPS — running the whole stack in Docker: the Next.js app,
+Postgres, MinIO for uploaded files, and the nightly backup sidecars. There is no
+platform to sign up for and nothing to pay for beyond the machine itself.
+
+The part that normally hurts is HTTPS on a real domain without opening a port on
+your router. A **Cloudflare Tunnel** removes that problem. A small daemon called
+`cloudflared` runs next to the app and dials **out** to Cloudflare, which holds
+the connection open and pushes your visitors' requests back down it. No inbound
+ports, no reverse proxy, no certificates to renew.
+
+One command does the whole thing:
 
 ```bash
 make setup
 ```
 
-This guide is the **journey** (clone → live). For per-command reference and the
-individual `make tunnel-*` targets, see [deployment.md](deployment.md); for the
-former CI pipeline (removed; kept as a record) see [ci-cd.md](ci-cd.md); for day-2 data safety see
-[backups.md](backups.md); for the full loop from a feature branch to a deploy
-on this box, see [Feature → Production](workflow.md).
+This page is the journey: clone → live → kept current. It is the guide to
+`make setup` and to the deploy loop that follows it.
+
+Two neighbours cover the same ground from different angles. If you would rather
+drive the tunnel by hand with the individual `make tunnel-*` targets — or you
+want to understand the tunnel itself — read [deployment.md](deployment.md). Once
+you are live, [backups.md](backups.md) is the data-safety half, and
+[Feature → Production](workflow.md) is the full loop from a feature branch to a
+deploy on this box. The former CI pipeline is removed, and kept as a record in
+[ci-cd.md](ci-cd.md).
+
+---
+
+## How it works (one diagram)
+
+Follow the arrows: everything crosses the network outwards, from your box to
+Cloudflare.
+
+```text
+User ──HTTPS──▶  Cloudflare edge  ◀══ outbound tunnel ══  cloudflared ──▶ app:3000
+                 (terminates TLS)                          (in Docker)
+```
+
+`cloudflared` dials **out** to Cloudflare and holds the connection open; no
+inbound ports are opened on your host. That is why the app container publishes
+no host port in tunnel mode — it is reachable only through the tunnel. Auth
+trusts the proxied host (`AUTH_TRUST_HOST` + `AUTH_URL`) and reads the real
+client IP from `CF-Connecting-IP`. Deeper detail:
+[architecture.md](architecture.md) and [deployment.md](deployment.md).
 
 ---
 
@@ -32,6 +68,11 @@ preflight ─▶ secrets (.env, AUTH_SECRET) ─▶ choose mode
                           │
      seed demo admin ─────┴─▶ verify (health + HSTS + CSP) ─▶ summary (URL + login)
 ```
+
+Read that top to bottom and you have the whole flow: it checks your tooling,
+writes `.env`, puts you online by whichever route you picked, creates a demo
+admin you can log in as, and then proves the result is actually serving over
+HTTPS with the hardening headers in place.
 
 It is **idempotent** — safe to re-run. It never rotates an existing
 `AUTH_SECRET` without asking (rotation logs everyone out and voids outstanding
@@ -55,6 +96,18 @@ Cloudflare Tunnel itself is free (Zero Trust free tier). Windows: run inside WSL
 ---
 
 ## Choose your mode
+
+The wizard asks you one real question: how public do you want this to be, and
+how much do you want to own. Pick the first row that describes you.
+
+| Mode          | You get                                | You need                              |
+| ------------- | -------------------------------------- | ------------------------------------- |
+| **Quick**     | A random `*.trycloudflare.com` URL     | Nothing — no account, no domain       |
+| **Guided**    | Your own domain, wired up by hand once | A Cloudflare domain + dashboard click |
+| **Automated** | Your own domain, provisioned as code   | The above + `terraform` + API token   |
+
+You can start with quick and re-run `make setup` later in another mode; nothing
+you do here is one-way.
 
 ### 1. Quick — instant demo, no account
 
@@ -82,6 +135,10 @@ the rest.
 
 The wizard stores the token in `.env`, sets `AUTH_URL=https://app.yourdomain.com`
 (the single most-missed manual step), brings the stack up, seeds, and verifies.
+
+The ingress target is `http://app:3000` — the Compose **service name**, resolved
+inside the Docker network by `cloudflared`. It is never `localhost`, because
+`localhost` inside the `cloudflared` container is the `cloudflared` container.
 
 ### 3. Automated — your domain, provisioned by Terraform
 
@@ -160,9 +217,13 @@ and let the agent trigger it.
 ## Continuous deployment
 
 `make setup` gets you live the first time; **continuous deployment** keeps a
-running box up to date as you push new code. Because the box is
-**outbound-only** (the tunnel opens no inbound ports), both paths below are
-**pull-based**: the box reaches out for the new image; nothing reaches in.
+running box up to date as you push new code.
+
+The shape of it follows from the tunnel. Because the box is **outbound-only**
+(the tunnel opens no inbound ports), nothing on the internet can push a new
+version at it. So both paths below are **pull-based**: the box reaches out for
+the new image; nothing reaches in. Tier B does the pull on a timer. Tier C lets
+GitHub trigger it, at the cost of running a GitHub runner on your network.
 
 > **The image-publishing pipeline was removed from this fork.** `ci.yml` used to
 > publish `ghcr.io/<owner>/<repo>` (the app) and `.../migrate` (the migrator —
@@ -351,6 +412,8 @@ external drive — see [backups.md](backups.md#optional-offsite-copy-disk-failur
 
 ## Troubleshooting
 
+Find the symptom, apply the fix. These are the failures people actually hit.
+
 | Symptom                                                       | Fix                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Preflight: Compose too old**                                | Upgrade Docker Desktop / the compose plugin to ≥ v2.24.                                                                                                                                                                                                                                                                                                                               |
@@ -365,15 +428,6 @@ external drive — see [backups.md](backups.md#optional-offsite-copy-disk-failur
 
 ---
 
-## How it works (one diagram)
-
-```text
-User ──HTTPS──▶  Cloudflare edge  ◀══ outbound tunnel ══  cloudflared ──▶ app:3000
-                 (terminates TLS)                          (in Docker)
-```
-
-`cloudflared` dials **out** to Cloudflare and holds the connection open; no
-inbound ports are opened on your host. Auth trusts the proxied host
-(`AUTH_TRUST_HOST` + `AUTH_URL`) and reads the real client IP from
-`CF-Connecting-IP`. Deeper detail: [architecture.md](architecture.md) and
-[deployment.md](deployment.md).
+**Next:** [Deployment — Cloudflare Tunnel](deployment.md) for the tunnel itself
+and the by-hand `make tunnel-*` route, then [Backups & restore](backups.md) to
+make the box's data survive a bad day.

@@ -1,22 +1,103 @@
 # CI/CD
 
-> **Removed.** The `CI` and `CodeQL` workflows were deleted from this fork.
-> There is no automated lint/typecheck/test/E2E run and no image publishing on
-> a tag; run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` locally
-> before pushing. `deploy.yml` is still present, but it consumes the container
-> images `ci.yml` used to build and push to GHCR — so a `v*` tag will no longer
-> produce an image for it to deploy. This document is kept as a record of what
-> the pipeline did, and as the starting point if it is restored.
-
 [← Back to README](../README.md)
 
-This documentation covers the CI/CD pipeline and testing workflow for the Next.js Fullstack Boilerplate. Deployment is covered separately in [deployment.md](deployment.md). For the full path from a feature branch to a deploy on your box, see [Feature → Production](workflow.md).
+**What this covers:** why this fork has no automated pipeline, what you run in
+its place, and — kept as an honest record — exactly what the old GitHub Actions
+pipeline did, in case you want it back.
 
-### Pipeline Overview
+> ## There is no CI in this fork
+>
+> The `CI` and `CodeQL` workflows were **deleted**. Nothing runs lint,
+> typecheck, unit tests or E2E tests when you push. Nothing builds or publishes
+> a container image on a merge or on a release tag.
+>
+> **You are the pipeline.** Run this before every push:
+>
+> ```bash
+> pnpm lint && pnpm typecheck && pnpm test && pnpm build
+> ```
+>
+> One workflow survives — `deploy.yml` — and it is off by default. See
+> [What is still in `.github/workflows/`](#what-is-still-in-githubworkflows).
 
-Three workflows cover CI, security scanning, and deployment. `ci.yml` and
-`codeql.yml` run on every push and pull request to `main`; `deploy.yml` is
-opt-in and only runs on release tags:
+If what you want is to ship a change, read
+[Feature → Production](workflow.md) instead. The two sections below are what
+still applies today; everything after **The record** describes something that no
+longer runs.
+
+## Run the gates yourself
+
+There are two layers of protection left, and both are local.
+
+**The pre-commit hook.** Husky runs `lint-staged` (ESLint + Prettier) over your
+staged files on every `git commit`. It is installed automatically by the
+`prepare` script when you `pnpm install`. It only sees files you staged, so it
+catches formatting, not a broken build.
+
+**The pre-push command.** This is the real gate, and nothing runs it for you:
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
+For the full browser suite as well, start the local dependencies first:
+
+```bash
+pnpm docker:db && pnpm docker:minio && pnpm docker:mail && \
+  pnpm db:migrate && pnpm db:seed && pnpm build && pnpm test:e2e
+```
+
+What each of those scripts does, what the unit and E2E suites actually cover,
+and the rule about running E2E with `--workers=1` when
+`RAG_AGENTIC_ENABLED=true` all live in
+[Usage & Development → Testing](usage.md#testing), which owns that detail. The
+pre-deployment list lives in
+[Usage & Development → Production checklist](usage.md#production-checklist).
+
+Two habits carried over from the pipeline era and still worth keeping: aim for
+**unit-test coverage above 80%** (`pnpm test:coverage` reports it), and verify a
+**restore**, not only a backup, before you call a deployment production-ready —
+see [Backups & restore](backups.md).
+
+## What is still in `.github/workflows/`
+
+One file: `deploy.yml`. It listens for `v*` tags (and a manual **Run workflow**
+button) and runs `make deploy` on a **self-hosted runner** on your own box —
+pull the published images, migrate, restart. The runner dials out to GitHub, so
+it works behind a tunnel with no inbound ports.
+
+It is **skipped unless the repository variable `SELF_HOSTED_DEPLOY == 'true'`**,
+and it is `false`. Two things to know before you consider turning it on:
+
+1. It deploys images that `ci.yml` used to build. With `ci.yml` gone, **a `v*`
+   tag produces no image for it to pull.** Restore an image-publishing job (or
+   build and push the two images by hand) first.
+2. 🚫 **Do not enable it on a public repository.** A self-hosted runner on a
+   public repo is the configuration GitHub explicitly warns against: a fork
+   pull request can add a workflow targeting `runs-on: [self-hosted]` and, once
+   approved, execute arbitrary code on your box and home network. The
+   `SELF_HOSTED_DEPLOY` gate does not help — a malicious fork brings its own
+   workflow file. Use the pull-based **Tier B** deploy (`make deploy-timer`)
+   instead: no runner, no such surface. Full reasoning and the recommended
+   alternative are in
+   [Self-hosting → Continuous deployment](self-hosting.md#continuous-deployment).
+
+---
+
+## The record — everything below here no longer runs
+
+The rest of this page describes workflows that are **no longer in the
+repository**. It is kept for two reasons: the design decisions in it —
+especially the release fast-path — are the starting point if you restore the
+pipeline, and the measured numbers explain why the deploy path is shaped the way
+it is. It is written in the past tense throughout. You can stop reading here and
+still ship changes.
+
+## The record: the three workflows
+
+`ci.yml` and `codeql.yml` ran on every push and pull request to `main`;
+`deploy.yml` was opt-in and only ran on release tags.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -50,158 +131,27 @@ opt-in and only runs on release tags:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-`quality` and `e2e` run independently. **`docker` is gated on `quality` only**
-(fast lint/type/unit) so the ~2–3 min image build **overlaps** the ~2 min `e2e`
-instead of queuing behind it; **`docker-merge` (which assigns the human tags)
-needs both `docker` and `e2e`**, so nothing gets a usable tag until the full
-suite is green. Publishing and the opt-in `deploy.yml` are the
-continuous-deployment story — see [self-hosting.md](self-hosting.md#continuous-deployment).
+The interesting part of that layout is the gating. `quality` and `e2e` ran
+independently. **`docker` was gated on `quality` only** (fast lint/type/unit) so
+the ~2–3 min image build **overlapped** the ~2 min `e2e` instead of queuing
+behind it. But **`docker-merge` — the job that assigns the human-readable tags —
+needed both `docker` and `e2e`**, so nothing got a usable tag until the full
+suite was green. Fast where it is safe to be fast, strict where it matters.
 
-### Release fast-path — a `v*` tag re-tags, it does not rebuild
+### Shared setup
 
-A release is a `v*` tag placed on a `main` commit that CI **already built, tested,
-and published** (as `sha-<short>` + `latest`) minutes earlier. Rebuilding it on the
-tag would recompile a bit-identical image just to add the semver tag — the slowest
-thing on the whole tag→live path. Instead, on a tag ref the workflow runs a single
-`release` job that **adds the semver tag — and moves the floating `stable` tag — on
-the existing multi-arch digest** with `docker buildx imagetools create` (a manifest
-op, ~30s); `quality`, `e2e`, `docker`, and `docker-merge` are all skipped.
+All jobs ran on `ubuntu-latest` with **Node 22** (no version matrix) and pnpm
+via `pnpm/action-setup`, taking the version from `package.json`'s
+`packageManager` field rather than pinning it in the workflow. Next.js telemetry
+was disabled with `NEXT_TELEMETRY_DISABLED` for reproducible builds and no
+telemetry calls from CI.
 
-The `release` job **waits** for `ghcr.io/<owner>/<repo>:sha-<short>` (app + migrate)
-to exist before re-tagging, so it **inherits `main`'s full gate** — that image is
-only published once `main`'s `quality` + `e2e` + build pass. If it never appears the
-release fails loudly rather than shipping something untested.
+`ci.yml` set `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress:
+true }`. Pushing again to the same branch or PR therefore cancelled whatever run
+was already in flight — if a run vanished from the Actions tab after a follow-up
+push, that was this setting, not a failure.
 
-**`stable` always points at the most recently released image.** It's the tag a
-Tier B box sets `APP_TAG` to for automatic _release-only_ deploys: `latest` moves
-on every `main` merge, a pinned semver never moves — `stable` moves exactly when a
-release is cut. Any `v*` push moves it (including an old tag re-pushed), so roll
-back by pinning `APP_TAG` to a semver, not by re-pushing old tags.
-
-The `release` job also **creates the GitHub Release entry** so the Releases page
-never drifts from the tags: notes are this version's `CHANGELOG.md` section, and
-the title is the annotated tag's subject (`git tag -a vX.Y.Z -m "short title"` →
-"vX.Y.Z — short title"; a lightweight tag gets the bare version). Re-runs skip an
-existing release.
-
-Because the re-tagged image carries `main`'s baked `APP_VERSION=main`, the deployed
-version is applied at **runtime** from the tag the box pulled — `APP_VERSION:
-${APP_TAG}` on the `app` service in `docker-compose.deploy.yml` (with `APP_GIT_SHA`
-still baked, correct). Settings → Build shows `APP_TAG · <sha7>` — with a floating
-`APP_TAG=stable` that reads `stable · <sha7>` (the SHA still pins the exact commit);
-pin a semver if you want the version number displayed. See
-[spec 0024](../specs/0024-faster-time-to-deploy.md).
-
-> **Realizing the win:** merge to `main`, let `main` CI go green, **then** push the
-> `v*` tag — the image is already there and the tag ships in ~30s. Pushing the tag
-> at the same time as the merge is still correct: the `release` job just waits for
-> `main`'s build (no duplicate compute), then re-tags.
-
-### Time-to-deploy budget
-
-Measured on the `v0.16.x` releases (box pins a semver `APP_TAG`, so the tag pipeline
-is on the critical path):
-
-| Phase                                 | Before (0.16.x)       | After (0.17.0)                       |
-| ------------------------------------- | --------------------- | ------------------------------------ |
-| Tag CI (`git push` tag → image ready) | ~5m27s (full rebuild) | ~30s re-tag¹                         |
-| Poll wait (Tier B timer)              | 0–300s (avg ~150s)    | 0–60s (avg ~30s), idle ticks skipped |
-| Deploy on box                         | ~1–2 min              | ~1–2 min (unchanged)                 |
-
-¹ Plus a wait for `main`'s build if the tag is pushed before `main` CI is green. The
-`main` build itself (~3–4 min after overlapping build with e2e) is the one
-unavoidable compile of new source.
-
-### Quality Gates
-
-Before any PR can be merged, all checks must pass:
-
-```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build
-```
-
-#### 1. Linting & Formatting
-
-**ESLint** (flat config, Next.js) + **Prettier** + **Tailwind plugin** + **Husky pre-commit**.
-
-```bash
-pnpm lint          # check only
-pnpm lint:fix      # auto-fix
-pnpm format        # auto-fix (includes lint-staged)
-pnpm format:check  # verify
-```
-
-**Hook:** `pre-commit` runs `lint-staged` on staged files.
-
-#### 2. Type Safety
-
-**tsc --noEmit** with strict mode flags.
-
-```bash
-pnpm typecheck
-```
-
-#### 3. Unit Tests (Vitest)
-
-Run once or in watch mode:
-
-```bash
-pnpm test                    # run all
-pnpm test:watch              # watch mode
-pnpm test:coverage           # with coverage report
-```
-
-**Scope:** password hashing, validation schemas, upload validation, rate limiting, tokens, RBAC, OAuth, email soft-gate, Web Push.
-
-#### 4. E2E Tests (Playwright)
-
-Full browser stack for end-to-end flows:
-
-```bash
-pnpm test:e2e        # headless
-pnpm test:e2e:ui     # interactive UI runner
-```
-
-**Prerequisites:** migrated + seeded DB, running MinIO, running Mailpit.
-
-**Full local test suite:**
-
-```bash
-pnpm docker:db && pnpm docker:minio && pnpm docker:mail && \
-  pnpm db:migrate && pnpm db:seed && pnpm build && pnpm test:e2e
-```
-
-**E2E test coverage includes:**
-
-- Auth flows (login, register, sign-out)
-- Protected route redirects and RBAC
-- File upload/download/delete
-- Avatar uploads
-- PWA manifest/SW/offline
-- SEO (robots/sitemap/OG)
-- Accessibility (axe)
-- Email reset/verification round-trips (against Mailpit)
-
-### GitHub Actions Configuration
-
-The full source of truth is `ci.yml` _(deleted)_
-and `codeql.yml` _(deleted)_. The
-summary below describes what each job actually does — consult the workflow
-files for the authoritative YAML.
-
-Both workflows trigger on `push` and `pull_request` to `main` (CodeQL also runs
-on a weekly `schedule`); `ci.yml` additionally runs on `v*` tags, which publish
-the semver-tagged image. `ci.yml` sets `concurrency: { group: ci-${{
-github.ref }}, cancel-in-progress: true }`, so pushing again to the same
-branch or PR cancels whatever CI run was already in flight for it — if a run
-disappears from the Actions tab after a follow-up push, that's this behavior,
-not a failure. It also disables Next.js telemetry via
-`NEXT_TELEMETRY_DISABLED` (reproducible builds, no telemetry calls from CI).
-All jobs run on `ubuntu-latest` with
-**Node 22** (no version matrix) and pnpm via `pnpm/action-setup` (version taken
-from `package.json`'s `packageManager` field — not pinned in the workflow).
-
-#### `quality` job
+### `quality` job
 
 ```bash
 pnpm install --frozen-lockfile
@@ -212,287 +162,222 @@ pnpm test:coverage
 pnpm audit --audit-level=high   # continue-on-error: advisory, non-blocking
 ```
 
-#### `e2e` job
+### `e2e` job
 
-Postgres runs as a GitHub Actions `services:` container (`pgvector/pgvector:pg17` — the RAG migration needs the `vector` extension,
-health-checked). MinIO and Mailpit **cannot** be `services:` containers (that
-block supports only `image`/`env`/`ports`, and the `minio/minio` image needs a
-`server /data` command to run), so the workflow starts them explicitly with
-`docker run` and polls their health endpoints — mirroring `docker-compose.yml`.
-The bucket is `app-files`, created with the `minio/mc` client.
+Postgres ran as a GitHub Actions `services:` container using
+**`pgvector/pgvector:pg17`** — the RAG migration needs the `vector` extension,
+so a stock `postgres` image would not do — health-checked.
 
-The job then runs `pnpm db:migrate` → `pnpm db:seed` → `pnpm build` →
+MinIO and Mailpit **could not** be `services:` containers. That block supports
+only `image`/`env`/`ports`, and the `minio/minio` image needs a `server /data`
+command to start at all. The workflow started both explicitly with `docker run`
+and polled their health endpoints, mirroring `docker-compose.yml`. The bucket
+was `app-files`, created with the `minio/mc` client.
+
+The job then ran `pnpm db:migrate` → `pnpm db:seed` → `pnpm build` →
 `pnpm exec playwright install --with-deps chromium` → `pnpm test:e2e`, and
-uploads the `playwright-report/` as an artifact (`if: ${{ !cancelled() }}`,
-7-day retention). Email is enabled against Mailpit (`EMAIL_ENABLED=true`,
-`SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`) so the reset/verification round-trips
-run in `email-flow.spec.ts`. `AUTH_SECRET` is a throwaway CI value.
+uploaded `playwright-report/` as an artifact (`if: ${{ !cancelled() }}`, 7-day
+retention). Email was enabled against Mailpit (`EMAIL_ENABLED=true`,
+`SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`) so the reset and verification
+round-trips in `email-flow.spec.ts` actually ran. `AUTH_SECRET` was a throwaway
+CI value.
 
-#### `docker` job (+ `docker-merge`, `release`)
+**Test isolation.** Each E2E test uses a unique client IP (via
+`CF-Connecting-IP`) so rate-limit buckets do not leak between tests — that is
+what makes a parallel suite reproducible, and it also means the rate-limit tests
+assert something real. Implementation: `tests/e2e/fixtures.ts`. This is still
+true locally; it was not a CI-only trick.
 
-`docker` is gated `needs: [quality]` and runs in **parallel** with `e2e` (so the
-build overlaps the tests); `docker-merge` is gated `needs: [docker, e2e]`, so it
-only publishes **tested** images. They're **multi-arch** (`linux/amd64` +
-`linux/arm64`) so they run on Apple Silicon Mac minis as well as amd64 servers. To
-avoid slow QEMU emulation, `docker` is a matrix that builds each arch on its **own
-native runner** (`ubuntu-latest` + `ubuntu-24.04-arm`) and pushes by digest; a
-`docker-merge` job then assembles the per-arch digests into one manifest per image
-via `docker/metadata-action`:
+### `docker` job (+ `docker-merge`, `release`)
+
+`docker` was gated `needs: [quality]` and ran in **parallel** with `e2e`;
+`docker-merge` was gated `needs: [docker, e2e]`, so only tested images were
+published. Images were **multi-arch** (`linux/amd64` + `linux/arm64`) so they
+run on Apple Silicon Mac minis as well as amd64 servers. To avoid slow QEMU
+emulation, `docker` was a matrix that built each architecture on its **own
+native runner** (`ubuntu-latest` + `ubuntu-24.04-arm`) and pushed by digest;
+`docker-merge` then assembled the per-arch digests into one manifest per image
+via `docker/metadata-action`.
+
+Two images, because one cannot do both jobs:
 
 - `ghcr.io/<owner>/<repo>` — the production `runner` target (the app).
 - `ghcr.io/<owner>/<repo>/migrate` — the `builder` target, the only one that can
-  run `pnpm db:migrate` (the runner standalone image has no tsx/source).
+  run `pnpm db:migrate` (the runner standalone image has no tsx and no source).
 
-Tags: commit `sha`, the branch, semver on `v*` tags, and `latest` on the default
-branch. **Pull requests build both arches cache-only and never push** (login is
-skipped; `docker-merge` is gated to non-PR) so forks stay safe. Uses the workflow
-`GITHUB_TOKEN` with `packages: write`.
+Tags: the commit `sha`, the branch, semver on `v*` tags, and `latest` on the
+default branch. **Pull requests built both arches cache-only and never pushed**
+(login was skipped, and `docker-merge` was gated to non-PR runs) so forks stayed
+safe. It used the workflow `GITHUB_TOKEN` with `packages: write`.
 
-The `main`/PR app build bakes a **build identity** via build-args —
-`APP_VERSION=${{ github.ref_name }}` (`main` on a branch build) and
-`APP_GIT_SHA=${{ github.sha }}`. The Dockerfile persists them as `ENV` and
-`src/lib/env.ts` reads them. Because a **release tag re-tags this image rather than
-rebuilding** (see "Release fast-path"), the baked `APP_VERSION` stays `main`; the
-deployed version is instead applied at **runtime** from the pinned `APP_TAG`
-(`docker-compose.deploy.yml`), while `APP_GIT_SHA` stays baked (correct). Either
-way the app surfaces the pair in **Settings → Build** so an operator can confirm
-which version a self-hosted box is running.
+**Build identity.** The `main`/PR app build baked in
+`APP_VERSION=${{ github.ref_name }}` (so `main` on a branch build) and
+`APP_GIT_SHA=${{ github.sha }}` as build-args. The Dockerfile persists them as
+`ENV` and `src/lib/env.ts` reads them. Because a release tag **re-tagged this
+image rather than rebuilding it** (below), the baked `APP_VERSION` stayed
+`main`; the deployed version is instead applied at **runtime** from the pinned
+`APP_TAG` (`docker-compose.deploy.yml`), while `APP_GIT_SHA` stays baked and
+correct. Either way the app surfaces the pair in **Settings → Build**, so an
+operator can confirm which version a self-hosted box is running.
 
-On a tag ref, `docker`/`docker-merge` are skipped and the **`release`** job re-tags
-instead — see "Release fast-path" above.
+On a tag ref, `docker` and `docker-merge` were skipped and the `release` job
+re-tagged instead.
 
-#### CodeQL
+### CodeQL
 
-`codeql.yml` runs GitHub's CodeQL `security-and-quality` query suite over the
-`javascript-typescript` sources on every push/PR and weekly (Monday 06:00 UTC),
-publishing results to the repository's Security tab.
+`codeql.yml` ran GitHub's CodeQL `security-and-quality` query suite over the
+`javascript-typescript` sources on every push and PR, plus weekly on Monday
+06:00 UTC, publishing results to the repository's Security tab.
 
-#### `deploy.yml` (opt-in continuous deployment)
+## Deep dive: the release fast-path
 
-Skipped unless the repo variable `SELF_HOSTED_DEPLOY == 'true'`. When enabled, it
-runs `make deploy` on a **self-hosted runner** on your box (which dials out to
-GitHub — tunnel-friendly) on release tags, pulling the freshly published images,
-migrating, and restarting.
+This is the most repo-specific idea in the old pipeline, and the one worth
+keeping if you restore it.
 
-> **Do not enable this on a public repo.** A self-hosted runner on a public
-> repository is the configuration GitHub explicitly warns against: a fork pull
-> request can add a workflow that targets `runs-on: [self-hosted]` and, once
-> approved, executes arbitrary code on your box and home network. The
-> `SELF_HOSTED_DEPLOY` gate doesn't help — a malicious fork brings its own
-> workflow. Use the pull-based **Tier B** deploy (`make deploy-timer`) instead,
-> which needs no runner and has no such surface.
+A release is a `v*` tag placed on a `main` commit that CI **already built,
+tested, and published** (as `sha-<short>` + `latest`) minutes earlier.
+Rebuilding on the tag would recompile a bit-identical image just to add the
+semver tag — the slowest thing on the whole tag→live path. So on a tag ref the
+workflow ran a single `release` job that **added the semver tag — and moved the
+floating `stable` tag — on the existing multi-arch digest** with
+`docker buildx imagetools create` (a manifest operation, ~30s). `quality`,
+`e2e`, `docker` and `docker-merge` were all skipped.
 
-Full design and the recommended pull-based alternative:
-[self-hosting.md → Continuous deployment](self-hosting.md#continuous-deployment).
+Skipping the tests on a tag sounds unsafe. It is not, because of a wait. The
+`release` job **waited** for `ghcr.io/<owner>/<repo>:sha-<short>` (app +
+migrate) to exist before re-tagging, so it **inherited `main`'s full gate** —
+that image is only published once `main`'s `quality` + `e2e` + build pass. If it
+never appeared, the release failed loudly rather than shipping something
+untested.
 
-### Local Development Testing
+**`stable` always pointed at the most recently released image.** That is the tag
+a Tier B box sets `APP_TAG` to for automatic _release-only_ deploys: `latest`
+moves on every `main` merge, a pinned semver never moves, and `stable` moves
+exactly when a release is cut. Any `v*` push moved it — including an old tag
+re-pushed — so the correct rollback is to pin `APP_TAG` to a semver, not to
+re-push an old tag.
 
-#### Quick Start
+The `release` job also **created the GitHub Release entry**, so the Releases
+page never drifted from the tags. The notes were that version's `CHANGELOG.md`
+section, and the title came from the annotated tag's subject
+(`git tag -a vX.Y.Z -m "short title"` → "vX.Y.Z — short title"; a lightweight
+tag got the bare version). Re-runs skipped an existing release.
 
-```bash
-# Start local dependencies
-pnpm docker:db
-pnpm docker:minio
-pnpm docker:mail
+Because the re-tagged image carries `main`'s baked `APP_VERSION=main`, the
+deployed version is applied at **runtime** from the tag the box pulled —
+`APP_VERSION: ${APP_TAG}` on the `app` service in `docker-compose.deploy.yml`
+(with `APP_GIT_SHA` still baked, correct). Settings → Build shows
+`APP_TAG · <sha7>` — with a floating `APP_TAG=stable` that reads
+`stable · <sha7>`, and the SHA still pins the exact commit; pin a semver if you
+want the version number displayed. See
+[spec 0024](../specs/0024-faster-time-to-deploy.md).
 
-# Apply schema
-pnpm db:migrate
-pnpm db:seed
+> **Realizing the win:** merge to `main`, let `main` CI go green, **then** push
+> the `v*` tag — the image is already there and the tag ships in ~30s. Pushing
+> the tag at the same time as the merge was still correct: the `release` job
+> just waited for `main`'s build (no duplicate compute), then re-tagged.
 
-# Run full test suite
-pnpm test:e2e
-```
+## Measured: the time-to-deploy budget
 
-#### Running Tests Interactively
+Measured on the `v0.16.x` releases, with the box pinning a semver `APP_TAG` so
+the tag pipeline sits on the critical path:
 
-```bash
-# Watch mode for units
-pnpm test:watch
+| Phase                                 | Before (0.16.x)       | After (0.17.0)                       |
+| ------------------------------------- | --------------------- | ------------------------------------ |
+| Tag CI (`git push` tag → image ready) | ~5m27s (full rebuild) | ~30s re-tag¹                         |
+| Poll wait (Tier B timer)              | 0–300s (avg ~150s)    | 0–60s (avg ~30s), idle ticks skipped |
+| Deploy on box                         | ~1–2 min              | ~1–2 min (unchanged)                 |
 
-# Playwright UI runner
-pnpm test:e2e:ui
-```
+¹ Plus a wait for `main`'s build if the tag is pushed before `main` CI is green.
+The `main` build itself (~3–4 min after overlapping build with e2e) is the one
+unavoidable compile of new source.
 
-#### Test Isolation
+## Deep dive: how a merge became a live deploy
 
-Each E2E test uses a unique client IP (from `CF-Connecting-IP`) to isolate rate-limit buckets:
-
-- Prevents test interference
-- Ensures accurate rate-limit testing
-
-**Implementation:** `tests/e2e/fixtures.ts`
-
-### Docker Testing
-
-#### Multi-Stage Production Image
-
-Dockerfile builds:
-
-1. **Build stage** - dependencies + Next.js build
-2. **Runtime stage** - non-root user, healthcheck
-
-**Healthcheck endpoint:** `/api/health`
-
-#### Docker Compose
-
-- [`docker-compose.yml`](../docker-compose.yml) — local dev dependencies:
-  `db`, `minio`, `minio-init` (creates the bucket), and `mailpit`.
-- [`docker-compose.prod.yml`](../docker-compose.prod.yml) — the full
-  production-like stack, with these services:
-
-  | Service        | Role                                                    |
-  | -------------- | ------------------------------------------------------- |
-  | `db`           | Postgres 17 (named volume `pgdata`)                     |
-  | `migrate`      | Runs `db:migrate` once, then exits                      |
-  | `minio`        | S3-compatible object storage (named volume `miniodata`) |
-  | `minio-init`   | Creates the bucket on first boot                        |
-  | `db-backup`    | Nightly `pg_dump` sidecar                               |
-  | `minio-backup` | Nightly object-store backup sidecar                     |
-  | `app`          | The Next.js app, health-checked at `/api/health`        |
-
-The two `*-backup` sidecars are covered in [backups.md](backups.md). Cloudflare
-Tunnel variants live in `docker-compose.tunnel.yml` and
-`docker-compose.quick-tunnel.yml` (see [deployment.md](deployment.md)).
-
-### Deployment Pipeline
-
-#### Pre-deployment Checklist
-
-- [ ] Unique, strong `AUTH_SECRET`
-- [ ] `DATABASE_URL` on managed Postgres with TLS (`sslmode=require`)
-- [ ] Migrate schema (`pnpm db:migrate`)
-- [ ] Seed initial `admin` user
-- [ ] Check environment variables
-
-#### Cloudflare Tunnel Deployment
-
-See [deployment.md](deployment.md) for complete Cloudflare Tunnel setup:
-
-- **Quick tunnel:** `make tunnel-quick` (no account)
-- **Guided:** Cloudflare dashboard (requires account)
-- **Automated:** Terraform (`make tunnel-provision`, set `AUTH_URL`, then `make tunnel-up`)
-
-### Test Scripts
-
-#### Manual Testing
-
-- **Auth flow:** `/login`, `/register`, `/settings`
-- **File operations:** Upload → list → download → delete
-- **PWA features:** offline page, install prompt
-- **RBAC:** admin panel, role-based access
-
-#### Performance Testing
-
-- **Unit tests:** coverage on validation, hashing, rate limiting
-- **E2E tests:** full user journey times
-
-### How a merge becomes a live deploy
-
-Putting the pieces above into one ordered walkthrough, from `git push` to a
-box running the new code:
+The ordered walkthrough, from `git push` to a box running the new code, as it
+worked when the pipeline existed.
 
 1. A PR merges to `main`.
 2. `ci.yml` runs `quality` and `e2e` in parallel; `docker` starts as soon as
-   `quality` is green (it doesn't wait on `e2e`) and builds both architectures.
+   `quality` is green (it does not wait on `e2e`) and builds both
+   architectures.
 3. Once **both** `docker` and `e2e` are green, `docker-merge` assembles the
    multi-arch manifests and publishes `ghcr.io/<owner>/<repo>` (app) and
-   `ghcr.io/<owner>/<repo>/migrate` tagged `sha-<short>` and `latest`.
-4. When you're ready to cut a release: bump the version, update
+   `ghcr.io/<owner>/<repo>/migrate`, tagged `sha-<short>` and `latest`.
+4. When you are ready to cut a release: bump the version, update
    `CHANGELOG.md`, and push a `vX.Y.Z` tag on that same commit (see
    [Contributing](../CONTRIBUTING.md)).
 5. The tag triggers `ci.yml`'s `release` job, which **waits** for step 3's
-   `sha-<short>` image to exist, then re-tags it with the semver and moves the
+   `sha-<short>` image to exist, then re-tags it with the semver, moves the
    floating `stable` tag (~30s, no rebuild) and creates the GitHub Release.
 6. A box tracking `APP_TAG=stable` (the recommended default — see
-   [self-hosting.md → Tier B](self-hosting.md#tier-b-recommended--pull-with-make-deploy))
-   picks up the new digest on its next `make deploy-timer` tick (≤60s) and
-   runs `make deploy`: pull → migrate → restart. Nothing is pushed to the
-   box — it's outbound-only the whole way.
+   [Self-hosting → Tier B](self-hosting.md#tier-b-recommended--pull-with-make-deploy))
+   picks up the new digest on its next `make deploy-timer` tick (≤60s) and runs
+   `make deploy`: pull → migrate → restart. Nothing is pushed to the box — it is
+   outbound-only the whole way.
 
-### How to add a new CI check
+Today steps 1, 4 and 6 still happen — you merge, you tag, and the box polls —
+but steps 2, 3 and 5 do not, so nothing is built or published in between and a
+release tag ships nothing. [Feature → Production](workflow.md) shows the same
+sequence with a manual build step filling that gap.
 
-1. Add the command to the relevant job in `ci.yml` _(deleted)_
-   — most checks belong in `quality` (fast, blocking) alongside
-   `format:check`/`lint`/`typecheck`/`test:coverage`.
-2. If it's exploratory or has a high false-positive rate (like `pnpm audit`
-   today), mark the step `continue-on-error: true` so it reports but doesn't
-   block merges, rather than skipping it entirely.
-3. Expose it as a `pnpm` script in `package.json` if it's something a
-   contributor should also be able to run locally before pushing — CI should
-   never be the only place a check can run.
-4. Update the **Quality Gates** list above and the pre-push command
-   (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`) in this doc,
-   `README.md`, and `CONTRIBUTING.md` if the new check should be part of that
-   gate.
+## If you restore CI
 
-### Troubleshooting
+The workflow files are gone, so restoring means writing them again — but the
+shape above is the design worth copying, and these rules still apply.
 
-#### Common Issues
+1. Put a new check in the `quality` job. It is the fast, blocking one, next to
+   `format:check` / `lint` / `typecheck` / `test:coverage`.
+2. If a check is exploratory or has a high false-positive rate — as
+   `pnpm audit` did — mark the step `continue-on-error: true` so it reports
+   without blocking merges, rather than leaving it out entirely.
+3. Expose it as a `pnpm` script in `package.json` if a contributor should be
+   able to run it locally before pushing. **CI should never be the only place a
+   check can run** — which is exactly why this fork still works without it.
+4. If the check belongs in the standard gate, update the pre-push command
+   (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`) here, in
+   [Usage & Development](usage.md), in `README.md` and in `CONTRIBUTING.md`.
+5. Pin one Node version (22 was the pinned one) rather than a matrix, and bump
+   it deliberately when you upgrade.
+6. Restore image publishing before you enable `deploy.yml` — see
+   [What is still in `.github/workflows/`](#what-is-still-in-githubworkflows).
 
-1. **502 Bad Gateway**
-   - App not ready yet or wrong ingress service
-   - Fix: Ensure `http://app:3000` in Ingress
+## Troubleshooting
 
-2. **Login loop**
-   - Wrong `AUTH_URL` or `AUTH_TRUST_HOST=false`
-   - Fix: Set correct public URL in `.env`
+Deploy-time symptoms — 502 Bad Gateway, a login loop, the wrong client IP, a
+stale `.env` — are owned by
+[Self-hosting → Troubleshooting](self-hosting.md#troubleshooting).
 
-3. **Test isolation issues**
-   - Rate limiting leaks between tests
-   - Fix: Check unique client IP generation
+Two failures that are specific to running the suite:
 
-4. **Docker compose health checks**
-   - Services not ready
-   - Fix: Increase wait time or check logs
-
-#### Debugging Commands
+- **Rate-limit leakage between tests.** Check that each test is getting a unique
+  client IP from `tests/e2e/fixtures.ts`; a shared IP makes tests interfere.
+- **Compose health checks not ready.** The dependency containers are slower than
+  the test runner on a cold start. Give them longer, or read their logs:
 
 ```bash
-# Container logs
-docker compose logs
-
-# Follow logs
+# Container logs, following:
 docker compose logs -f
 
-# Apply pending database migrations
+# Apply pending database migrations:
 pnpm db:migrate
 
-# MinIO status (uses the minio/mc Docker image, not an npm package)
+# MinIO status (uses the minio/mc Docker image, not an npm package):
 docker run --rm --network host --entrypoint /bin/sh minio/mc \
   -c "mc alias set local http://localhost:9000 minioadmin minioadmin && mc admin info local"
 ```
 
-### Best Practices
+Routine maintenance chores that used to be listed here live with their owners:
+the migration workflow (edit `src/db/schema.ts` → `pnpm db:generate` → review →
+commit → `pnpm db:migrate`) in [Database](database.md), the generated assets
+(`pnpm gen:icons`, `pnpm gen:og`) in
+[Usage & Development → Scripts](usage.md#scripts), and the rule that every new
+environment variable goes into both `src/lib/env.ts` and `.env.example` in
+[Usage & Development → Environment variables](usage.md#environment-variables).
 
-1. **Test coverage:** Keep unit test coverage >80%
-2. **Isolation:** Each test should be self-contained
-3. **Environment:** Use `.env.example` as reference
-4. **Versioning:** CI runs on a single pinned Node version (22); bump it in the workflow when upgrading
-5. **Backups:** Always verify restore procedures before production deployment
+---
 
-### Maintenance
-
-#### Database Migration
-
-Always follow the workflow:
-
-```bash
-1. Edit src/db/schema.ts
-2. pnpm db:generate
-3. Review SQL migration
-4. Commit migration file
-5. pnpm db:migrate
-```
-
-#### Script Updates
-
-Build scripts (`gen:icons`, `gen:og`) need regeneration:
-
-```bash
-pnpm gen:icons
-pnpm gen:og
-```
-
-#### Environment Changes
-
-Update `.env.example` whenever adding new environment variables.
+**Next:** [specs/README.md](../specs/README.md) — the numbered design specs
+behind everything in these docs, including
+[spec 0024](../specs/0024-faster-time-to-deploy.md), which is where the release
+fast-path above was designed.

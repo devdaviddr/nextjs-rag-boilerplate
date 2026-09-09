@@ -179,6 +179,6 @@ dev` — this caught a real bug (Next.js redacts thrown Server Action
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - Depends on: none. [0009](0009-automated-backups.md) (backups) depends on
   this shipping first for the object-storage half of that spec.

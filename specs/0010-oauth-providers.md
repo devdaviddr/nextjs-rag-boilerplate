@@ -173,7 +173,7 @@ Verification notes:
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - Builds on the integration sketch in
   [0006 — RBAC § OAuth Provider Integration](0006-rbac.md#oauth-provider-integration)
   and the adapter-compatible schema from

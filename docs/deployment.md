@@ -2,33 +2,47 @@
 
 [← Back to README](../README.md)
 
-Expose the Docker container on a Cloudflare-managed domain over HTTPS via
-**Cloudflare Tunnel** — no open ports, no reverse proxy, no certificate
-management. The `cloudflared` daemon makes an outbound-only connection to
-Cloudflare's edge, which terminates TLS and routes traffic back down the tunnel.
+**What this covers:** the three ways to put this app on a public HTTPS address
+with a Cloudflare Tunnel, and how to drive each one by hand.
 
-This keeps the existing stack (`docker-compose.prod.yml`: app + db + migrator)
-unchanged; the tunnel is an opt-in overlay.
+A tunnel solves a specific problem. Your app is listening on port 3000 inside
+Docker, on a machine sitting behind a home router or a firewall. To reach it from
+the internet the usual answer is to forward a port, run a reverse proxy, and keep
+a TLS certificate renewed. Every one of those is a thing that can break, and the
+open port is a thing that can be attacked.
 
-Three on-ramps, all converging on the same runtime:
+A **Cloudflare Tunnel** turns that inside out. You run a small daemon,
+`cloudflared`, alongside the app. It dials **out** to Cloudflare's edge and keeps
+that connection open. When someone visits your domain, Cloudflare terminates TLS
+at its edge and pushes the request **down the connection you already opened**, to
+the app container on the internal Docker network. Your host opens no inbound
+port, runs no reverse proxy, and manages no certificate.
 
-| Path                      | Command                                     | Cloudflare account? |
-| ------------------------- | ------------------------------------------- | ------------------- |
-| **Quick tunnel** (demo)   | `make tunnel-quick`                         | ❌ none             |
-| **Guided** (dashboard)    | see [Option B](#option-b--guided-dashboard) | ✅                  |
-| **Automated** (Terraform) | `make tunnel-provision && make tunnel-up`   | ✅ + API token      |
+The production stack in [`docker-compose.prod.yml`](../docker-compose.prod.yml)
+— app, database, migrator, MinIO and the backup sidecars — is unchanged by any of
+this. The tunnel is an opt-in overlay layered on top.
 
 > In tunnel modes the app has **no published host ports** — it's reachable only
 > through the tunnel.
 
-## How it works
+## Which path do I want?
 
-`cloudflared` dials **out** to Cloudflare and holds the connection open;
-Cloudflare terminates TLS for your domain and pushes matching requests down
-that connection to the app container over the internal Docker network — no
-inbound ports are opened on your host. Full diagram and deeper walkthrough:
-[self-hosting.md → How it works](self-hosting.md#how-it-works-one-diagram)
-and [architecture.md](architecture.md).
+All three end at the same runtime. They differ only in who creates the tunnel.
+These are the same three modes `make setup` offers as Quick, Guided and
+Automated in [Self-hosting](self-hosting.md#choose-your-mode). The A/B letters
+below are the historical names of the two named-tunnel paths, and the rows are
+ordered easiest-first rather than alphabetically.
+
+| Path                                                       | Command                                   | You need                  | Good for                        |
+| ---------------------------------------------------------- | ----------------------------------------- | ------------------------- | ------------------------------- |
+| **Quick tunnel**                                           | `make tunnel-quick`                       | ❌ no Cloudflare account  | A demo link in 60 seconds       |
+| **[Guided](#option-b--guided-dashboard)** (Option B)       | dashboard + `make tunnel-up`              | ✅ a domain on Cloudflare | Your own domain, clicked once   |
+| **[Automated](#option-a--automated-terraform)** (Option A) | `make tunnel-provision && make tunnel-up` | ✅ + a scoped API token   | Reproducible, torn down as code |
+
+If you would rather answer a few prompts than run these targets yourself,
+[`make setup`](self-hosting.md) wraps all three in a wizard and also seeds and
+verifies the deployment. This page is the manual route — the same primitives, one
+command at a time.
 
 ## Prerequisites
 
@@ -39,6 +53,9 @@ and [architecture.md](architecture.md).
   scoped API token — **Account → Cloudflare Tunnel: Edit**, **Zone → DNS: Edit**.
 
 ## Environment variables
+
+Only these matter for the tunnel. The full reference for every variable in the
+app is [usage.md → Environment variables](usage.md#environment-variables).
 
 | Variable                                       | Used by                | Notes                                         |
 | ---------------------------------------------- | ---------------------- | --------------------------------------------- |
@@ -63,22 +80,8 @@ make tunnel-quick
 The URL is printed in the `cloudflared` logs. `AUTH_TRUST_HOST=true` (set in the
 compose app) makes auth work on the random hostname.
 
-## Option A — Automated (Terraform)
-
-Provisions the tunnel, its ingress, and the DNS record, then wires the token in.
-
-```bash
-cp infra/cloudflare/terraform.tfvars.example infra/cloudflare/terraform.tfvars
-# edit terraform.tfvars: api token, account id, zone id, hostname
-
-make tunnel-provision          # terraform apply + writes CLOUDFLARE_TUNNEL_TOKEN to .env
-# set AUTH_URL=https://<hostname> in .env
-make tunnel-up                 # start the stack behind the tunnel
-URL=https://<hostname> make tunnel-verify
-```
-
-Details and the token scopes are in [`infra/cloudflare/`](../infra/cloudflare/README.md).
-Tear down with `make tunnel-destroy`.
+The URL is thrown away when the stack stops, and you get a different one next
+time. That is the trade for needing no account at all.
 
 ## Option B — Guided (dashboard)
 
@@ -97,13 +100,41 @@ Produces the same `CLOUDFLARE_TUNNEL_TOKEN` + DNS record by hand:
    URL=https://app.yourdomain.com make tunnel-verify
    ```
 
+The service target in step 3 is `http://app:3000` — `app` is the Compose service
+name, which `cloudflared` resolves on the internal Docker network. Using
+`localhost` there points the tunnel at the `cloudflared` container itself and
+gives you a 502.
+
+## Option A — Automated (Terraform)
+
+Provisions the tunnel, its ingress, and the DNS record, then wires the token in.
+
+```bash
+cp infra/cloudflare/terraform.tfvars.example infra/cloudflare/terraform.tfvars
+# edit terraform.tfvars: api token, account id, zone id, hostname
+
+make tunnel-provision          # terraform apply + writes CLOUDFLARE_TUNNEL_TOKEN to .env
+# set AUTH_URL=https://<hostname> in .env
+make tunnel-up                 # start the stack behind the tunnel
+URL=https://<hostname> make tunnel-verify
+```
+
+Details and the token scopes are in [`infra/cloudflare/`](../infra/cloudflare/README.md).
+Tear down with `make tunnel-destroy`.
+
 ## How the app runs behind the tunnel
+
+Three things change once traffic arrives through Cloudflare rather than directly.
 
 - **`AUTH_TRUST_HOST=true`** + **`AUTH_URL`** so Auth.js trusts the proxied host
   and issues secure cookies over HTTPS.
 - **Client IP** is read from `CF-Connecting-IP` (set by Cloudflare, unspoofable)
   for rate limiting — see `src/lib/request-ip.ts`.
 - HSTS / CSP / hardening headers are served from the origin as usual.
+
+The first two are why a tunnel deployment with the wrong `AUTH_URL` produces a
+login loop rather than an error: the app issues a cookie for one host and the
+browser presents it on another.
 
 ## Operating
 
@@ -132,3 +163,11 @@ partway through provisioning.
 - For production, use managed Postgres and a remote Terraform state backend.
 - Optional: gate the app (or staging) with **Cloudflare Access** for an
   edge SSO layer in front of the app's own auth.
+- The full diagram and the clone-to-live walkthrough live in
+  [self-hosting.md → How it works](self-hosting.md#how-it-works-one-diagram);
+  the wider request path is in [architecture.md](architecture.md).
+
+---
+
+**Next:** [Backups & restore](backups.md) — the deployment is only finished once
+you can get the data back.

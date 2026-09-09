@@ -152,7 +152,7 @@ Verification notes:
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - Stubbed hooks: `public/sw.js` (from
   [0002 — PWA & responsive app shell](0002-pwa-and-app-shell.md)).
 - [web-push (npm)](https://github.com/web-push-libs/web-push).

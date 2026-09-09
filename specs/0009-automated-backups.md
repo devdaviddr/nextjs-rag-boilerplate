@@ -156,7 +156,7 @@ Verification notes:
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - Depends on: [0007](0007-file-uploads.md) for the MinIO half.
 - Pattern reused from: [0005](0005-cloudflare-tunnel-deployment.md)'s
   `tunnel-verify` doctor script.

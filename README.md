@@ -25,22 +25,38 @@ with an optional agentic retrieval loop.**
 
 ## What this is
 
-An opinionated application template, not a library. Clone it, point it at an
-LLM endpoint, and you have a working multi-user document-chat product: users
-register, upload PDFs into private knowledge bases they own, and hold
-conversations answered only from those documents, with a page-level citation
-for every claim.
+An opinionated application template, not a library. Clone it, point it at a
+language-model endpoint, and you have a working multi-user document-chat
+product: users register, upload PDFs into private knowledge bases they own, and
+hold conversations answered only from those documents, with a page-level
+citation for every claim.
+
+The technique underneath is **retrieval-augmented generation** (RAG). A
+language model only knows what was in its training data, and your documents
+were not in there — ask it about your staff handbook and it will answer anyway,
+fluently and wrongly. RAG is the repair: search your own documents first, hand
+the model only the handful of passages you found, and let it write the answer
+from those. You do not need to know any of this yet.
+**[RAG — how it works](docs/rag.md)** builds every term up from nothing, and
+the **[Tutorial](docs/tutorial.md)** walks you through it with this app in
+front of you.
 
 Auth, PostgreSQL + pgvector, object storage, PWA, Docker and a retrieval
 evaluation harness are already wired together. Two properties are enforced in
-code rather than left to the model:
+ordinary code rather than left to the model:
 
-1. **An answer is grounded, or there is no answer.** If retrieval returns
-   nothing above the similarity floor, the chat model is never called and a
-   fixed refusal is returned.
+1. **An answer is grounded, or there is no answer.** If retrieval finds nothing
+   close enough to your question, the chat model is never called at all and a
+   fixed refusal comes back. This matters because the characteristic failure of
+   a document chatbot is not silence — it is a confident, fluent, invented
+   answer. Asking a model nicely not to make things up does not prevent that.
+   Not calling it does.
 2. **You can only retrieve your own documents.** Ownership and knowledge-base
    scope live in the SQL `WHERE` clause of every retrieval channel — not as a
-   filter over results, and not as an instruction to the model.
+   filter applied to results afterwards, and not as an instruction to the
+   model. This matters because everything else in a RAG system is text a model
+   reads, and text can be argued with. A `WHERE` clause cannot. There is no
+   phrasing of a question that widens what it can see.
 
 Retrieval quality is measured, not asserted: `pnpm rag:eval` scores hit@k, MRR,
 refusal accuracy and cross-knowledge-base leakage against a ground-truth
@@ -57,6 +73,8 @@ model.
 (`corepack enable`) · Docker · an API key for an OpenAI-compatible endpoint
 (a free [NVIDIA NIM](https://build.nvidia.com) key works — rate-limited, not
 token-billed).
+
+Run these in order from a fresh clone. Each step is safe to re-run.
 
 ```bash
 # 1. Install dependencies
@@ -77,9 +95,20 @@ pnpm db:seed               # → demo@example.com / Password123
 pnpm dev                   # http://localhost:3000
 ```
 
+Then, in the browser: sign in with `demo@example.com` / `Password123`, go to
+`/documents` and create a knowledge base, upload a text PDF into it and wait
+for its status to reach `ready`, then go to `/chat`, pick that knowledge base
+and ask a question the document answers. Every answer cites the page it came
+from. Now ask something the document does not cover — you get a refusal instead
+of a guess, and that is the point of the whole exercise.
+
 Without `NVIDIA_API_KEY` the app still boots — `/chat` and `/documents` report
 themselves as unconfigured and the RAG test suites self-skip — so you can
 evaluate the rest of the template first.
+
+If anything here does not behave, the same sequence with the reasoning attached
+is in **[Usage & Development](docs/usage.md)**, and the model configuration is
+in **[RAG → Setup](docs/rag.md#setup)**.
 
 ---
 
@@ -144,10 +173,7 @@ Each block is inert until configured — none is required to run the app.
 
 ## Usage
 
-Sign in with the seeded demo account or register at `/register`, create a
-knowledge base, upload a PDF, and start a conversation scoped to it. Every
-answer cites the page it came from; a question the documents cannot answer is
-refused rather than guessed.
+The scripts you will actually reach for:
 
 ```bash
 pnpm dev                   # dev server (Turbopack) at localhost:3000
@@ -172,23 +198,32 @@ thereafter. See **[Self-hosting](docs/self-hosting.md)** and
 
 ## Documentation
 
+The table is in reading order, not alphabetical. If RAG is new to you, start at
+the top and work down — the first four pages take you from nothing to a working
+system you understand. If you have built retrieval before, jump straight to
+[RAG](docs/rag.md) for the retrieval design,
+[Architecture](docs/architecture.md) for the request flow and security model,
+[Usage](docs/usage.md) for env vars and scripts, or
+[Self-hosting](docs/self-hosting.md) to get it deployed.
+
 | Doc                                             | What's inside                                                         |
 | ----------------------------------------------- | --------------------------------------------------------------------- |
+| 🎓 **[Tutorial](docs/tutorial.md)**             | Start here — build up a working RAG system step by step               |
+| 📄 **[Summary](docs/summary.md)**               | One-page project overview — stats, stack, what ships                  |
+| 🛠️ **[Usage & Development](docs/usage.md)**     | Scripts, env vars, testing, Docker, extending the app                 |
 | 🧠 **[RAG](docs/rag.md)**                       | Ingestion, index design, hybrid search, the agentic loop, evaluation  |
-| 📋 **[Features](docs/features.md)**             | Complete feature list and what's included                             |
-| 🏛️ **[Architecture](docs/architecture.md)**     | Request flow, auth design, security model, project structure          |
 | 🗄️ **[Database](docs/database.md)**             | ERD, schema, migrations, Drizzle workflow, seeding                    |
+| 🏛️ **[Architecture](docs/architecture.md)**     | Request flow, auth design, security model, project structure          |
+| 📋 **[Features](docs/features.md)**             | Complete feature list and what's included                             |
 | 🔑 **[OAuth](docs/oauth.md)**                   | GitHub + Google sign-in — setup, callback URLs, linking               |
 | ✉️ **[Email](docs/email.md)**                   | SMTP setup, password reset, email verification, soft gate             |
 | 📱 **[PWA & App Shell](docs/pwa.md)**           | Manifest, service worker strategy, icons, responsive shell            |
 | 🔔 **[Web Push](docs/push.md)**                 | VAPID setup, subscribe/send, service-worker handlers                  |
-| 🛠️ **[Usage & Development](docs/usage.md)**     | Scripts, env vars, testing, Docker, extending the app                 |
 | 📦 **[Self-hosting](docs/self-hosting.md)**     | `make setup` clone-to-live + continuous deployment (`make deploy`)    |
 | 🚀 **[Deployment](docs/deployment.md)**         | Cloudflare Tunnel — quick, guided, and Terraform paths                |
-| ⚙️ **[CI/CD](docs/ci-cd.md)**                   | _Removed in this fork_ — record of the former GitHub Actions pipeline |
-| 🔁 **[Feature → Production](docs/workflow.md)** | One playbook: branch → PR → CI → release → deploy                     |
 | 💾 **[Backups](docs/backups.md)**               | Nightly Postgres + MinIO backups, restore runbook, offsite            |
-| 📄 **[Summary](docs/summary.md)**               | One-page project overview — stats, stack, what ships                  |
+| 🔁 **[Feature → Production](docs/workflow.md)** | One playbook: branch → PR → release → deploy                          |
+| ⚙️ **[CI/CD](docs/ci-cd.md)**                   | _Removed in this fork_ — record of the former GitHub Actions pipeline |
 | 📐 **[Specs](specs/README.md)**                 | Spec-driven development — one spec per feature/release                |
 
 ---
@@ -204,3 +239,8 @@ refusal accuracy is a hard gate, not a report line. See
 ## License
 
 Released under the [MIT License](LICENSE).
+
+---
+
+**Next:** if RAG is new to you, **[Tutorial](docs/tutorial.md)**. Otherwise
+**[Summary](docs/summary.md)** for the whole project on one page.

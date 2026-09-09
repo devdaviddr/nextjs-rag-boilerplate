@@ -161,7 +161,7 @@ Verification notes:
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - Deferred-hardening callout in
   [0006 — RBAC](0006-rbac.md#deferred-hardening-follow-ups).
 - Reuses `verificationTokens` table already present since

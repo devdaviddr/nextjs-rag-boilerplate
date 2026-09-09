@@ -170,7 +170,7 @@ it's wired up and simply unused.
 
 ## References
 
-- [Roadmap](../README.md#roadmap).
+- [README](../README.md).
 - Builds directly on [0007 — File uploads](0007-file-uploads.md) (storage
   client, validation, quota, ownership pattern) and its production-redaction
   fix (`{ ok, error }` return pattern).

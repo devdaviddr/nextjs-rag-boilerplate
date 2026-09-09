@@ -21,7 +21,8 @@ tunnel's defining constraint: the box is **outbound-only**.
 
 ## Problem / motivation
 
-Today CI ([`ci.yml`](../.github/workflows/ci.yml)) builds a production image and
+Today CI (`ci.yml` — since deleted, see [docs/ci-cd.md](../docs/ci-cd.md))
+builds a production image and
 then **throws it away** (`push: false`), and `docker-compose.prod.yml` builds the
 app **on the box** (`build:`, not `image:`). So "deploy a new version" means
 SSHing in and rebuilding by hand — and CI verifies an artifact nobody ships.

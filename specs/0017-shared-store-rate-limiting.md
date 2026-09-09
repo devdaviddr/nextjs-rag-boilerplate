@@ -124,7 +124,7 @@ reason to build it now.
 
 ## References
 
-- Off the scheduled [roadmap](../README.md#roadmap) entirely for the single-box
+- Off the schedule entirely (see the [spec index](README.md)) for the single-box
   deployment model — this spec is the only record of the eventual change.
 - Existing constraint documented in `src/lib/rate-limit.ts`'s own docstring.
 - [`@upstash/ratelimit`](https://github.com/upstash/ratelimit).

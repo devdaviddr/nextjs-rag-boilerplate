@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for your interest in improving this project. For the full path from a
-feature branch to a live deploy on your own box (this doc + CI + Cloudflare
+feature branch to a live deploy on your own box (this doc + Cloudflare
 Tunnel, tied together), see [Feature → Production](docs/workflow.md).
 
 ## Getting set up
@@ -29,12 +29,15 @@ pnpm dev
    pnpm lint && pnpm typecheck && pnpm test && pnpm build
    ```
 
-5. Open a pull request into `main`. CI (lint · typecheck · unit · E2E ·
-   Docker) must pass. To cut a release, bump the version, set the spec to
-   `Shipped`, update `CHANGELOG.md`, and push a `vX.Y.Z` tag on `main` — the
-   tag defines the release (there's no required `Release vX.Y.Z` merge commit;
-   v0.14.0+ tag a plain commit directly), and pushing the tag is what triggers
-   deploy.
+5. Open a pull request into `main`. There is no CI in this fork and no status
+   checks — the gate in step 4 is yours to run (see
+   [docs/ci-cd.md](docs/ci-cd.md)). To cut a release, bump the version, set the
+   spec to `Shipped`, update `CHANGELOG.md`, and push a `vX.Y.Z` tag on `main`
+   — the tag defines the release (there's no required `Release vX.Y.Z` merge
+   commit; v0.14.0+ tag a plain commit directly). The tag no longer triggers a
+   deploy on its own: build and push the images yourself, then the box's pull
+   timer picks them up (see
+   [Feature → Production](docs/workflow.md) steps 4–6).
 
 ## Commit messages
 
