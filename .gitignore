@@ -23,6 +23,9 @@ next-env.d.ts
 .env*.local
 .env.production
 
+# local compose overrides — per-machine ports and env wiring, not the stack
+docker-compose.local.yml
+
 # drizzle
 /drizzle/meta/_journal.json.bak
 
