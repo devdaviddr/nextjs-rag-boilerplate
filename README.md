@@ -25,29 +25,27 @@ with an optional agentic retrieval loop.**
 
 ## What this is
 
-An application template, not a library. Clone it, point it at a language-model
-endpoint, and you have a working document-chat product: users register, upload
-PDFs into private knowledge bases, and ask questions answered only from those
-documents — with a page citation for every claim.
+A starter project for building a chat app that answers questions about your own
+PDF files.
 
-It does that with **retrieval-augmented generation** (RAG): search your own
-documents first, then hand the model only the passages you found. New to RAG?
-The **[Tutorial](docs/tutorial.md)** builds it up from nothing with this app in
-front of you.
+Clone it, add an API key, and you have a working app. People sign up, upload
+PDFs into their own private collections, and ask questions about them. Every
+answer shows the page it came from.
 
-Auth, PostgreSQL + pgvector, object storage, PWA, Docker and a retrieval
-evaluation harness are already wired together. Two guarantees are enforced in
-ordinary code rather than asked of the model:
+It works by searching your documents first, then asking the model to write an
+answer using only what the search found. This is called RAG
+(retrieval-augmented generation). If that's new to you, start with the
+**[Tutorial](docs/tutorial.md)** — it explains everything from scratch.
 
-- **Grounded, or no answer.** If retrieval finds nothing close enough to the
-  question, the chat model is never called and a fixed refusal comes back. It
-  cannot invent an answer it was never asked for.
-- **You only ever retrieve your own documents.** Ownership and knowledge-base
-  scope live in the SQL `WHERE` clause of every query, not in a prompt — so no
-  phrasing of a question widens what it can see.
+Two rules are built into the code, so the model can't break them:
 
-Retrieval quality is measured, not asserted: `pnpm rag:eval` scores hit@k, MRR,
-refusal accuracy and cross-knowledge-base leakage against a ground-truth corpus.
+- **It won't make things up.** If nothing in your documents matches the
+  question, the app says it doesn't know. The model isn't even called.
+- **You only ever see your own documents.** That limit is part of the database
+  query, not an instruction the model could be talked out of.
+
+Sign-in, the database, file storage, offline support and Docker are already set
+up. `pnpm rag:eval` scores how well the search is working.
 
 ---
 
