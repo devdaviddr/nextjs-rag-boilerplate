@@ -4,10 +4,15 @@ Guidance for AI assistants working in this repository.
 
 ## What this is
 
-A production-grade full-stack **Next.js 16** boilerplate: App Router + RSC +
-Server Actions, Auth.js v5 credentials auth, Drizzle ORM on PostgreSQL, a PWA
-with a responsive app shell, Docker, and CI. Full docs live in [`docs/`](docs/)
-(architecture, features, database, pwa, usage) — read those before large changes.
+A production-grade **Next.js 16** RAG boilerplate: grounded document chat over
+PDFs in per-user knowledge bases, with page-level citations and an optional
+agentic retrieval loop. Underneath it is a full-stack app — App Router + RSC +
+Server Actions, Auth.js v5 credentials auth, Drizzle ORM on PostgreSQL +
+pgvector, a PWA with a responsive app shell, and Docker. There is no CI in this
+fork (see [`docs/ci-cd.md`](docs/ci-cd.md)). Full docs live in
+[`docs/`](docs/) — [`tutorial.md`](docs/tutorial.md) teaches the system end to
+end and [`rag.md`](docs/rag.md) is the retrieval reference; read those before
+large changes.
 
 ## Stack
 
@@ -81,7 +86,13 @@ Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
   update `CHANGELOG.md`, then tag. The tagged commit can be a `Release vX.Y.Z`
   merge commit (the style through v0.13.6) or a plain commit on `main` (v0.14.0+
   tag directly, no release-merge commit); both are fine — the tag is what
-  defines the release, and pushing a `v*` tag is what triggers deploy. Pre-1.0.
+  defines the release. Pushing the tag does **not** deploy: `ci.yml` was
+  deleted from this fork, so nothing publishes an image, and `deploy.yml` is
+  skipped unless the repo variable `SELF_HOSTED_DEPLOY` is `'true'` (it is
+  unset here, and this repo is public, where enabling it is unsafe). Build and
+  push the image yourself, then the box's pull timer picks it up — see
+  [`docs/ci-cd.md`](docs/ci-cd.md) and [`docs/workflow.md`](docs/workflow.md).
+  Pre-1.0.
 - **Conventional Commits**, enforced by a commitlint `commit-msg` hook. Keep
   commit **body lines ≤ 100 characters**. A `pre-commit` hook runs lint-staged.
 - Update `CHANGELOG.md` (Keep a Changelog) for user-facing changes.
