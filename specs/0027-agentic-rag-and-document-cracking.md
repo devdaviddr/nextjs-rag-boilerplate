@@ -96,6 +96,18 @@ model instead, and a good illustration of the gap this spec addresses.
 
 ## Implementation status
 
+> **This is a planning spec, and it does not follow
+> [`TEMPLATE.md`](TEMPLATE.md).** It has no Requirements or Acceptance criteria
+> sections because it is not a single change to accept — it is a survey of
+> options with a recommended sequence, and the table below is its equivalent of
+> a checklist. Work it recommended was specified and verified elsewhere:
+> Recommendation 0 and Phase 1a/1b shipped in v0.20.0 and are covered by the
+> criteria in [0028](0028-independent-knowledge-bases.md); Phase 3 became
+> [0029](0029-agentic-retrieval-loop.md), which carries its own criteria and
+> measurements. `status: Shipped` here means the recommendations that were taken
+> up have shipped — not that every row below is done. Several are deliberately
+> not started.
+
 | Item                                       | Status                                                                    |
 | ------------------------------------------ | ------------------------------------------------------------------------- |
 | **0** Evaluation harness                   | **Shipped** — `pnpm rag:eval`, 20 questions, 3 documents with distractors |

@@ -2,7 +2,7 @@
 id: 0005
 title: Cloudflare Tunnel deployment
 status: Shipped
-release: v0.4.0
+release: 'v0.4.0'
 created: 2026-07-12
 updated: 2026-07-12
 ---
@@ -89,6 +89,10 @@ Layered — right tool per layer, all converging on the Compose runtime:
 - [ ] `make tunnel-provision && make tunnel-up` serves the app on a custom domain
       — needs a Cloudflare account/API token (module written, not applied here).
 - [ ] `make tunnel-destroy` / `terraform destroy` removes everything — same.
+
+> **Not verified (2026-09-09).** The two open boxes need a Cloudflare account
+> and API token, as their own text says. The Terraform module is written and
+> committed; it has not been applied here.
 
 ## Security & privacy
 

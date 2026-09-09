@@ -1,8 +1,8 @@
 ---
 id: 0024
 title: Faster time-to-deploy — re-tag on release, overlap build with e2e, tighter pull loop
-status: Shipped # Proposed | Accepted | In Progress | Shipped | Superseded | Rejected
-release: v0.17.0
+status: Shipped
+release: 'v0.17.0'
 created: 2026-07-16
 updated: 2026-07-16
 ---
@@ -141,15 +141,29 @@ the `release` job simply waits for `main`'s build (no duplicate compute), then r
 
 ## Acceptance criteria
 
-- [ ] A `v*` tag runs only the `release` job (quality/e2e/docker/docker-merge show "skipped") and
-      publishes `…:X.Y.Z` for app + migrate by re-tagging the `sha-<short>` digest — no build step.
+- [x] A `v*` tag runs only the `release` job (quality/e2e/docker/docker-merge show "skipped") and
+      publishes `…:X.Y.Z` for app + migrate by re-tagging the `sha-<short>` digest — no build step. —
+      observed at ship time and recorded in `CHANGELOG.md` v0.17.0: "Tag CI drops
+      from ~5m27s to ~30s", which only holds if the build jobs were skipped.
 - [ ] `docker buildx imagetools inspect …:X.Y.Z` shows the same digest as `…:sha-<short>` (multi-arch
       preserved), and `/settings` on the box shows `X.Y.Z · <sha7>`.
-- [ ] On `main`, `docker` starts after `quality` (not `e2e`); `docker-merge` waits for `e2e`; a failed
-      `e2e` yields no tagged image.
-- [ ] `make deploy-timer` installs a 60s agent; an idle tick logs "up to date … nothing to deploy"
-      and changes no containers; a new release deploys within one interval.
+- [x] On `main`, `docker` starts after `quality` (not `e2e`); `docker-merge` waits for `e2e`; a failed
+      `e2e` yields no tagged image. —
+      `CHANGELOG.md` v0.17.0 records the shipped wiring: `docker` gated on
+      `quality` only, `docker-merge` gated on both, so a failed `e2e` yields no
+      tagged image.
+- [x] `make deploy-timer` installs a 60s agent; an idle tick logs "up to date … nothing to deploy"
+      and changes no containers; a new release deploys within one interval. —
+      `scripts/macos-deploy-timer.sh` defaults to 60s and compares the pulled
+      digest against `.last-deployed-image` before doing anything;
+      `CHANGELOG.md` v0.17.0 records the digest-skip behaviour.
 - [ ] PRs still build both arches cache-only and push nothing.
+
+> **No longer verifiable (2026-09-09).** The two open boxes describe
+> `ci.yml` behaviour — the multi-arch digest match on a re-tagged image, and
+> PRs building cache-only without pushing. That workflow was deleted from this
+> fork ([docs/ci-cd.md](../docs/ci-cd.md)), so there is no longer a run that
+> could close them. They are left open rather than assumed.
 
 ## Security & privacy
 

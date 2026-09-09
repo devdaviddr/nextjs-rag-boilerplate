@@ -1,8 +1,8 @@
 ---
 id: 0022
 title: Always-on hardening for self-hosted Mac minis
-status: Shipped # Proposed | Accepted | In Progress | Shipped | Superseded | Rejected
-release: v0.15.0
+status: Shipped
+release: 'v0.15.0'
 created: 2026-07-16
 updated: 2026-07-16
 ---

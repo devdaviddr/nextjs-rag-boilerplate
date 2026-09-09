@@ -1,7 +1,7 @@
 ---
 id: NNNN
 title: <Short, imperative title>
-status: Proposed # Proposed | Accepted | In Progress | Shipped | Superseded | Rejected
+status: Proposed # Proposed | Shipped | Superseded | Rejected
 release: '—' # e.g. v0.4.0 once shipped
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -43,7 +43,13 @@ and modules (`src/…`). Call out anything a reviewer must not get wrong.
 
 ## Acceptance criteria
 
-- [ ] Observable, testable condition …
+Tick these on release and cite what backs each one — the test, script or
+migration that makes it true, so a tick can be re-checked later. A criterion
+that cannot be verified stays unticked under a
+`> **Not verified (YYYY-MM-DD).**` note saying why; `pnpm specs:check` warns
+about open boxes with no such note.
+
+- [ ] Observable, testable condition … — `path/to/the.test.ts`
 - [ ] …
 
 ## Security & privacy

@@ -2,7 +2,7 @@
 id: 0002
 title: PWA & responsive app shell
 status: Shipped
-release: v0.2.0
+release: 'v0.2.0'
 created: 2026-07-11
 updated: 2026-07-12
 ---

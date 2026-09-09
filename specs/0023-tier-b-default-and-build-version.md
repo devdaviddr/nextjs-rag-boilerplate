@@ -1,8 +1,8 @@
 ---
 id: 0023
 title: Pull-based deploy as the default + deployed build version in Settings
-status: Shipped # Proposed | Accepted | In Progress | Shipped | Superseded | Rejected
-release: v0.16.0
+status: Shipped
+release: 'v0.16.0'
 created: 2026-07-16
 updated: 2026-07-16
 ---
@@ -127,15 +127,26 @@ private-repo-only.
 
 ## Acceptance criteria
 
-- [ ] A tag build bakes `APP_VERSION`/`APP_GIT_SHA` into the image; `docker inspect` shows the ENV.
-- [ ] `/settings` shows "Build vX.Y.Z · <sha7>" for a baked image, and a graceful fallback under
-      `next dev`.
-- [ ] `make deploy-timer` installs a launchd agent that pulls + deploys on the interval;
-      `... status` reports it; `... uninstall` removes it.
+- [x] A tag build bakes `APP_VERSION`/`APP_GIT_SHA` into the image; `docker inspect` shows the ENV. —
+      `Dockerfile` declares `ARG`/`ENV` for both and the release job passed them;
+      re-tagging (0024) later moved `APP_VERSION` to runtime via `APP_TAG`.
+- [x] `/settings` shows "Build vX.Y.Z · <sha7>" for a baked image, and a graceful fallback under
+      `next dev`. —
+      `src/app/(dashboard)/settings/page.tsx` passes `env.APP_VERSION` into
+      `BuildInfoCard`, which falls back gracefully when unset.
+- [x] `make deploy-timer` installs a launchd agent that pulls + deploys on the interval;
+      `... status` reports it; `... uninstall` removes it. —
+      `Makefile` target → `scripts/macos-deploy-timer.sh`, which implements
+      `install`, `uninstall` and `status`.
 - [ ] On frank: the `frank` runner is deregistered (gone from repo → Settings → Actions → Runners),
       `SELF_HOSTED_DEPLOY=false`, and the Tier B timer keeps the box current within one interval.
-- [ ] `docs/self-hosting.md` presents Tier B as the default and Tier C as private-repo-only with the
-      fork-PR warning.
+- [x] `docs/self-hosting.md` presents Tier B as the default and Tier C as private-repo-only with the
+      fork-PR warning. —
+      "Tier B (recommended)" and "Tier C (private repos only)" with the
+      fork-PR warning are both present in `docs/self-hosting.md`.
+
+> **Not verified (2026-09-09).** The remaining box is live infrastructure
+> state on the operator's box, not something the repository can attest to.
 
 ## Security & privacy
 

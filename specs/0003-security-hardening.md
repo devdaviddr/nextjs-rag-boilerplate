@@ -2,7 +2,7 @@
 id: 0003
 title: Production security hardening
 status: Shipped
-release: v0.3.0
+release: 'v0.3.0'
 created: 2026-07-12
 updated: 2026-07-12
 ---

@@ -1,8 +1,8 @@
 ---
 id: 0020
 title: One-click self-hosting setup
-status: Shipped # Proposed | Accepted | In Progress | Shipped | Superseded | Rejected
-release: v0.14.0
+status: Shipped
+release: 'v0.14.0'
 created: 2026-07-16
 updated: 2026-07-16
 ---
@@ -174,10 +174,14 @@ and the ingress target stays `http://app:3000` (Compose service name), never
       end to end.
 - [ ] Re-running `make setup` is idempotent — existing `AUTH_SECRET` preserved
       (no silent overwrite), no duplicate DNS/tunnel, seed stays a no-op.
-- [ ] Missing prerequisite (Docker down / Compose too old / no `terraform` in
-      automated mode) fails preflight with a specific, actionable message.
-- [ ] `.env` and `infra/cloudflare/terraform.tfvars` are created `0600`; no
-      secret appears in stdout or the git tree.
+- [x] Missing prerequisite (Docker down / Compose too old / no `terraform` in
+      automated mode) fails preflight with a specific, actionable message. —
+      `scripts/setup.sh` preflight fails with a named cause and a next step for
+      a missing Docker binary, a stopped daemon, and a missing Compose v2 plugin.
+- [x] `.env` and `infra/cloudflare/terraform.tfvars` are created `0600`; no
+      secret appears in stdout or the git tree. —
+      `scripts/setup.sh` `chmod 600`s `.env` and writes the tfvars under
+      `umask 177`.
 - [ ] Non-interactive invocation (all inputs via env/flags) completes the same
       flow unattended.
 - [x] `docs/self-hosting.md` walks a non-expert from clone to live domain and is
@@ -185,6 +189,11 @@ and the ingress target stays `http://app:3000` (Compose service name), never
 - [ ] The `self-host` skill is present for both Claude Code and opencode, is
       discovered automatically on opening the project, and drives a successful
       `make setup` end to end (verified at least in quick mode).
+
+> **Not verified (2026-09-09).** The open boxes above all need a live
+> Cloudflare domain and a real end-to-end wizard run — resources only the
+> operator has. They are accounted for, not forgotten: **Post-ship validation**
+> below sets out the exact sequence that closes them.
 
 ## Post-ship validation
 

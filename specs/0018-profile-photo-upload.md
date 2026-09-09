@@ -2,7 +2,7 @@
 id: 0018
 title: Profile photo upload
 status: Shipped
-release: v0.7.0
+release: 'v0.7.0'
 created: 2026-07-13
 updated: 2026-07-13
 ---

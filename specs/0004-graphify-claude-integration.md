@@ -2,7 +2,7 @@
 id: 0004
 title: graphify & CLAUDE.md integration
 status: Shipped
-release: v0.3.1
+release: 'v0.3.1'
 created: 2026-07-12
 updated: 2026-07-12
 ---

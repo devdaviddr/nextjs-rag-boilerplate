@@ -2,7 +2,7 @@
 id: 0007
 title: File uploads & object storage (MinIO)
 status: Shipped
-release: v0.6.0
+release: 'v0.6.0'
 created: 2026-07-13
 updated: 2026-07-13
 ---

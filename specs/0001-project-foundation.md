@@ -2,7 +2,7 @@
 id: 0001
 title: Project foundation
 status: Shipped
-release: v0.1.0
+release: 'v0.1.0'
 created: 2026-07-11
 updated: 2026-07-12
 ---

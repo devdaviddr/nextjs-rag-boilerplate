@@ -274,6 +274,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Email, Web Push, Backups — now has its own page. Linked from the README docs
   index and referenced from `pwa.md` / `features.md`.
 
+## [0.13.5] - 2026-07-13
+
 ### Documentation
 
 - Documentation review pass — corrected stale content, added a consolidated
@@ -292,6 +294,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
     email-provider list, fenced the deployment ASCII diagram as `text`, and
     fixed the "gitflow" → trunk-based wording in `specs/README.md`.
 
+## [0.13.4] - 2026-07-13
+
 ### Added
 
 - End-to-end email round-trips via a Mailpit catcher (`tests/e2e/email-flow.spec.ts`):
@@ -304,6 +308,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - Unit test for the email-disabled FR6 branch of `requestPasswordReset`
   (`tests/unit/recovery-actions.test.ts`), which the e2e suite can no longer
   cover now that it runs email-enabled.
+
+## [0.13.3] - 2026-07-13
 
 ### Added
 
@@ -321,6 +327,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   in the test that provokes them. A Playwright `globalSetup` also seeds the demo
   admin (idempotent), making local runs self-healing if the dev DB was mutated.
 
+## [0.13.2] - 2026-07-13
+
 ### Fixed
 
 - OAuth users are now marked email-verified at creation. GitHub/Google verify
@@ -332,6 +340,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   adapter-created (OAuth) users. Credentials users are unaffected — they still
   verify via the emailed link. (Password reset was already correct: it only
   applies to accounts that have a password.)
+
+## [0.13.1] - 2026-07-13
 
 ### Documentation
 
@@ -485,6 +495,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   fast/cached load renders the image directly instead of briefly flashing
   initials.
 
+## [0.7.1] - 2026-07-13
+
 ### Fixed
 
 - File downloads (`GET /api/files/[id]`) 500'd when the original filename
@@ -496,6 +508,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   carries the real Unicode name for modern browsers. Existing avatars/files
   affected by this display correctly on the next request — no re-upload
   needed. Regression-tested with a macOS-screenshot-style filename.
+
+## [0.7.0] - 2026-07-13
 
 ### Added
 

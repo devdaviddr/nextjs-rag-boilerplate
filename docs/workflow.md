@@ -113,9 +113,22 @@ recommended default in step 6.
 
 ## 5 — Cut a release
 
+Before you tag, walk this list. Every item on it is something that has been
+missed on a past release — specs left mid-flight, criteria never closed out,
+tags with no changelog entry:
+
+- [ ] Every spec this release ships: `status: Shipped`, `release:` filled in
+- [ ] Its acceptance criteria closed out — ticked with the evidence that backs
+      them, or left open under a `> **Not verified (YYYY-MM-DD).**` note
+- [ ] `pnpm specs:check` passes (regenerate with `pnpm specs:index` if it
+      complains the index is stale)
+- [ ] `CHANGELOG.md` has a `## [X.Y.Z]` section for this version
+- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+
 ```bash
 # bump "version" in package.json, update CHANGELOG.md,
-# set any shipped spec's status to Shipped
+# set any shipped spec's status to Shipped, close out its criteria
+pnpm specs:index && pnpm specs:check
 git commit -m "chore(release): vX.Y.Z"
 git tag -a vX.Y.Z -m "short title"
 git push origin main --tags

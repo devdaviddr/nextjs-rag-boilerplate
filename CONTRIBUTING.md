@@ -34,7 +34,11 @@ pnpm dev
    [docs/ci-cd.md](docs/ci-cd.md)). To cut a release, bump the version, set the
    spec to `Shipped`, update `CHANGELOG.md`, and push a `vX.Y.Z` tag on `main`
    — the tag defines the release (there's no required `Release vX.Y.Z` merge
-   commit; v0.14.0+ tag a plain commit directly). The tag no longer triggers a
+   commit; v0.14.0+ tag a plain commit directly). Before tagging, walk the
+   release checklist in
+   [Feature → Production § 5](docs/workflow.md#5--cut-a-release) — spec
+   statuses, acceptance criteria, `pnpm specs:check`, changelog entry. The tag
+   no longer triggers a
    deploy on its own: build and push the images yourself, then the box's pull
    timer picks them up (see
    [Feature → Production](docs/workflow.md) steps 4–6).

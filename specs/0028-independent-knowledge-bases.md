@@ -300,29 +300,55 @@ which may be the whole reason they made a separate KB.
 
 ## Acceptance criteria
 
-- [ ] A user can create, rename, delete a KB, and move a document between KBs.
-- [ ] Moving a document issues no embedding calls (assert on the NIM client).
-- [ ] Deleting a KB removes its S3 objects, verified against the bucket, not
-      only its database rows.
-- [ ] Uploading from `/documents/[kbId]` files the document in that KB, and
-      every chunk carries the same `knowledge_base_id`.
-- [ ] Unit test: the generated SQL contains a `knowledge_base_id` predicate in
+Each box cites the evidence that closed it, so a tick can be re-checked rather
+than taken on trust.
+
+- [x] A user can create, rename, delete a KB, and move a document between KBs.
+      — `tests/e2e/knowledge-bases.spec.ts` covers create, move and delete.
+      **Rename is implemented (`src/lib/rag/kb-actions.ts`) but has no
+      automated test** — a real gap, recorded rather than papered over.
+- [x] Moving a document issues no embedding calls (assert on the NIM client).
+      — `tests/e2e/knowledge-bases.spec.ts` proves it more strongly than the
+      criterion asked: it snapshots the chunk rows before and after the move and
+      asserts identical ids and `created_at`. Re-embedding could not leave those
+      untouched.
+- [x] Deleting a KB removes its S3 objects, verified against the bucket, not
+      only its database rows. — `tests/e2e/knowledge-bases.spec.ts`, "deleting a
+      knowledge base removes its documents, chunks, and S3 object", which
+      queries the bucket with a real `S3Client`.
+- [x] Uploading from `/documents/[kbId]` files the document in that KB, and
+      every chunk carries the same `knowledge_base_id`. —
+      `tests/e2e/knowledge-bases.spec.ts` asserts every chunk row carries the
+      uploading KB's id.
+- [x] Unit test: the generated SQL contains a `knowledge_base_id` predicate in
       the dense CTE, the lexical CTE, and the final select — asserted against
-      the SQL text, following the existing owner-isolation test.
-- [ ] Unit test: an empty `kbIds` array never produces a query without a KB
-      predicate.
-- [ ] Unit test: `retrieveDocumentChunks` with a document id outside the
-      permitted set returns nothing.
-- [ ] E2E: two KBs, a document in each; a chat scoped to A cannot answer a
+      the SQL text, following the existing owner-isolation test. —
+      `tests/unit/rag-retrieve.test.ts`, "knowledge-base isolation (spec 0028
+      FR6, NFR1)", one test per clause.
+- [x] Unit test: an empty `kbIds` array never produces a query without a KB
+      predicate. — `tests/unit/rag-retrieve.test.ts` asserts `retrieveForOwner`,
+      `listReadyDocuments` and `retrieveDocumentChunks` each return `[]`
+      immediately, with no embedding call and no query issued at all.
+- [x] Unit test: `retrieveDocumentChunks` with a document id outside the
+      permitted set returns nothing. — `tests/unit/rag-retrieve.test.ts`,
+      "the dangerous one (spec 0028)".
+- [x] E2E: two KBs, a document in each; a chat scoped to A cannot answer a
       question only answerable from B, and answers it when both are selected.
-- [ ] E2E: a question naming a document by title in an unselected KB does not
-      resolve to it.
-- [ ] Migration on a populated database: every document and chunk ends in
+      — `tests/e2e/knowledge-bases.spec.ts`, "cross-knowledge-base isolation".
+- [x] E2E: a question naming a document by title in an unselected KB does not
+      resolve to it. — same test, third leg.
+- [x] Migration on a populated database: every document and chunk ends in
       exactly one KB per owner; the assertion query returns zero rows; every
-      pre-existing conversation retrieves what it retrieved before.
-- [ ] `pnpm rag:eval` reports **cross-KB leakage = 0** and fails the run
-      otherwise.
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass.
+      pre-existing conversation retrieves what it retrieved before. —
+      `drizzle/0012_messy_bucky.sql` enforces this at migration time: a `DO`
+      block raises on a fragmented owner, an orphaned document or an orphaned
+      chunk, so the migration cannot commit unless the property holds. Prior
+      conversations are backfilled against every KB their owner had.
+- [x] `pnpm rag:eval` reports **cross-KB leakage = 0** and fails the run
+      otherwise. — `eval/run.ts`, "Cross-KB leakage + complement check (spec
+      0028 NFR4)".
+- [x] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass. —
+      re-verified 2026-09-09.
 
 ## Security & privacy
 

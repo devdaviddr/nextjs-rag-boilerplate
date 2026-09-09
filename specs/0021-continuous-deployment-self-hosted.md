@@ -1,8 +1,8 @@
 ---
 id: 0021
 title: Continuous deployment for self-hosted instances
-status: Shipped # Proposed | Accepted | In Progress | Shipped | Superseded | Rejected
-release: v0.14.0
+status: Shipped
+release: 'v0.14.0'
 created: 2026-07-16
 updated: 2026-07-16
 ---
@@ -149,6 +149,12 @@ primitive; Watchtower is mentioned as an optional convenience with this caveat.
       confirmed before enabling, then every `v*` tag auto-deploys there.)_
 - [x] Nothing changes for a fork that sets neither `APP_IMAGE` nor the repo
       variable. _(PR #9's `docker` job built both images without pushing.)_
+
+> **No longer verifiable (2026-09-09).** The open box describes `ci.yml`
+> publishing images to GHCR on a push to `main`. That workflow was deleted from
+> this fork ([docs/ci-cd.md](../docs/ci-cd.md)); nothing publishes an image now,
+> so the criterion cannot be exercised. The PR half of it — build without
+> pushing — is evidenced by the last box.
 
 ## Security & privacy
 

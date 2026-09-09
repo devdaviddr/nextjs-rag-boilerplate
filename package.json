@@ -29,6 +29,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "gen:icons": "node scripts/generate-icons.mjs",
     "gen:og": "node scripts/generate-og-image.mjs",
+    "specs:index": "node scripts/specs-index.mjs",
+    "specs:check": "node scripts/specs-index.mjs --check",
     "docker:db": "docker compose up -d db",
     "docker:minio": "docker compose up -d minio minio-init",
     "docker:mail": "docker compose up -d mailpit",

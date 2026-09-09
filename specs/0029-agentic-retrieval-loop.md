@@ -278,22 +278,42 @@ unable to ship a regression by accident.
 
 ## Acceptance criteria
 
-- [ ] A `followup` question retrieves the passage its standalone form retrieves.
+Each box cites the evidence that closed it, so a tick can be re-checked rather
+than taken on trust.
+
+- [x] A `followup` question retrieves the passage its standalone form retrieves.
       **Measured:** _"what about carrying it over?"_ → `"carrying over annual
-leave"` → staff-handbook p1 @ 0.479, one search, 8.1s.
-- [ ] A planner that fails, times out or returns something unparseable leaves
-      the loop with whatever it had, and the request still succeeds.
-- [ ] The persisted user message is the text the user typed, not the resolved
-      query.
-- [ ] Router allowlist unit-tested; anything not on it retrieves.
-- [ ] Fuzzing the planner's tool arguments with `ownerId`/`userId`/`owner_id`
-      fields produces byte-identical results to the same call without them.
-- [ ] A planner-supplied `documentId` outside the conversation's permitted KB
-      set returns exactly what a missing document returns.
-- [ ] Each of `RAG_MAX_SEARCHES`, `RAG_MAX_LOOP_MS`, `RAG_MAX_LOOP_TOKENS` is
-      independently shown to terminate the loop.
-- [ ] Citation verification strips an unsupported sentence; stripping everything
-      yields the fixed refusal, not an empty answer.
+leave"` → staff-handbook p1 @ 0.479, one search, 8.1s. The `followup` fixtures
+      are in `eval/questions.json` and are scored by `pnpm rag:eval`.
+- [x] A planner that fails, times out or returns something unparseable leaves
+      the loop with whatever it had, and the request still succeeds. —
+      `tests/unit/rag-agentic.test.ts`, "planner failure": returns what it has
+      when the planner throws, stops rather than retrying on an unusable
+      decision, stops on a search decision with an empty query.
+- [x] The persisted user message is the text the user typed, not the resolved
+      query. — `src/app/api/chat/route.ts` persists `content: question` (the raw
+      text); the resolved form exists only inside the planner call and the
+      drafting prompt. _Verified by inspection; no regression test guards it._
+- [x] Router allowlist unit-tested; anything not on it retrieves. —
+      `tests/unit/rag-route-intent.test.ts` drives `routeTurn` over tables of
+      filler, meta-questions and real questions, including the case that matters
+      most: filler followed by a real question still retrieves.
+- [x] Fuzzing the planner's tool arguments with `ownerId`/`userId`/`owner_id`
+      fields produces byte-identical results to the same call without them. —
+      `tests/unit/rag-planner.test.ts`, "ignores scope-shaped fields the model
+      has no business supplying".
+- [x] A planner-supplied `documentId` outside the conversation's permitted KB
+      set returns exactly what a missing document returns. —
+      `tests/unit/rag-retrieve.test.ts`, "the dangerous one (spec 0028)".
+- [x] Each of `RAG_MAX_SEARCHES`, `RAG_MAX_LOOP_MS`, `RAG_MAX_LOOP_TOKENS` is
+      independently shown to terminate the loop. —
+      `tests/unit/rag-agentic.test.ts`, "budgets": one test per budget, plus
+      "does not exceed the search budget by one".
+- [x] Citation verification strips an unsupported sentence; stripping everything
+      yields the fixed refusal, not an empty answer. —
+      `tests/unit/rag-verify.test.ts` covers stripping and three
+      strip-everything cases that set `empty`;
+      `src/app/api/chat/route.ts` turns `empty` into the fixed refusal.
 - [ ] `step` frames arrive for every phase; no gap exceeds one planner call.
 - [x] `pnpm rag:eval --compare` prints both tables. **Measured:** single-hop
       0.941 → 0.882, refusal 1.000 → 1.000, follow-up 0 → 0.667, multi-hop
@@ -302,7 +322,17 @@ leave"` → staff-handbook p1 @ 0.479, one search, 8.1s.
       the first A/B measured 0.667 against a baseline of 1.000, which is why
       `RAG_AGENTIC_FLOOR_STEP` exists.
 - [ ] With `RAG_AGENTIC_ENABLED=false` the existing path is byte-identical.
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass.
+- [x] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass. —
+      re-verified 2026-09-09.
+
+> **Not verified (2026-09-09).** Two criteria above have no evidence behind them
+> and are left open rather than ticked. `step` frames are emitted for `routing`,
+> `searching`, `drafting` and `verifying` in `src/app/api/chat/route.ts`, but
+> nothing asserts the timing property ("no gap exceeds one planner call").
+> Byte-identical behaviour with `RAG_AGENTIC_ENABLED=false` is guarded by a
+> single `retrievalMode === 'agentic'` branch and was checked by hand during
+> development, but there is no test pinning it. Both are worth a test before the
+> flag is turned on anywhere.
 
 ### The risk this creates, named
 
