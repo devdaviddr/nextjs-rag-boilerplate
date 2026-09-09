@@ -27,5 +27,11 @@ declare module 'next-auth/jwt' {
   interface JWT extends DefaultJWT {
     /** Role names assigned to the user */
     roles: string[]
+    /**
+     * Unix seconds when the user row was last confirmed to exist (spec 0030).
+     * Absent on tokens issued before revalidation existed, which is why
+     * `needsRevalidation` treats a missing value as "check now".
+     */
+    verifiedAt?: number
   }
 }

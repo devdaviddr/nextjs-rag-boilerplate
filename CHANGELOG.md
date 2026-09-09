@@ -8,6 +8,22 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sessions naming a deleted user are now invalidated instead of trusted**
+  ([spec 0030](specs/0030-invalidate-sessions-for-deleted-users.md)). A JWT was
+  trusted on its signature alone, so a token outlived the row it named: delete
+  an account, restore an older backup, or point one `AUTH_SECRET` at a second
+  database, and the holder stayed "signed in" as a user that did not exist —
+  route protection passed, the UI rendered as authenticated, and the first
+  write died on a foreign key as an unexplained 500 (reported against
+  knowledge-base creation). The Node `jwt` callback now re-checks that the user
+  row exists and returns `null` when it does not, which both nulls the session
+  and clears the stale cookie. The check is throttled to once per
+  `SESSION_REVALIDATE_SECONDS` (300) so ordinary requests add no query, and a
+  failed lookup is treated as "unknown", never "deleted" — a database blip must
+  not log everyone out.
+
 ## [0.20.0] - 2026-09-08
 
 ### Added

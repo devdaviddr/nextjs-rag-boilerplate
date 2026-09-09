@@ -17,6 +17,7 @@ import {
   verificationTokens,
 } from '@/db/schema'
 import { authConfig } from './config'
+import { getUserPresence, needsRevalidation } from './revalidate'
 import { fakeVerifyPassword, verifyPassword } from './password'
 import { isGithubConfigured, isGoogleConfigured } from './providers'
 import { bootstrapNewUserRole } from './roles'
@@ -184,16 +185,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig.callbacks,
     /** Populate roles on the JWT at sign-in and refresh on session update. */
     async jwt({ token, user, trigger }) {
+      const nowSeconds = Math.floor(Date.now() / 1000)
+
       if (user) {
         token.id = user.id
         // Credentials `authorize` returns roles inline; OAuth adapter users
         // don't, leaving this undefined so the DB fetch below runs for them.
         token.roles = user.roles
         token.picture = user.image ?? null
+        // Just authenticated against the DB — no need to look the row up again
+        // on the very next request.
+        token.verifiedAt = nowSeconds
       }
       // Back-fill id from `sub` so pre-RBAC tokens self-heal instead of showing
       // a blank id and no roles.
       token.id ??= token.sub
+
+      // Spec 0030: a signature proves the token wasn't forged, not that its
+      // user still exists. Re-check periodically and sign ghosts out.
+      // Returning null both nulls the session and clears the cookie —
+      // confirmed in @auth/core's lib/actions/session.js (`token !== null`),
+      // not assumed. Runs BEFORE the enrichment below: no point fetching roles
+      // for a token we are about to drop.
+      if (token.id && needsRevalidation(token.verifiedAt, nowSeconds)) {
+        const presence = await getUserPresence(token.id as string)
+        if (presence === 'missing') {
+          logger.warn('Session invalidated — user no longer exists', {
+            userId: token.id,
+          })
+          return null
+        }
+        // 'unknown' means the lookup itself failed. Leave `verifiedAt` alone so
+        // the check retries next request, and keep the user signed in — a
+        // database blip must never read as "this account was deleted".
+        if (presence === 'present') token.verifiedAt = nowSeconds
+      }
       // Fetch roles on an explicit session update, when a token has none yet,
       // or on a fresh OAuth sign-in (roles assigned in events.createUser).
       if ((trigger === 'update' || token.roles === undefined) && token.id) {
