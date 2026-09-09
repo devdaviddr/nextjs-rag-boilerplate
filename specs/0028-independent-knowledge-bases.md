@@ -304,9 +304,10 @@ Each box cites the evidence that closed it, so a tick can be re-checked rather
 than taken on trust.
 
 - [x] A user can create, rename, delete a KB, and move a document between KBs.
-      — `tests/e2e/knowledge-bases.spec.ts` covers create, move and delete.
-      **Rename is implemented (`src/lib/rag/kb-actions.ts`) but has no
-      automated test** — a real gap, recorded rather than papered over.
+      — `tests/e2e/knowledge-bases.spec.ts` covers create, move and delete;
+      `tests/unit/kb-actions.test.ts` covers rename, including that it refuses a
+      knowledge base owned by someone else with the same error a missing one
+      gets, so the action cannot be used to probe which ids exist.
 - [x] Moving a document issues no embedding calls (assert on the NIM client).
       — `tests/e2e/knowledge-bases.spec.ts` proves it more strongly than the
       criterion asked: it snapshots the chunk rows before and after the move and
