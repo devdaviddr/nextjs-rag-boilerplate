@@ -65,7 +65,8 @@ the same problem, neither measured against the other.
 
 ## Non-goals
 
-- Reranking (1f). Still blocked; see [`0027`](0027-agentic-rag-and-document-cracking.md).
+- Reranking (1f) — [`0036`](0036-reranking.md) now covers it. It is the largest
+  available precision gain and does not belong buried in a non-goal here.
 - Changing the embedding model or the `halfvec(2048)` column.
 - Anything about the agentic loop. This spec changes what the loop searches
   **over**, and must be measured after [`0032`](0032-settle-the-agentic-trade.md)
@@ -205,7 +206,7 @@ allowed to become a reason to relax them.
 
 ## Out of scope / future
 
-- Reranking, until one is reachable.
+- Reranking — [`0036`](0036-reranking.md).
 - Fine-tuning an embedding model on the corpus (0027 rejected this as
   disproportionate; it still is).
 - **Triage tuning.** `minVectorOps: 6` routes every page of a document with
