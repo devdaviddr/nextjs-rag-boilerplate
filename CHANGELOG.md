@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-09-10
+
 ### Fixed
 
 - **Sessions naming a deleted user are now invalidated instead of trusted**

@@ -1,8 +1,8 @@
 ---
 id: 0030
 title: Invalidate sessions whose user no longer exists
-status: Proposed
-release: '—'
+status: Shipped
+release: 'v0.20.1'
 created: 2026-09-10
 updated: 2026-09-10
 ---
