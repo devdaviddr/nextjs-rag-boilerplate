@@ -4,7 +4,7 @@ title: Highlight the cited span, not just the page
 status: Proposed
 release: '—'
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 ---
 
 # 0035 — Highlight the cited span, not just the page
@@ -128,17 +128,98 @@ than a solution.
 
 ### FR3 — rendering
 
-Two routes, and this is the decision the spec exists to force:
+> **This spec offered two options and both were wrong (superseded 2026-09-11).**
+> The original framing is kept immediately below, because the reasoning that
+> replaced it only makes sense against what it replaced, and because a spec that
+> silently edits its own choice after implementation teaches nobody why the
+> choice moved.
+>
+> The framing as written:
+>
+> > Two routes, and this is the decision the spec exists to force:
+> >
+> > 1. **Render with pdf.js in the citation panel.** Full control, highlights
+> >    are straightforward, and it is the path 0026 and the source route both
+> >    name. It moves untrusted PDF content into our origin — see NFR1.
+> > 2. **Serve the document from a separate origin** and keep a native viewer.
+> >    Preserves isolation, and gives no way to draw the highlight, which
+> >    defeats the spec.
+> >
+> > So (1), with the security work done explicitly rather than assumed away. The
+> > existing route keeps serving bytes; what changes is who renders them.
+>
+> The implementation rejected that choice and took a third option this spec did
+> not consider. It was right to. The argument is below, and it is also written
+> at the top of `src/app/api/documents/[id]/page/route.ts`, where a reader who
+> finds that file will otherwise conclude it should not exist.
 
-1. **Render with pdf.js in the citation panel.** Full control, highlights are
-   straightforward, and it is the path 0026 and the source route both name. It
-   moves untrusted PDF content into our origin — see NFR1.
-2. **Serve the document from a separate origin** and keep a native viewer.
-   Preserves isolation, and gives no way to draw the highlight, which defeats
-   the spec.
+**Render the page to a PNG server-side and position the boxes over the image.**
+`GET /api/documents/[id]/page?n=<1-based>` returns raw PNG bytes; the panel is
+an `<img>` with absolutely-positioned overlay divs, and `GET
+/api/citations/[chunkId]` returns the boxes as JSON.
 
-So (1), with the security work done explicitly rather than assumed away. The
-existing route keeps serving bytes; what changes is who renders them.
+**Why this beats option 1 on the security question the spec asked.** Running
+pdf.js in the panel moves an untrusted, attacker-supplied PDF into the
+JavaScript context of the authenticated application origin. That is a **new**
+trust boundary, and it is not hypothetical: CVE-2024-4367 was exactly this
+shape — a crafted font in a PDF executing arbitrary JavaScript in the page
+embedding pdf.js — and the embedding page here holds the user's session.
+
+Rendering server-side adds **no trust boundary at all**. This application
+already opens every one of these PDFs with pdf.js in the same Node process at
+ingestion: `extract.ts` calls `getDocumentProxy` on each upload and `render.ts`
+rasterises its pages for the parser. A PDF that could compromise pdf.js has had
+that opportunity long before it is ever cited. What reaches the browser is an
+`image/png` pinned with `nosniff`, which cannot become script under any
+interpretation. So the spec's premise — that highlighting requires accepting a
+new risk in exchange — was simply false. There was a way to get the highlight
+and accept nothing.
+
+Two further properties fall out of the same choice, and the second is the one
+that protects the guarantee in _What a reviewer must not get wrong_:
+
+- **The app's CSP needs no relaxing.** `img-src 'self'` already covers this.
+  pdf.js wants a worker, and `worker-src 'self'` does not permit the blob
+  worker it constructs.
+- **The coordinates need no re-derivation.** `chunks.bbox` is normalised 0–1
+  top-left _in the frame of the page image `render.ts` produced_ — which is the
+  image the layout parser was looking at when it drew the box. Rendering the
+  page the same way and positioning rectangles as percentages of that image
+  reproduces the frame exactly. Highlighting on a pdf.js canvas would mean
+  re-deriving the mapping through the viewport, page rotation and a possibly
+  non-zero CropBox origin: three chances to place a box confidently in the
+  wrong place, which this spec itself identifies as strictly worse than placing
+  no box at all.
+
+**The cost is real and is not zero.** The panel shows a picture of a page, so
+its text cannot be selected, searched or copied — capabilities the framed
+native viewer had and this does not. The document itself stays one click away
+behind "Open in new tab", which still serves the unchanged, hardened
+`/api/documents/[id]/source` to the browser's own viewer. That route and its
+headers are untouched (NFR1), and a page that fails to render falls back to
+framing it.
+
+### FR6 was not delivered, because the schema is still singular
+
+`chunkPages` and `chunkElements` both compute the **list** — `Chunk.boxes` — and
+`tests/unit/rag-chunk.test.ts` asserts a two-column chunk yields two rectangles
+with the gutter in neither. Everything downstream of the database is written for
+a list too: `toCitationBoxes` accepts arrays, and the panel maps over them.
+
+The storage in between is singular. `chunks.bbox` is one rectangle (added by
+[`0031`](0031-tables-figures-and-complex-layouts.md)), no `boxes` column was
+added, and `src/lib/rag/ingest.ts` persists `bbox: piece.bbox ?? null` and drops
+`piece.boxes` on the floor. `unionIfContiguous` then correctly **refuses to
+lie**: regions spanning more than one column, or filling less than 65% of their
+union, return `null` rather than a union that would cover the gutter and the
+wrong column.
+
+The net effect on a reader is worth stating plainly, because it is the opposite
+of what FR6 asked for and it is invisible from the tests: **a chunk spanning two
+columns gets no highlight at all.** It falls back to page-level behaviour (FR4),
+which is the safe failure and the one this spec argued for — no box beats a
+wrong box — but it is a fallback, not the feature. FR6 is unmet, and closing it
+needs a `boxes jsonb` column, a migration, and one line in `ingest.ts`.
 
 ### What a reviewer must not get wrong
 
@@ -151,21 +232,52 @@ exist for that reason: no box is strictly better than a wrong box.
 
 ## Acceptance criteria
 
-- [ ] Every chunk produced by the text-layer path carries a box —
-      `tests/unit/rag-chunk.test.ts`
-- [ ] Boxes from both paths are normalised 0–1 top-left, verified against the
-      same page ingested each way — `tests/unit/rag-chunk.test.ts`
+- [x] Every chunk produced by the text-layer path carries a box —
+      `tests/unit/rag-chunk.test.ts`, _"gives every chunk of a positioned page a
+      box (FR1)"_. True of the chunker; what survives the schema is the
+      criterion below
+- [x] Boxes from both paths are normalised 0–1 top-left, verified against the
+      same page ingested each way — `tests/unit/rag-boxes.test.ts`, _"puts the
+      same heading in the same place either way (FR2)"_, comparing
+      `toPositionedItems` against `chunkElements` to two decimal places. **The
+      criterion cited the wrong file**: `rag-chunk.test.ts` checks the
+      convention only within the text path
 - [ ] A chunk spanning two columns records two boxes, not one union covering the
       gutter — `tests/unit/rag-chunk.test.ts`
-- [ ] Opening a citation marks the cited region on the page
-- [ ] A chunk with `bbox = null` opens at the page with no highlight and no
-      error — `tests/e2e/`
-- [ ] A `figure` citation is highlighted and still labelled as a description,
-      not a quotation
-- [ ] The source route's hardening headers are unchanged, and the new rendering
+- [x] Opening a citation marks the cited region on the page —
+      `tests/unit/chat-source-viewer.test.tsx`, _"highlight drawn"_, against a
+      mocked `/api/citations/[chunkId]`. Holds for single-region chunks, which
+      is every chunk the schema can currently store a box for
+- [x] A chunk with `bbox = null` opens at the page with no highlight and no
+      error — `tests/unit/chat-source-viewer.test.tsx` (FR4), and
+      `tests/e2e/chat.spec.ts` asserts no error text appears
+- [x] A `figure` citation is highlighted and still labelled as a description,
+      not a quotation — `src/components/chat/source-viewer.tsx` outlines a
+      figure with a dashed amber border instead of filling it and states in
+      words that it is a description, with a screen-reader equivalent; covered
+      by `tests/unit/chat-source-viewer.test.tsx` (FR5)
+- [x] The source route's hardening headers are unchanged, and the new rendering
       path is reviewed against its threat model with the outcome recorded here
-- [ ] `docs/rag.md`'s "Citations resolve to a page, not a sentence" gap is
-      removed
+      — `src/app/api/documents/[id]/source/route.ts` is untouched, and the
+      review is now recorded in _FR3 — rendering_ above. `tests/e2e/chat.spec.ts`
+      re-asserts `image/png`, `nosniff`, `private, no-store` and
+      `X-Frame-Options: DENY` on the new route, plus 404s for `n=0`,
+      `n=99999` and a chunk id belonging to another user
+- [x] `docs/rag.md`'s "Citations resolve to a page, not a sentence" gap is
+      removed — replaced with what is true now, including the two-column limit
+
+> **Not verified (2026-09-11).** The two-column criterion is **not met, and not
+> merely unmeasured** — see _FR6 was not delivered_. The chunker records two
+> boxes and `tests/unit/rag-chunk.test.ts` proves it; `chunks.bbox` then stores
+> one rectangle or none, and for a two-column chunk `unionIfContiguous`
+> correctly stores none. So no gutter-covering union is ever drawn, which is the
+> half of the criterion that protects the reader, and no highlight is drawn
+> either, which is the half that was the feature. It stays unticked until a
+> `boxes` column carries the list to the browser.
+>
+> **NFR3 is also unmeasured.** Nothing times the citation panel; the only thing
+> standing between it and a slow page is the render route's rate limit of 120
+> requests per 10 minutes per user.
 
 ## Security & privacy
 
