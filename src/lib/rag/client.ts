@@ -46,6 +46,51 @@ function requireKey(): string {
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 const MAX_ATTEMPTS = 4
 
+/**
+ * Per-attempt deadline. **Not optional, and not cosmetic.**
+ *
+ * `fetch` has no timeout of its own, so before this a stalled upstream hung the
+ * request indefinitely. Observed 2026-09-10: a single planner call took **86
+ * seconds** where the same call normally takes 3-6, and the agentic loop's
+ * `RAG_MAX_LOOP_MS` (15s) could do nothing about it — that budget is checked
+ * BETWEEN iterations, so it cannot interrupt a call already in flight. The user
+ * saw a 90-second spinner on a 15-second budget.
+ *
+ * A timeout turns that into a retry, which is what the retry loop was always
+ * for. 60s is deliberately generous: a vision call over a page image genuinely
+ * takes 40s (spec 0031), so anything tighter would abort real work.
+ */
+const REQUEST_TIMEOUT_MS = 60_000
+
+/**
+ * The caller's signal AND a deadline, whichever fires first.
+ *
+ * Composed rather than replaced: aborting because the browser navigated away
+ * and aborting because the endpoint stalled are different events, and only the
+ * second one should be retried.
+ *
+ * Built from an explicit `AbortController` rather than `AbortSignal.timeout`
+ * for two reasons: the timer can be cleared the moment the response lands
+ * instead of being left pending, and a plain `setTimeout` is something a test
+ * can drive deterministically.
+ */
+function withDeadline(
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController()
+  const timer = setTimeout(
+    () => controller.abort(new Error(`Request exceeded ${timeoutMs}ms`)),
+    timeoutMs,
+  )
+  return {
+    signal: signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal,
+    clear: () => clearTimeout(timer),
+  }
+}
+
 function backoffMs(attempt: number): number {
   // 0.5s, 1s, 2s — plus jitter so a batch of parallel workers doesn't retry
   // in lockstep and re-trigger the same rate limit.
@@ -64,23 +109,47 @@ async function sleep(ms: number): Promise<void> {
 async function post(
   path: string,
   body: unknown,
-  { stream = false, signal }: { stream?: boolean; signal?: AbortSignal } = {},
+  {
+    stream = false,
+    signal,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  }: { stream?: boolean; signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<Response> {
   const key = requireKey()
   const url = `${env.RAG_LLM_BASE_URL.replace(/\/$/, '')}${path}`
 
   let lastDetail = 'no response'
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        Accept: stream ? 'text/event-stream' : 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal,
-    })
+    let response: Response
+    const deadline = withDeadline(signal, timeoutMs)
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          Accept: stream ? 'text/event-stream' : 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: deadline.signal,
+      })
+    } catch (error) {
+      // The CALLER aborting is final — the browser navigated away, and there is
+      // nothing left to retry for. Only our own deadline is retryable.
+      if (signal?.aborted) throw error
+
+      lastDetail = `no response within ${timeoutMs}ms`
+      if (attempt === MAX_ATTEMPTS - 1)
+        throw new RagUpstreamError(0, lastDetail)
+      logger.warn('Inference request timed out', {
+        timeoutMs,
+        attempt: attempt + 1,
+      })
+      await sleep(backoffMs(attempt))
+      continue
+    } finally {
+      deadline.clear()
+    }
 
     if (response.ok) return response
 
@@ -219,6 +288,8 @@ interface CompletionResponse {
 }
 
 export interface CompletionOptions {
+  /** Per-attempt deadline. Defaults to `REQUEST_TIMEOUT_MS`. */
+  timeoutMs?: number
   /** Defaults to the chat model; the planner passes `RAG_PLANNER_MODEL`. */
   model?: string
   /** Advertise tools. With these present, reasoning models split their
@@ -260,6 +331,9 @@ export async function createChatCompletion(
 
   const response = await post('/chat/completions', body, {
     signal: options.signal,
+    ...(options.timeoutMs !== undefined
+      ? { timeoutMs: options.timeoutMs }
+      : {}),
   })
   const json = (await response.json()) as CompletionResponse
 

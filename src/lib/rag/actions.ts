@@ -8,6 +8,7 @@ import { db } from '@/db'
 import { chunks, documents, files, knowledgeBases } from '@/db/schema'
 import type { DocumentStatus } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
+import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { UPLOAD_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
@@ -45,8 +46,17 @@ async function currentUsageBytes(userId: string): Promise<number> {
 }
 
 /** Whether document chat is usable at all — surfaced in the UI as an empty state. */
-export async function ragStatus(): Promise<{ configured: boolean }> {
-  return { configured: isRagConfigured() }
+export async function ragStatus(): Promise<{
+  configured: boolean
+  /**
+   * Whether document cracking is on (spec 0031). The UI needs it because what
+   * a user may upload changes: with it off a scanned PDF is refused, with it
+   * on the same file is read. Copy that states one while the other is true is
+   * worse than no copy.
+   */
+  cracking: boolean
+}> {
+  return { configured: isRagConfigured(), cracking: env.RAG_CRACK_ENABLED }
 }
 
 /**
