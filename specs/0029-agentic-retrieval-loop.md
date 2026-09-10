@@ -222,6 +222,22 @@ Revised upward from 0027's draft, because the latency it assumed was wrong.
 | `RAG_MAX_LOOP_TOKENS` | **8000**  | Stop; answer from accumulated evidence or refuse     |
 | Verification passes   | **1**     | Strip, never redraft                                 |
 
+> **`RAG_MAX_LOOP_MS` was not a bound, and this table implied it was
+> (corrected 2026-09-10).** The loop read the budget BETWEEN iterations and
+> handed every call the outer request signal, so a single slow call overran it
+> by however long that call took. Measured on a live endpoint: a 45s budget
+> finishing at **102s**, and — before a per-attempt deadline existed in
+> `client.ts` — one planner call taking **86 seconds** where the same call
+> normally takes 3–6, with the user watching a spinner the whole time.
+>
+> Two fixes, in `src/lib/rag/client.ts` and `src/lib/rag/agentic.ts`: every
+> request now carries a 60s per-attempt deadline so a stall becomes a retry,
+> and every call the loop makes carries a signal composed from the budget it
+> has left. "Abort and refuse" in the row above is now what actually happens.
+>
+> The failure was latent from the start and only surfaced once spec 0031 added
+> a call type slow enough to expose it.
+
 Worst case: rewrite ~2s + 3 × (plan 2.6s + search ~0.5s) + verify ~3s ≈ **14s**
 to first token. Typical (one search, planner answers immediately): ~**8s**. At
 0027's assumed 10s-per-call this budget would have been 45s and unusable; the

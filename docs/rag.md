@@ -523,14 +523,14 @@ you.
 These only matter with `RAG_AGENTIC_ENABLED=true`; see
 [The agentic path](#the-agentic-path) for what the loop does and what it costs.
 
-| Variable                 | Default                                 | Effect                                                          |
-| ------------------------ | --------------------------------------- | --------------------------------------------------------------- |
-| `RAG_AGENTIC_ENABLED`    | `false`                                 | Off: the fixed pipeline runs byte-identically                   |
-| `RAG_PLANNER_MODEL`      | `nvidia/nemotron-3.5-lightning-30b-a3b` | Plans and calls tools; measured 10/10 native tool calls         |
-| `RAG_MAX_SEARCHES`       | 3                                       | Hard cap on `search_documents` calls per question               |
-| `RAG_MAX_LOOP_MS`        | 15000                                   | Wall-clock for the loop, excluding answer streaming             |
-| `RAG_MAX_LOOP_TOKENS`    | 8000                                    | Prompt + completion across every planning call                  |
-| `RAG_AGENTIC_FLOOR_STEP` | 0.04                                    | Similarity floor rises by this per **extra** search — see below |
+| Variable                 | Default                                 | Effect                                                                                                          |
+| ------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `RAG_AGENTIC_ENABLED`    | `false`                                 | Off: the fixed pipeline runs byte-identically                                                                   |
+| `RAG_PLANNER_MODEL`      | `nvidia/nemotron-3.5-lightning-30b-a3b` | Plans and calls tools; measured 10/10 native tool calls                                                         |
+| `RAG_MAX_SEARCHES`       | 3                                       | Hard cap on `search_documents` calls per question                                                               |
+| `RAG_MAX_LOOP_MS`        | 15000                                   | Wall-clock for the loop, excluding answer streaming. Raised to a 45s floor when `RAG_READ_FIGURE_ENABLED` is on |
+| `RAG_MAX_LOOP_TOKENS`    | 8000                                    | Prompt + completion across every planning call. Raised to a 30k floor when `RAG_READ_FIGURE_ENABLED` is on      |
+| `RAG_AGENTIC_FLOOR_STEP` | 0.04                                    | Similarity floor rises by this per **extra** search — see below                                                 |
 
 Planning and prose are separate roles because they were measured separately.
 The probe scored structural reliability — did the model emit a valid tool
@@ -1115,7 +1115,13 @@ Every exit is named in the trace, never swallowed:
 | `no-scope`            | The conversation has no permitted knowledge bases                                                                                                                                    |
 
 Budgets are checked **before** each expensive call, never after — checking
-afterwards lets each bound be exceeded by exactly one call.
+afterwards lets each bound be exceeded by exactly one call. Each call also
+carries a signal composed from the time the loop has left, so `RAG_MAX_LOOP_MS`
+bounds work already in flight rather than only deciding whether to start more.
+Underneath that, every inference request has a **60-second per-attempt
+deadline**: `fetch` has no timeout of its own, and without one a stalled
+endpoint hung a request indefinitely while the loop budget looked on
+(measured: one planner call at 86s where it normally takes 3–6).
 
 ### The first pass always searches
 
@@ -1289,6 +1295,17 @@ deterministic guard removes any number the figure does not print:
 `read_figure` makes a figure's structure readable. It does not make an
 unlabelled chart quantitative.
 
+**It is expensive in both currencies.** One call measured **~13.5s and ~6,600
+tokens**, against loop budgets sized for text searches at 2.6–4.4s and a few
+hundred tokens. Left alone, the first look at a picture exhausted the loop and
+it stopped holding a reading it never used — so with the tool on, both budgets
+are raised to floors (45s, 30k). They raise a configured value and never lower
+one, so a deployment that tuned them earlier still works.
+
+Expect a figure question to take **20–60s** end to end. The bound stops it
+running away; it does not make it fast. If that is too slow, `RAG_MAX_SEARCHES`
+is the lever — at 2 the loop cannot plan a third round after a figure read.
+
 ### Budgets, and degrading rather than failing
 
 `RAG_CRACK_MAX_PAGES` (25) caps parse calls per document and
@@ -1363,7 +1380,9 @@ than hidden.
 Named rather than hidden.
 
 - **The agentic path is ~10× slower.** Median 9–11s per question against ~1s,
-  because every planner call is a round trip to a reasoning model. The label on
+  because every planner call is a round trip to a reasoning model. A question
+  that reads a figure is slower again — 20–60s — since a vision call over a
+  cropped page image is the single most expensive thing this system does. The label on
   the thinking indicator is what stops that reading as a hang.
 - **The sidebar can lag a readable answer** by the length of citation
   verification, because refreshing Recents under a live stream aborts it. See

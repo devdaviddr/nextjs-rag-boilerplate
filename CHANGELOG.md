@@ -46,6 +46,32 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - **Scanned PDFs are no longer rejected outright** when cracking is enabled.
   With it off, the existing rejection is unchanged.
 
+### Fixed
+
+- **Inference requests are now bounded.** `fetch` has no timeout of its own, so
+  a stalled endpoint hung a request indefinitely — measured at 86 seconds on a
+  planner call that normally takes 3–6, while the agentic loop's 15-second
+  budget could do nothing about it. Every request now carries a 60-second
+  per-attempt deadline, so a stall becomes a retry; a caller abort is still
+  final and never retried.
+
+- **The agentic loop's wall-clock budget is now a bound rather than a
+  checkpoint.** It was read between iterations while every call got the outer
+  request signal, so one slow call overran it freely (a 45-second budget
+  finishing at 102). Each call now carries a signal composed from the budget it
+  has left. Latent since spec 0029; only surfaced once figure reading added a
+  call slow enough to expose it.
+
+- **Loop budgets are sized for figure reading when it is enabled.** One
+  `read_figure` costs ~13.5s and ~6,600 tokens against text-only defaults of 15s
+  and 8,000, so the first look at a picture exhausted the loop and it stopped
+  holding a correct reading it never used. Floors of 45s and 30k tokens apply
+  with the tool on; they raise a configured value and never lower one.
+
+- **The upload panel no longer claims scanned documents are unsupported** when
+  cracking is enabled — the copy now reflects what the deployment actually
+  does.
+
 ### Notes
 
 - Spec 0031 asserted that flattened tables and interleaved columns cost answers.
