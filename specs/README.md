@@ -94,6 +94,7 @@ other — one isn't a substitute for the other.
 | [0028](0028-independent-knowledge-bases.md)           | Independent knowledge bases                                                          | Shipped  | v0.20.0 |
 | [0029](0029-agentic-retrieval-loop.md)                | Agentic retrieval loop                                                               | Shipped  | v0.20.0 |
 | [0030](0030-invalidate-sessions-for-deleted-users.md) | Invalidate sessions whose user no longer exists                                      | Shipped  | v0.20.1 |
+| [0031](0031-tables-figures-and-complex-layouts.md)    | Index tables, figures and complex layouts                                            | Proposed | —       |
 
 <!-- specs:index:end -->
 
