@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { env } from '@/lib/env'
-import type { PageText } from './chunk'
+import type { PageText, PositionedItem } from './chunk'
+import { positionedItemsByPage } from './signals'
 
 /**
  * PDF text extraction (spec 0025 FR5).
@@ -32,6 +33,16 @@ export interface ExtractionResult {
    * worse than one pointing at nothing.
    */
   allPageTexts: string[]
+  /**
+   * Every page's positioned text items, in the same full page sequence as
+   * `allPageTexts` (spec 0035 FR1).
+   *
+   * Exposed as well as attached to `pages` because the cracked path builds its
+   * own `PageText` objects from `allPageTexts` and needs somewhere to get the
+   * matching items from; without them its text-layer pages fall back to
+   * page-level citations, which is FR4's behaviour and not a failure.
+   */
+  itemsByPage: PositionedItem[][]
   /**
    * The open pdf.js document, so a caller that goes on to crack pages renders
    * from the same proxy rather than re-parsing the file.
@@ -99,10 +110,20 @@ export async function extractPdf(
     )
   }
 
+  // Read AFTER the rejections above, so a file that is not going to be ingested
+  // never pays for a second pass over its text layer.
+  const itemsByPage = await positionedItemsByPage(pdf)
+
   return {
-    pages: pages.filter((p) => p.text.length > 0),
+    pages: pages
+      .filter((p) => p.text.length > 0)
+      .map((p) => {
+        const items = itemsByPage[p.pageNumber - 1]
+        return items && items.length > 0 ? { ...p, items } : p
+      }),
     pageCount,
     allPageTexts: pages.map((p) => p.text),
+    itemsByPage,
     pdf,
   }
 }
