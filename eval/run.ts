@@ -441,6 +441,16 @@ function scoreQuestion(
   retrieved: readonly RetrievedChunk[],
   titleById: ReadonlyMap<string, string>,
 ): { rank: number | null; factRanks?: (number | null)[]; passed: boolean } {
+  // Refusal is checked FIRST, before the multi-hop branch, and the order is
+  // load-bearing. An unanswerable question carries no `answerDocuments` — the
+  // same way an unanswerable single-hop carries no `document`/`page` — so the
+  // multi-hop branch would find an empty fact list and score `passed: false`
+  // however correctly the system refused. Multi-hop refusal accuracy read
+  // 0.000 by construction, and the failures were invisible because no metric
+  // reported multi-hop refusal at all.
+  if (!q.answerable) {
+    return { rank: null, passed: retrieved.length === 0 }
+  }
   if (questionType(q) === 'multi-hop') {
     const facts = q.answerDocuments ?? []
     const factRanks = facts.map((f) =>
@@ -448,9 +458,6 @@ function scoreQuestion(
     )
     const passed = facts.length > 0 && factRanks.every((rank) => rank !== null)
     return { rank: null, factRanks, passed }
-  }
-  if (!q.answerable) {
-    return { rank: null, passed: retrieved.length === 0 }
   }
   const rank = findRank(retrieved, titleById, q.document!, q.page!)
   return { rank, passed: rank !== null }
@@ -748,7 +755,11 @@ interface MultiHopMetrics {
 }
 
 function multiHopMetrics(results: readonly QuestionResult[]): MultiHopMetrics {
-  const rows = results.filter((r) => r.type === 'multi-hop')
+  // Answerable rows only. An unanswerable multi-hop has no facts to retrieve,
+  // so counting a correct refusal as a "full match" would inflate the rate with
+  // questions that had nothing to match. Its refusal correctness is reported by
+  // `coreMetrics` over the same slice instead.
+  const rows = results.filter((r) => r.type === 'multi-hop' && r.answerable)
   const allFacts = rows.flatMap((r) => r.factRanks ?? [])
   return {
     count: rows.length,
@@ -1259,6 +1270,12 @@ async function main(): Promise<void> {
   const baselineFollowupCore = coreMetrics(baselineFollowup)
   const baselineLayoutCore = coreMetrics(baselineLayout)
   const baselineMultiHop = multiHopMetrics(baselineResults)
+  // Multi-hop refusal had no home: `multiHopMetrics` scores fact recall over
+  // answerable rows, so a correctly-refused multi-hop was measured nowhere.
+  const baselineMultiHopSlice = baselineResults.filter(
+    (r) => r.type === 'multi-hop',
+  )
+  const baselineMultiHopCore = coreMetrics(baselineMultiHopSlice)
   // Pooled over every question the pass ran, exactly like the agentic block —
   // not over the single-hop headline slice. Cost does not care which slice a
   // question belongs to, and pooling the two blocks differently would put two
@@ -1315,6 +1332,7 @@ async function main(): Promise<void> {
     followup: baselineFollowupCore,
     layout: baselineLayoutCore,
     multiHop: baselineMultiHop,
+    multiHopRefusal: baselineMultiHopCore,
     // New in spec 0032, and purely additive: older files in eval/results/ have
     // no `cost` key at all, and the only field this harness ever reads back
     // out of a saved file is `metrics.refusalAccuracy` (the --baseline gate
@@ -1338,8 +1356,9 @@ async function main(): Promise<void> {
       `hit@3 ${baselineFollowupCore.hitAt3}  MRR ${baselineFollowupCore.mrr}`,
   )
   console.log(
-    `Baseline multi-hop (n=${baselineMultiHop.count}): full-match ${baselineMultiHop.fullMatchRate}  ` +
-      `fact recall ${baselineMultiHop.factRecall}`,
+    `Baseline multi-hop (n=${baselineMultiHop.count} answerable): full-match ${baselineMultiHop.fullMatchRate}  ` +
+      `fact recall ${baselineMultiHop.factRecall}  ` +
+      `refusal ${baselineMultiHopCore.refusalAccuracy} (n=${baselineMultiHopCore.mustRefuse})`,
   )
   console.log(
     `Baseline layout (n=${baselineLayout.length}): hit@1 ${baselineLayoutCore.hitAt1}  ` +
