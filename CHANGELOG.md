@@ -10,6 +10,33 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **A citation highlights the passage, not just the page**
+  ([spec 0035](specs/0035-span-level-citations.md)). Opening a source marks the
+  cited region on the page instead of leaving the reader to find the sentence
+  themselves. A chunk stored with several boxes — a passage spanning two
+  columns — highlights each of them; their union would cover the gutter and the
+  wrong column.
+
+  A framed PDF viewer cannot be drawn on, so the panel now shows a
+  **server-rendered image of the page** with the boxes over it. That is a
+  security decision, made deliberately: the alternative, running pdf.js in the
+  panel, would put an attacker-supplied PDF inside the authenticated origin's
+  JavaScript context, which is exactly the class of bug CVE-2024-4367 was.
+  Rendering server-side adds no new exposure at all, because ingestion already
+  parses every one of these PDFs with pdf.js in the same process, and what
+  reaches the browser is a PNG pinned with `nosniff`. The trade is real: the
+  page is a picture, so its text cannot be selected or searched. The document
+  itself is still one click away in "Open in new tab", served by the unchanged,
+  hardened `/api/documents/[id]/source`.
+
+  Nothing about this is conditional on re-ingesting. A chunk with no stored box
+  opens at its page with no highlight, silently — the behaviour every citation
+  had before — and so does a page that will not render, which falls back to the
+  browser's own viewer. A **figure** citation is outlined rather than filled and
+  says in words that it is a description written to make the figure findable,
+  not the document's own words: a box around it looks more like a quotation than
+  a page number ever did, so the labelling matters more there, not less.
+
 - **Tables, figures and scanned pages can be indexed**
   ([spec 0031](specs/0031-tables-figures-and-complex-layouts.md)), behind
   `RAG_CRACK_ENABLED` (default off). Each page is triaged locally, for free, and

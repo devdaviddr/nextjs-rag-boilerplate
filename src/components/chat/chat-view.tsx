@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, ExternalLink, Send, X } from 'lucide-react'
+import { ChevronDown, Send } from 'lucide-react'
 
 import { FormMessage } from '@/components/auth/field-error'
 import { Markdown } from '@/components/chat/markdown'
+import { SourceViewer } from '@/components/chat/source-viewer'
 import { Thinking } from '@/components/chat/thinking'
 import { CreateKnowledgeBaseDialog } from '@/components/rag/create-knowledge-base-dialog'
 import { Button } from '@/components/ui/button'
@@ -20,7 +21,6 @@ import type { StoredCitation, StoredMetrics } from '@/db/schema'
 import type { ConversationMessage } from '@/lib/chat/actions'
 import { formatMetrics } from '@/lib/chat/metrics'
 import type { KnowledgeBaseSummary } from '@/lib/rag/kb-actions'
-import { cn } from '@/lib/utils'
 
 /**
  * The chat surface (spec 0026), now knowledge-base scoped (spec 0028).
@@ -199,15 +199,9 @@ export function ChatView({
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Escape closes the source panel.
-  useEffect(() => {
-    if (!source) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSource(null)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [source])
+  // Stable, so the source panel's Escape handler is not torn down and
+  // reattached on every render of the transcript.
+  const closeSource = useCallback(() => setSource(null), [])
 
   const hasFixedScope = lockedKbIds !== undefined
   const selectedIds = selectedIdsFor(selection, knowledgeBases)
@@ -607,52 +601,13 @@ export function ChatView({
       </div>
 
       {source && (
-        <aside
-          aria-label={`Source: ${source.documentTitle}, page ${source.pageNumber}`}
-          className={cn(
-            'bg-background flex w-full max-w-full flex-col border-l',
-            'fixed inset-0 z-40 md:static md:z-auto md:w-[45%] md:max-w-[720px]',
-          )}
-        >
-          <div className="flex items-center gap-2 border-b px-3 py-2">
-            <p className="min-w-0 flex-1 truncate text-sm font-medium">
-              {source.documentTitle}{' '}
-              <span className="text-muted-foreground font-normal">
-                — page {source.pageNumber}
-              </span>
-            </p>
-            <Button asChild size="icon" variant="ghost" className="size-8">
-              <a
-                href={`/api/documents/${source.documentId}/source#page=${source.pageNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open in new tab"
-              >
-                <ExternalLink className="size-4" />
-              </a>
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-8"
-              aria-label="Close source"
-              onClick={() => setSource(null)}
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-          {/* No `sandbox` attribute: a fully-restrictive sandbox prevents the
-              browser's PDF viewer from initialising, and the permissive
-              combination that does work (`allow-scripts allow-same-origin`)
-              provides no protection at all. The route hardens the response
-              instead — see its comment for the threat model. */}
-          <iframe
-            key={`${source.documentId}#${source.pageNumber}`}
-            title={`${source.documentTitle}, page ${source.pageNumber}`}
-            src={`/api/documents/${source.documentId}/source#page=${source.pageNumber}`}
-            className="min-h-0 flex-1 border-0"
-          />
-        </aside>
+        // Keyed by chunk, so switching citations remounts rather than trying
+        // to reconcile a half-loaded page image with a new one's boxes.
+        <SourceViewer
+          key={source.chunkId}
+          citation={source}
+          onClose={closeSource}
+        />
       )}
 
       <CreateKnowledgeBaseDialog

@@ -164,21 +164,38 @@ test.describe('with an indexed document', () => {
     const chip = page.locator('button', { hasText: /^\[1\]/ }).first()
     await expect(chip).toBeVisible()
 
-    // FR14: the citation opens the source panel at the cited page.
+    // FR14 (spec 0026) and FR3/FR4 (spec 0035): the citation opens the source
+    // panel at the cited page, now as a rendered page image the highlight can
+    // be drawn on.
     await chip.click()
-    const frame = page.locator('iframe')
-    await expect(frame).toHaveCount(1)
-    expect(await frame.getAttribute('src')).toMatch(
-      /\/api\/documents\/[0-9a-f-]{36}\/source#page=\d+/,
+    const pageImage = page.getByRole('img', { name: /^Page \d+ of / })
+    await expect(pageImage).toBeVisible()
+    expect(await pageImage.getAttribute('src')).toMatch(
+      /\/api\/documents\/[0-9a-f-]{36}\/page\?n=\d+/,
     )
     // The panel must have real size — it once collapsed to zero height.
-    const box = await frame.boundingBox()
+    const box = await pageImage.boundingBox()
     expect(box?.width ?? 0).toBeGreaterThan(200)
     expect(box?.height ?? 0).toBeGreaterThan(200)
 
+    // Spec 0035 FR4: a chunk stored without a box degrades to exactly this —
+    // the right page, nothing drawn on it, and no error for the reader. Which
+    // of the two it is depends on how the document happened to be ingested,
+    // so what is asserted is the part that must hold either way.
+    await expect(page.getByText(/could not|failed|error/i)).toHaveCount(0)
+
+    // NFR1: the hardened source route is still one click away, unchanged.
+    expect(
+      await page
+        .getByRole('link', { name: 'Open in new tab' })
+        .getAttribute('href'),
+    ).toMatch(/\/api\/documents\/[0-9a-f-]{36}\/source#page=\d+/)
+
     // Escape closes it.
     await page.keyboard.press('Escape')
-    await expect(page.locator('iframe')).toHaveCount(0)
+    await expect(page.getByRole('img', { name: /^Page \d+ of / })).toHaveCount(
+      0,
+    )
   })
 
   test('the source route is framable by this app but not by others', async ({
@@ -217,6 +234,79 @@ test.describe('with an indexed document', () => {
     // Ordinary pages must still refuse framing outright.
     const pageHeaders = (await page.request.get('/chat')).headers()
     expect(pageHeaders['x-frame-options']).toBe('DENY')
+  })
+
+  /**
+   * Spec 0035. The rendered page is the only thing that reaches the browser
+   * from a document once the panel stops framing the PDF, so its content type
+   * has to be as unforgeable as the source route's — a page image that could
+   * be re-interpreted as HTML would hand a crafted upload the origin that the
+   * source route's `nosniff` was added to protect.
+   */
+  test('a rendered page is a pinned, unframable, uncached PNG', async ({
+    page,
+  }) => {
+    await register(page, 'pagerender')
+    const kbId = await createKnowledgeBase(page, 'My documents')
+    await page.goto(`/documents/${kbId}`)
+    await page
+      .getByLabel('Upload a PDF')
+      .setInputFiles(`${FIXTURES}/handbook.pdf`)
+    await expect(
+      page.getByRole('row', { name: /handbook/i }).getByText('Ready'),
+    ).toBeVisible({ timeout: INGEST_TIMEOUT })
+
+    const res = await page.request.post('/api/chat', {
+      data: { question: 'annual leave' },
+    })
+    const citationLine = (await res.text())
+      .split('\n')
+      .find((l) => l.includes('"citations"'))
+    const citation = JSON.parse(citationLine!).citations[0]
+
+    const rendered = await page.request.get(
+      `/api/documents/${citation.documentId}/page?n=${citation.pageNumber}`,
+    )
+    expect(rendered.status()).toBe(200)
+    const headers = rendered.headers()
+    expect(headers['content-type']).toBe('image/png')
+    expect(headers['x-content-type-options']).toBe('nosniff')
+    expect(headers['cache-control']).toBe('private, no-store')
+    // Unlike the source route, this one wants the global DENY: it is drawn as
+    // an image, never framed.
+    expect(headers['x-frame-options']).toBe('DENY')
+
+    // A page that does not exist is a 404, not a render attempt.
+    expect(
+      (
+        await page.request.get(`/api/documents/${citation.documentId}/page?n=0`)
+      ).status(),
+    ).toBe(404)
+    expect(
+      (
+        await page.request.get(
+          `/api/documents/${citation.documentId}/page?n=99999`,
+        )
+      ).status(),
+    ).toBe(404)
+
+    // The location lookup answers for a chunk the caller owns, and gives the
+    // same non-signal 404 as every other document lookup for one they do not.
+    const location = await page.request.get(
+      `/api/citations/${citation.chunkId}`,
+    )
+    expect(location.status()).toBe(200)
+    const body = await location.json()
+    expect(body.pageNumber).toBe(citation.pageNumber)
+    // Possibly empty — an empty list is what FR4's page-level fallback reads.
+    expect(Array.isArray(body.boxes)).toBe(true)
+    expect(
+      (
+        await page.request.get(
+          '/api/citations/00000000-0000-0000-0000-000000000000',
+        )
+      ).status(),
+    ).toBe(404)
   })
 })
 
