@@ -96,8 +96,19 @@ inheritance.
 
 ### Functional
 
-- **FR1** — A reranking stage sits between fusion and the similarity gate,
-  re-scoring the top `RAG_RERANK_CANDIDATES` and reordering them.
+- **FR1** — Retrieval fetches `RAG_RERANK_CANDIDATES` fused candidates (never
+  fewer than `RAG_TOP_K`); the reranking stage re-scores and reorders them; the
+  similarity gate is applied; and only then is the result cut to `RAG_TOP_K`.
+
+  > **The cut MUST come after reranking**, and this requirement was originally
+  > written without saying so — which is how the first implementation shipped as
+  > conformant while being inert. The SQL ended `LIMIT RAG_TOP_K` (8), so
+  > `min(RAG_RERANK_CANDIDATES, 8)` was always 8: the reranker could only
+  > reorder chunks that had already survived, never promote one fusion ranked
+  > below `RAG_TOP_K`, which is the stage's entire purpose. Corrected
+  > 2026-09-11. Seventy-nine passing tests missed it because the query mock
+  > returned a fixed row count regardless of the bound `LIMIT`.
+
 - **FR2** — At least one backend that does **not** depend on the NIM account is
   implemented, behind an interface a NIM reranker could later satisfy.
 - **FR3** — Reranking is **failure-open**. A backend that errors, times out or
@@ -113,9 +124,20 @@ inheritance.
 
 ### Non-functional
 
-- **NFR1** — Refusal accuracy holds at **1.000**. This is the requirement most
-  at risk: FR5 is explicitly about admitting chunks the floor currently rejects,
-  and the last attempt at that (a lexical bypass) took refusal from 1.0 to 0.0.
+- **NFR1** — Refusal accuracy holds at **1.000**.
+
+  > **The permutation argument covers the rerank STEP, not the pool WIDTH**
+  > (noted 2026-09-11). Reranking itself only reorders, so the gate admits the
+  > identical set. Widening the pool from 8 to 20 does not: the gate is
+  > per-element, so it admits the same _fraction_ of whatever it sees, and a
+  > chunk fusion ranked twelfth but **above the floor** can now reach an answer
+  > that previously refused. No below-floor chunk can get in — that is pinned by
+  > a test where every below-floor chunk scores maximum and none is admitted —
+  > but refusal can still move in the answering direction. It needs its own
+  > measurement, separate from the reranker's. This is the requirement most
+  > at risk: FR5 is explicitly about admitting chunks the floor currently rejects,
+  > and the last attempt at that (a lexical bypass) took refusal from 1.0 to 0.0.
+
 - **NFR2** — Reranking adds at most one round trip per query, and its latency is
   reported beside its quality.
 - **NFR3** — A local backend must not require a sidecar container. The
@@ -130,8 +152,12 @@ inheritance.
 `retrieveForOwner` fuses two channels with RRF and then applies
 `RAG_MIN_SIMILARITY`. Reranking belongs **between** those two steps: fusion
 chooses candidates, the reranker re-scores them, the gate decides what survives.
-Putting it after the gate would rerank a list the gate has already truncated,
-which is the one arrangement that cannot help.
+Two arrangements cannot help, and the second is the one that actually shipped.
+Putting the stage after the gate reranks a list the gate has already _filtered_
+(it filters per element, it does not truncate). Putting it after a
+`LIMIT RAG_TOP_K` is equally useless and far less obvious, because everything
+still looks wired up — the flag reads, the model is called, scores come back,
+and the order changes. It just cannot reach the candidate it was added to find.
 
 ### Backend 1 — local ONNX cross-encoder
 

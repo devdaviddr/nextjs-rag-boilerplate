@@ -212,6 +212,44 @@ here resizes chunks, so refusal must be re-checked after each one and not just
 at the end. This project has already seen refusal fall from 1.000 to 0.667
 _while every other metric improved_.
 
+### 1g — HyDE is built, and the evidence so far argues against it
+
+Implemented behind `RAG_HYDE_ENABLED` (default off), 2026-09-11. It works
+mechanically — 8/8 hypotheticals parsed via a native tool call, in a document's
+voice with headings, defined terms and concrete numbers. The control call
+without `tools` returned `"Here's a thinking process:"` and no passage,
+reproducing what `rewrite.ts` and `planner.ts` already document about reasoning
+models.
+
+**Two measurements point the wrong way, and both are cases this spec expected
+HyDE to win.**
+
+1. **It invents the wrong document.** Asked to summarise an HR handbook, it
+   wrote a fluent excerpt about a _RAG developer manual_ — FAISS index
+   parameters and all — inferred purely from the file's title. That vector
+   points away from the real document. Summarisation is precisely the case
+   [`0027`](0027-agentic-rag-and-document-cracking.md) predicted HyDE would
+   rescue.
+
+2. **It manufactures plausible answers to unanswerable questions.** Given the
+   corpus's canonical refusal case — "How much parental leave am I entitled
+   to?", which the corpus cannot answer — it produced a detailed, plausible
+   parental-leave policy. That embeds far closer to the corpus's real leave
+   passages than the bare question does, pushing similarity **up** for a
+   question that must refuse. NFR2's hazard in concrete form.
+
+**Latency:** median 9.5s on the chat model (4.7–15.8s), 18.3s on the smaller
+planner model (12.1–45.5s, worst case landing on the summarise question). The
+call runs before the embedding, the search and the answer, so HyDE roughly
+doubles time to first token.
+
+**The head-to-head cannot run yet.** Three configurations are needed —
+`scope.ts` alone, HyDE alone, both — and "HyDE alone" is not selectable, because
+`resolveScope` is called unconditionally at `src/app/api/chat/route.ts` and in
+three places in `eval/run.ts`. A `RAG_SCOPE_ENABLED` flag that nothing reads was
+deliberately NOT added; shipping config that silently does nothing is the same
+defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
+
 ## Acceptance criteria
 
 - [x] Token counts are within a stated tolerance of the provider's own
