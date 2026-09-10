@@ -38,6 +38,28 @@ export interface AgenticResult {
 /** Recent turns shown to the planner. Enough for a pronoun, not a summary. */
 export const PLANNER_CONTEXT_TURNS = 4
 
+/**
+ * Smallest loop budget that can actually complete a figure question.
+ *
+ * One search (~4s) plus one `read_figure` (~13.5s) plus a final planning call
+ * needs headroom that the 15s text-only default does not have.
+ */
+export const FIGURE_LOOP_FLOOR_MS = 45_000
+
+/**
+ * Smallest token budget that can complete a figure question.
+ *
+ * An image is expensive in tokens, not just in seconds: one `read_figure` was
+ * measured at **~6,600 tokens** against a text-only default of 8,000. So the
+ * first look at a picture all but exhausts the loop, and it terminates on
+ * `token-budget` holding a correct reading it never gets to use — observed end
+ * to end on 2026-09-10, twice, with the wall-clock budget already raised.
+ *
+ * The same floor treatment as `FIGURE_LOOP_FLOOR_MS`, for the same reason: two
+ * budgets guard this loop and a vision call blows through both.
+ */
+export const FIGURE_LOOP_FLOOR_TOKENS = 30_000
+
 const PLANNER_SYSTEM_PROMPT = `You plan document searches for a retrieval system.
 
 Call search_documents when answering needs information from the user's documents.
@@ -155,11 +177,27 @@ export async function runAgenticRetrieval(input: {
   // planner tokens on every question to describe something that cannot exist.
   const figureReadingEnabled =
     env.RAG_READ_FIGURE_ENABLED && env.RAG_CRACK_ENABLED
+
+  // `RAG_MAX_LOOP_MS` defaults to 15s, which was sized for TEXT searches at a
+  // measured 2.6-4.4s each. One `read_figure` is ~13.5s (render, crop, vision),
+  // so with figure reading on a 15s budget is spent by a single look at a
+  // picture and the loop terminates on `time-budget` before it can answer —
+  // observed end to end on 2026-09-10.
+  //
+  // A floor rather than a different default, because it has to hold for a
+  // deployment that set the value explicitly before turning figures on. It only
+  // ever raises: a larger configured budget wins.
+  const maxMs = figureReadingEnabled
+    ? Math.max(env.RAG_MAX_LOOP_MS, FIGURE_LOOP_FLOOR_MS)
+    : env.RAG_MAX_LOOP_MS
+  const maxTokens = figureReadingEnabled
+    ? Math.max(env.RAG_MAX_LOOP_TOKENS, FIGURE_LOOP_FLOOR_TOKENS)
+    : env.RAG_MAX_LOOP_TOKENS
   const outcome = await runAgenticLoop(
     {
       maxSearches: env.RAG_MAX_SEARCHES,
-      maxMs: env.RAG_MAX_LOOP_MS,
-      maxTokens: env.RAG_MAX_LOOP_TOKENS,
+      maxMs,
+      maxTokens,
     },
     {
       plan: async (steps, planSignal) => {
@@ -208,7 +246,11 @@ export async function runAgenticRetrieval(input: {
       // cannot service.
       ...(figureReadingEnabled
         ? {
-            readFigure: (chunkId: string, figureQuestion: string) =>
+            readFigure: (
+              chunkId: string,
+              figureQuestion: string,
+              figureSignal: AbortSignal,
+            ) =>
               readFigure(
                 {
                   ownerId: userId,
@@ -217,7 +259,10 @@ export async function runAgenticRetrieval(input: {
                   // Bound HERE, from the conversation — never from the model.
                   knowledgeBaseIds: permittedKbIds,
                 },
-                { signal },
+                // The loop's signal, not the request's: it carries whatever is
+                // left of the wall-clock budget, so a slow vision call is cut
+                // off rather than allowed to overrun it.
+                { signal: figureSignal },
               ),
           }
         : {}),

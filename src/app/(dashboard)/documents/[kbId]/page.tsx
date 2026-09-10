@@ -27,7 +27,7 @@ export default async function KnowledgeBasePage({
   if (!session?.user) redirect('/login')
 
   const { kbId } = await params
-  const [knowledgeBases, { configured }] = await Promise.all([
+  const [knowledgeBases, { configured, cracking }] = await Promise.all([
     listMyKnowledgeBases(),
     ragStatus(),
   ])
@@ -61,6 +61,7 @@ export default async function KnowledgeBasePage({
         knowledgeBases={knowledgeBases}
         initialDocuments={initialDocuments}
         configured={configured}
+        cracking={cracking}
       />
     </div>
   )

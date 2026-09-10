@@ -386,6 +386,21 @@ The tool counts against the loop's existing `maxSearches`, `maxMs` and
 `RAG_MAX_LOOP_MS` budget is significant and must be, or the loop will spend its
 whole allowance looking at pictures.
 
+> **Right in principle, wrong in the numbers (corrected 2026-09-10).** Bounding
+> the tool by the existing budgets was correct. Leaving those budgets at their
+> text-only values was not: one `read_figure` measured **~13.5s and ~6,600
+> tokens** against defaults of 15s and 8,000. In practice the first look at a
+> picture exhausted both, and the loop terminated on `time-budget` or
+> `token-budget` **holding a correct reading it never got to use** — observed
+> end to end, twice.
+>
+> Floors now apply when the tool is enabled: `FIGURE_LOOP_FLOOR_MS` 45s and
+> `FIGURE_LOOP_FLOOR_TOKENS` 30k, raising a configured value but never lowering
+> one. A deployment that tuned these before turning figures on still works.
+>
+> Worse, `maxMs` turned out not to be a bound at all — see the note in
+> [`0029`](0029-agentic-retrieval-loop.md).
+
 ### Schema
 
 ```

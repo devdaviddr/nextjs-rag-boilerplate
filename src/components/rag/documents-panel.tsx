@@ -68,6 +68,8 @@ interface DocumentsPanelProps {
   knowledgeBases: KnowledgeBaseSummary[]
   initialDocuments: DocumentSummary[]
   configured: boolean
+  /** Document cracking is on, so scanned PDFs are read rather than refused. */
+  cracking: boolean
 }
 
 export function DocumentsPanel({
@@ -75,6 +77,7 @@ export function DocumentsPanel({
   knowledgeBases,
   initialDocuments,
   configured,
+  cracking,
 }: DocumentsPanelProps) {
   const [documents, setDocuments] = useState(initialDocuments)
   const [isUploading, setIsUploading] = useState(false)
@@ -160,8 +163,9 @@ export function DocumentsPanel({
       <CardHeader>
         <CardTitle>Your documents</CardTitle>
         <CardDescription>
-          PDFs with selectable text. Scanned documents aren&apos;t supported yet
-          — they have no text layer to index.
+          {cracking
+            ? 'PDFs, including scanned ones. Pages with tables, figures or an unusual layout are read page by page, which takes longer than a plain text PDF.'
+            : "PDFs with selectable text. Scanned documents aren't supported yet — they have no text layer to index."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
