@@ -4,7 +4,7 @@ title: Agentic RAG, document cracking and the evaluation that makes both provabl
 status: Shipped
 release: 'v0.20.0'
 created: 2026-09-07
-updated: 2026-09-08
+updated: 2026-09-11
 ---
 
 # 0027 — Agentic RAG, document cracking, and the evaluation that makes both provable
@@ -103,23 +103,59 @@ model instead, and a good illustration of the gap this spec addresses.
 > a checklist. Work it recommended was specified and verified elsewhere:
 > Recommendation 0 and Phase 1a/1b shipped in v0.20.0 and are covered by the
 > criteria in [0028](0028-independent-knowledge-bases.md); Phase 3 became
-> [0029](0029-agentic-retrieval-loop.md), which carries its own criteria and
-> measurements. `status: Shipped` here means the recommendations that were taken
-> up have shipped — not that every row below is done. Several are deliberately
-> not started.
+> [0029](0029-agentic-retrieval-loop.md) and Phase 2 became
+> [0031](0031-tables-figures-and-complex-layouts.md), each of which carries its
+> own criteria and measurements. `status: Shipped` here means the
+> recommendations that were taken up have shipped — not that every row below is
+> done. Several are deliberately not started.
 
-| Item                                       | Status                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------- |
-| **0** Evaluation harness                   | **Shipped** — `pnpm rag:eval`, 20 questions, 3 documents with distractors |
-| **1a** Contextual chunk headers            | **Shipped**                                                               |
-| **1b** Hybrid retrieval (RRF)              | **Shipped**, with one sub-decision reversed — see below                   |
-| 1c Structure-aware / parent–child chunking | Not started                                                               |
-| 1d Real tokenizer                          | Not started                                                               |
-| 1e HNSW / filtered-ANN tuning              | Not started                                                               |
-| 1f Reranking                               | Blocked — no reranker on this account                                     |
-| 1g HyDE                                    | Not started                                                               |
-| Phase 2 Document cracking                  | Not started                                                               |
-| Phase 3 Agentic loop                       | Not started — blocked on 3a-bis                                           |
+| Item                                       | Status                                                                                                                                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** Evaluation harness                   | **Shipped** — `pnpm rag:eval`, 20 questions, 3 documents with distractors                                                                                                     |
+| **1a** Contextual chunk headers            | **Shipped**                                                                                                                                                                   |
+| **1b** Hybrid retrieval (RRF)              | **Shipped**, with one sub-decision reversed — see below                                                                                                                       |
+| 1c Structure-aware / parent–child chunking | Not started                                                                                                                                                                   |
+| 1d Real tokenizer                          | **Partly done** — calibrated counter in [0033](0033-retrieval-fundamentals.md); `length/4` under-counted table markup 48%. Still ~10%, so a real tokenizer remains the answer |
+| 1e HNSW / filtered-ANN tuning              | Not started                                                                                                                                                                   |
+| 1f Reranking                               | **Unblocked in principle** — [0036](0036-reranking.md) ships an LLM backend behind an interface; the blocked NIM endpoint was only ever one of three options. Unmeasured      |
+| 1g HyDE                                    | Not started                                                                                                                                                                   |
+| Phase 2 Document cracking                  | **Shipped** as [0031](0031-tables-figures-and-complex-layouts.md) — mixed result, see below                                                                                   |
+| Phase 3 Agentic loop                       | **Shipped** as [0029](0029-agentic-retrieval-loop.md), after 3a-bis was settled                                                                                               |
+
+### What the two shipped phases actually settled
+
+**Phase 3** went out as [`0029`](0029-agentic-retrieval-loop.md). 3a-bis was
+settled first, exactly as this spec insisted it must be, and the loop's shape
+followed from that answer rather than from the guess written here. Whether the
+agentic path should be the _default_ is a separate question and is still open —
+[`0032`](0032-settle-the-agentic-trade.md) exists to close it.
+
+**Phase 2** went out as
+[`0031`](0031-tables-figures-and-complex-layouts.md), **and half of the case
+made for it below did not survive measurement.** The scoreboard 0031 recorded:
+
+| Phase 2 claim, as argued below                       | Outcome                                                     |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| 2a — scanned pages are invisible, and OCR fixes that | **Proven**, at both the retrieval and the answer level      |
+| 2e — figures contribute nothing to the index         | **Proven** — new capability, there was no baseline to beat  |
+| 2c — a flattened table is "worse than useless"       | **Not reproduced**, on two deliberately destructive corpora |
+| 2c/1c — interleaved columns lose column association  | **Not reproduced**, on the same two corpora                 |
+
+0031 built a second corpus (`plant-services-manual`) specifically to make
+flattening destroy the answer — two columns whose sentences are word-for-word
+parallel, and a seven-column table with three two-column spans — and all three
+questions were answered **correctly with cracking off**. Across two independent
+fixtures and five questions the table-and-column gap did not appear once:
+`nvidia/nemotron-3-super-120b` reconstructs row-major interleaving and
+multi-level headers from flattened text reliably.
+
+So the honest reading is that Phase 2 is justified by **2a and 2e**, not by
+**2c**. The table and column work shipped anyway, because the same parse call
+returns it at no extra cost and better chunks are still better chunks — but it
+should never again be cited as the reason to spend one. 0031 records the limits
+of its own negative result too: three-row tables, one large chat model, and
+interleaving that alternates cleanly. It showed the failure is hard to produce,
+not that it cannot exist.
 
 Measured effect of 1a + 1b together, against the dense-only baseline:
 

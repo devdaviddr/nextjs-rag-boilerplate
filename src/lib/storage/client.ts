@@ -3,6 +3,7 @@ import 'server-only'
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -78,4 +79,63 @@ export async function deleteObject(key: string): Promise<void> {
   await client.send(
     new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
   )
+}
+
+/**
+ * Every key under `prefix`, following the listing's pagination.
+ *
+ * `prefix` MUST end in `/`. A bare prefix is a substring match on S3, so
+ * `listObjectKeys('alice')` would also return Bob-if-he-were-called-`alice2`'s
+ * objects; requiring the separator makes the prefix a folder boundary instead.
+ * This is enforced rather than documented because the only caller today feeds
+ * the result to a delete.
+ */
+export async function listObjectKeys(prefix: string): Promise<string[]> {
+  if (!prefix.endsWith('/') || prefix === '/') {
+    throw new Error(
+      `Refusing to list on an unbounded prefix: ${JSON.stringify(prefix)}. ` +
+        'A prefix must name a folder and end in "/".',
+    )
+  }
+
+  const keys: string[] = []
+  let continuationToken: string | undefined
+
+  do {
+    const page = await client.send(
+      new ListObjectsV2Command({
+        Bucket: env.S3_BUCKET,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    )
+    for (const object of page.Contents ?? []) {
+      const key = object.Key
+      // S3 promises every key it returns starts with the prefix we asked for.
+      // Checking anyway costs nothing and means a mis-implemented endpoint
+      // cannot widen a delete beyond the caller's intent.
+      if (typeof key === 'string' && key.startsWith(prefix)) keys.push(key)
+    }
+    continuationToken = page.IsTruncated
+      ? page.NextContinuationToken
+      : undefined
+  } while (continuationToken)
+
+  return keys
+}
+
+/**
+ * Deletes every object under `prefix` and returns how many went.
+ *
+ * One `DeleteObject` per key rather than a batched `DeleteObjects`: the batch
+ * API sends a content checksum that not every S3-compatible endpoint accepts,
+ * and the only caller clears a handful of evaluation fixtures. Correct and
+ * portable beats one fewer round trip here.
+ */
+export async function deleteObjectsUnderPrefix(
+  prefix: string,
+): Promise<number> {
+  const keys = await listObjectKeys(prefix)
+  for (const key of keys) await deleteObject(key)
+  return keys.length
 }

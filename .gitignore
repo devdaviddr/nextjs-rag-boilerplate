@@ -60,3 +60,6 @@ graphify-out/
 # Never commit; keep host directory permissions tight (see docs/backups.md).
 backups/
 eval/results/
+
+# Agent worktrees (created by Claude Code, never part of the repo).
+.claude/worktrees/

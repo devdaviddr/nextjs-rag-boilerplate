@@ -4,7 +4,7 @@ title: The retrieval fundamentals that were skipped
 status: Proposed
 release: '—'
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 ---
 
 # 0033 — The retrieval fundamentals that were skipped
@@ -131,6 +131,53 @@ calibration table beats `length / 4` without shipping a vocabulary. If
 calibration cannot get within a few percent on table and OCR text, ship the real
 tokenizer at ingestion only (FR2).
 
+> **Measured, and the calibration did not clear the bar it was given
+> (2026-09-11).** The cheap option was taken first, as this section recommends,
+> and calibration against the endpoint's own `usage` counts — 15 samples of
+> prose, table markup and OCR-like text, one `/embeddings` call each against
+> `nvidia/nemotron-3-embed-1b` — is now in `src/lib/rag/chunk.ts`. It is a
+> substantial improvement, and it is **not** what FR1 asks for.
+>
+> **The defect this section suspected was real, and worse than stated.** Against
+> the provider's reported counts:
+>
+> |                  | `length / 4`            | the calibration |
+> | ---------------- | ----------------------- | --------------- |
+> | prose            | mean −9.6%, max 19%     | max 9.5%        |
+> | OCR text         | mean −7.5%, max 17%     | max 7.3%        |
+> | **table markup** | **mean −48%, max −60%** | **max 8.1%**    |
+>
+> Table markup runs at ~2 characters per token, not ~4, because a digit costs a
+> token each. So a chunk the system believed was 512 tokens was really about a
+> thousand, and every budget, overlap tail and boundary computed over it was out
+> by a factor of two. That is not a rounding error in a knob; it is the chunker
+> silently doing something other than what it was configured to do, on exactly
+> the content [`0031`](0031-tables-figures-and-complex-layouts.md) had just
+> added to the corpus.
+>
+> **The condition attached above was met, and its consequence has not been
+> honoured.** This section says: if calibration cannot get within a few percent
+> on table and OCR text, ship the real tokenizer. It gets to ~10% worst case
+> (11% leaving each sample out of its own fit) — about four times the stated
+> bar. `estimateTokens` is still an estimate and its own comment says so: _"It
+> is not the model's vocabulary."_ So **1d is improved, not satisfied**, FR1 is
+> still open, and this spec's answer is still a real tokenizer at ingestion
+> time. What was bought is a six-fold improvement for no new dependency, which
+> is worth having and is not the requirement.
+>
+> Two things about it that should not be lost:
+>
+> - **The hard slice was fixed too, and had the same bug.** `sliceToBudget` sized
+>   its first guess at `budgetTokens * 4` characters — the same fixed ratio, on
+>   the one path that exists precisely for the oversized table and OCR runs where
+>   the ratio is worst. It now takes the first guess from the text's own measured
+>   density and walks down until it fits.
+> - **The calibration is not reproducible from the repo.** Whatever produced the
+>   15 samples was never committed; five of them survive as a fixture in
+>   `tests/unit/rag-chunk.test.ts`, recorded rather than fetched because a unit
+>   test that needs an API key and a rate-limited shared account is not a unit
+>   test. Refitting these constants means rebuilding that harness first.
+
 ### 1c — parent–child chunking
 
 Cracked pages already produce `NormalizedElement`s carrying `heading` and
@@ -165,11 +212,55 @@ here resizes chunks, so refusal must be re-checked after each one and not just
 at the end. This project has already seen refusal fall from 1.000 to 0.667
 _while every other metric improved_.
 
+### 1g — HyDE is built, and the evidence so far argues against it
+
+Implemented behind `RAG_HYDE_ENABLED` (default off), 2026-09-11. It works
+mechanically — 8/8 hypotheticals parsed via a native tool call, in a document's
+voice with headings, defined terms and concrete numbers. The control call
+without `tools` returned `"Here's a thinking process:"` and no passage,
+reproducing what `rewrite.ts` and `planner.ts` already document about reasoning
+models.
+
+**Two measurements point the wrong way, and both are cases this spec expected
+HyDE to win.**
+
+1. **It invents the wrong document.** Asked to summarise an HR handbook, it
+   wrote a fluent excerpt about a _RAG developer manual_ — FAISS index
+   parameters and all — inferred purely from the file's title. That vector
+   points away from the real document. Summarisation is precisely the case
+   [`0027`](0027-agentic-rag-and-document-cracking.md) predicted HyDE would
+   rescue.
+
+2. **It manufactures plausible answers to unanswerable questions.** Given the
+   corpus's canonical refusal case — "How much parental leave am I entitled
+   to?", which the corpus cannot answer — it produced a detailed, plausible
+   parental-leave policy. That embeds far closer to the corpus's real leave
+   passages than the bare question does, pushing similarity **up** for a
+   question that must refuse. NFR2's hazard in concrete form.
+
+**Latency:** median 9.5s on the chat model (4.7–15.8s), 18.3s on the smaller
+planner model (12.1–45.5s, worst case landing on the summarise question). The
+call runs before the embedding, the search and the answer, so HyDE roughly
+doubles time to first token.
+
+**The head-to-head cannot run yet.** Three configurations are needed —
+`scope.ts` alone, HyDE alone, both — and "HyDE alone" is not selectable, because
+`resolveScope` is called unconditionally at `src/app/api/chat/route.ts` and in
+three places in `eval/run.ts`. A `RAG_SCOPE_ENABLED` flag that nothing reads was
+deliberately NOT added; shipping config that silently does nothing is the same
+defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
+
 ## Acceptance criteria
 
-- [ ] Token counts are within a stated tolerance of the provider's own
+- [x] Token counts are within a stated tolerance of the provider's own
       `usage` figures, on prose, table markup and OCR text —
-      `tests/unit/rag-chunk.test.ts`
+      `tests/unit/rag-chunk.test.ts`, _"is within 15% of the provider's own
+      count on $kind"_, over five recorded `usage` counts covering prose, LaTeX
+      `tabular`, a formulae table, a pipe table and OCR-like text. **The stated
+      tolerance is 15%, not the "few percent" the Design section set as the bar
+      for keeping the calibration** — this criterion asks only that a tolerance
+      be stated and met, and that is a weaker thing than FR1 asks for. See the
+      note under _1d — a real tokenizer_
 - [ ] `pnpm rag:eval` after 1d alone, recorded, refusal 1.000
 - [ ] Filtered-ANN recall measured for a small-share tenant, with the
       `hnsw.iterative_scan` decision and its numbers recorded here
@@ -180,8 +271,35 @@ _while every other metric improved_.
 - [ ] HyDE measured alone, `scope.ts` measured alone, and both together, on the
       same questions — the loser removed or disabled with numbers stated
 - [ ] Refusal accuracy is 1.000 at every one of those checkpoints
-- [ ] Chunks still never span a page boundary — `tests/unit/rag-chunk.test.ts`
-- [ ] `docs/rag.md`'s chunking section reflects what is actually done
+- [x] Chunks still never span a page boundary — `tests/unit/rag-chunk.test.ts`,
+      _"never lets a chunk span a page boundary"_ and _"still never lets a chunk
+      span a page boundary when boxed"_, the second added with
+      [`0035`](0035-span-level-citations.md)'s box-tracking so the invariant is
+      re-proved on the path that walks items alongside the text (NFR3)
+- [x] `docs/rag.md`'s chunking section reflects what is actually done — it
+      described `length / 4`, which the calibration replaced, so it was not
+      stale but false; rewritten with the measured error rates
+
+> **Not verified (2026-09-11).** Every remaining criterion needs a measurement
+> run, and none has been done:
+>
+> - **The four `pnpm rag:eval` checkpoints and the refusal-accuracy line.** 1d
+>   is in the tree and **has not been measured**, which is the one thing the
+>   Design section's ordering argument said must not happen. Table chunks got
+>   roughly twice as small, `RAG_MIN_SIMILARITY` (0.35) was calibrated against
+>   the old sizes, and _What a reviewer must not get wrong_ is specifically
+>   about this: refusal has already fallen from 1.000 to 0.667 once in this
+>   project while every other metric improved. The change's own commit message
+>   says "Refusal must be re-measured before this ships." It has not been.
+> - **1e's filtered-ANN recall** needs a database and a constructed small-share
+>   tenant corpus as well as a run. `hnsw.iterative_scan` appears nowhere in the
+>   tree; the only related artefact is `CANDIDATE_POOL_CEILING` in
+>   `retrieve.ts`, which widens the candidate pool for the multi-KB case and is
+>   neither this measurement nor a substitute for it.
+> - **1c and 1g are unstarted.** No parent–child chunking exists — `Chunk` has
+>   no parent link and no migration adds one — and there is no HyDE
+>   implementation, so nothing has been measured against `scope.ts`. Their
+>   criteria are open because the work is open, not because a run is pending.
 
 ## Security & privacy
 
@@ -213,6 +331,29 @@ allowed to become a reason to relax them.
   ruled headers and footers to the parser, which is a cost problem in
   [`0031`](0031-tables-figures-and-complex-layouts.md)'s territory rather than a
   retrieval-quality one. Tracked separately.
+
+  > **Done, and not by tuning the threshold (2026-09-11).** This entry assumed
+  > the fix was `minVectorOps`. It was not: the threshold is **still 6**, and
+  > the defect was that `vectorOpCount` counted the page template as content.
+  > `signals.ts` now discounts full-width rules and page-size frames before
+  > triage ever sees the number, so the running header, footer and border that
+  > nearly every corporate PDF carries no longer clear the threshold on their
+  > own. `itemCount` was fixed alongside it to exclude pdf.js's synthetic
+  > whitespace spacers, with `denseItemRatio` recalibrated 8 → 10 to match.
+  >
+  > Measured on a realistically styled 8-page report: **8 of 8 pages routed to
+  > the parser, now 6 of 8** — the two prose pages are free, and the chart,
+  > the flowchart, both table pages and the scanned page still route.
+  > `eval/corpus` is unchanged at 6 of 17, with the same route on every page,
+  > which is the control that shows this narrowed the trigger rather than
+  > weakening it.
+  >
+  > Two honest limits. The 8-page document **is not in the repo**, so that
+  > figure is not reproducible from a checkout — `eval/make-corpus.mjs`
+  > generates no page template, which is exactly why the regression was
+  > invisible for so long. And the unit tests pin the mechanism (furniture
+  > scores 0, a chart scores 3) rather than the outcome, so nothing would fail
+  > if 6 of 8 regressed.
 
 ## References
 

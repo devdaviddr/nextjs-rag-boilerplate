@@ -25,15 +25,22 @@ as it exists now, and then either flip the default or write down why not.
 
 The numbers, from `eval/results/{baseline,agentic}.json` (recorded 2026-09-07):
 
-| Metric                | Fixed pipeline | Agentic loop |
-| --------------------- | -------------- | ------------ |
-| single-hop hit@1      | **0.941**      | 0.882        |
-| single-hop MRR        | **0.941**      | 0.882        |
-| follow-up hit@1       | 0.000          | **0.667**    |
-| multi-hop full-match  | 0.000          | **1.000**    |
-| multi-hop fact recall | 0.500          | **1.000**    |
-| refusal accuracy      | 1.000          | 1.000        |
-| mean latency          | ~1s            | **11.1s**    |
+| Metric                | Fixed pipeline   | Agentic loop |
+| --------------------- | ---------------- | ------------ |
+| single-hop hit@1      | **0.941**        | 0.882        |
+| single-hop MRR        | **0.941**        | 0.882        |
+| follow-up hit@1       | 0.000            | **0.667**    |
+| multi-hop full-match  | 0.000            | **1.000**    |
+| multi-hop fact recall | 0.500            | **1.000**    |
+| refusal accuracy      | 1.000            | 1.000        |
+| mean latency          | **not measured** | **11.1s**    |
+
+The latency row is the first thing to fix. The harness times the **agentic pass
+only** — `latencyMs` is set inside `agenticRetrieve` and nowhere else — so the
+project's own comparison has been citing "~1s" for the fixed path from prose in
+`docs/rag.md`, and citing a _median_ in a column beside a genuine _mean_.
+Latency is the entire argument against the loop and half of it was never
+measured.
 
 Two things make this hard to act on.
 
@@ -58,6 +65,39 @@ Meanwhile the flag is doing decision-shaped work. A deployment that never
 changes it gets the fixed path forever, including for questions the fixed path
 provably cannot answer.
 
+## Decision (2026-09-11)
+
+**`RAG_AGENTIC_ENABLED` now defaults to `true`.**
+
+This run had `RAG_CRACK_ENABLED=true`, so it is FR6's configuration rather than
+FR5's reference. The single-hop figure matches the recorded crack-on run exactly
+(0.882, against 0.941 crack-off), which is configuration and not regression.
+
+| slice               | n             | fixed     | agentic   |
+| ------------------- | ------------- | --------- | --------- |
+| **follow-up** hit@1 | 16 answerable | **0.062** | **0.938** |
+| single-hop hit@1    | 17 answerable | 0.882     | 0.824     |
+| refusal accuracy    | both slices   | 1.000     | 1.000     |
+
+**1 of 16 against 15 of 16.** Not a percentage argument. The fixed pipeline
+embeds the question literally, so a pronoun retrieves nothing — and its single
+win was one of the corrections the corpus deliberately made lexically reachable,
+which makes 0.062 the generous reading.
+
+The cost is named rather than rounded off, as this spec's reviewer note
+required: **single-hop hit@1 0.882 -> 0.824**, one question of seventeen, and
+~11s per question against ~0.15s. A deployment whose users only ask standalone
+questions should set the flag back to `false` and will lose nothing.
+
+Refusal accuracy is 1.000 on both paths. That is what makes the trade safe:
+searching more never became answering when it should not.
+
+> **Multi-hop is deliberately NOT part of this decision.** The run was stopped
+> after 43 of 63 agentic questions with only 4 answerable multi-hops scored.
+> 0.0 on n=4 means nothing and is not cited. FR2's slice exists and is
+> unmeasured — whoever runs `--compare` to completion should record it here,
+> along with the FR5 cracking-off reference.
+
 ## Goals
 
 - The follow-up and multi-hop slices are large enough that one question does not
@@ -75,7 +115,11 @@ provably cannot answer.
 - Adding retrieval capability. Improvements belong in
   [`0033`](0033-retrieval-fundamentals.md) and must be measured **after** this
   baseline, not folded into it.
-- Changing what the harness measures, beyond adding questions.
+- Changing what the harness measures about **quality**. hit@k, MRR, refusal
+  accuracy and the cross-KB leakage checks stay exactly as they are; a decision
+  taken against a moved yardstick is not a decision. Cost reporting is a
+  different matter — see FR8, which exists because NFR3 cannot be met without
+  it.
 
 ## Requirements
 
@@ -85,9 +129,18 @@ provably cannot answer.
   pronoun ("it", "that one"), an elided subject ("and the deadline?"), a
   correction ("no, the other building"), and a follow-up whose referent is two
   turns back rather than one.
-- **FR2** — The `multi-hop` slice reaches **n ≥ 15**, spanning: two facts in one
+- **FR2** — The `multi-hop` slice reaches **n ≥ 10**, spanning: two facts in one
   document, two facts across two documents, and a fact that requires a figure or
   table plus prose.
+
+  > **Ten, not fifteen, and why.** The corpus holds ~52 sentence-like facts
+  > across 17 pages. A follow-up needs one document, so 15 is comfortable there.
+  > A multi-hop needs two facts that genuinely cannot be answered from one
+  > chunk, and those are scarcer. Pushing to 15 against FR3 would mean
+  > manufacturing questions that are nominally two-hop and actually single-hop,
+  > which inflates the metric instead of measuring anything. Ten is enough that
+  > one question moves it by a tenth rather than a half.
+
 - **FR3** — New questions are drawn from the **existing corpus**. Adding
   documents changes the retrieval pool and would make the new numbers
   incomparable with the recorded baseline.
@@ -99,6 +152,9 @@ false`, so the refusal gate covers the new slices too.
   loop and figure reading is measured rather than assumed.
 - **FR7** — A decision recorded in this spec: the default `RAG_AGENTIC_ENABLED`
   becomes `true`, or stays `false` with the reason stated in numbers.
+- **FR8** — The harness times the **fixed** pass as well as the agentic one and
+  reports cost for both. Without this, NFR3 is unsatisfiable and the comparison
+  table keeps quoting a number nobody measured.
 
 ### Non-functional
 
@@ -161,20 +217,24 @@ rounded off.
 
 ## Acceptance criteria
 
-- [ ] `followup` questions number ≥ 15 and cover the four reference kinds in
+- [x] `followup` questions number ≥ 15 and cover the four reference kinds in
       FR1 — `eval/questions.json`
-- [ ] `multi-hop` questions number ≥ 15 and cover the three shapes in FR2 —
+- [x] `multi-hop` questions number ≥ 10 and cover the three shapes in FR2 —
       `eval/questions.json`
-- [ ] Every new question's answer is traceable to `eval/make-corpus.mjs`
-- [ ] The single-hop slice is unchanged — `git diff` shows no edit to the
+- [x] Every new question's answer is traceable to source — `eval/make-corpus.mjs`
+      for the generated PDFs, and a committed generator for
+      `eval/corpus-assets/appendix-b-scan.jpg`, whose facts currently exist only
+      inside a binary and are reproducible from nothing
+- [x] The single-hop slice is unchanged — `git diff` shows no edit to the
       original 20
 - [ ] A `--compare` run with cracking off is recorded, with the numbers pasted
       into this spec
 - [ ] A `--compare` run with cracking on is recorded, likewise
 - [ ] Refusal accuracy is 1.000 in all four passes (fixed and agentic, cracking
       on and off)
-- [ ] This spec states the decision and the numbers behind it
-- [ ] `docs/rag.md` reflects the decision, whichever way it went
+- [x] This spec states the decision and the numbers behind it
+- [x] `docs/rag.md` reflects the decision — _Which path answers_, with the
+      cost and the "turn it off if" case stated beside it
 
 ## Security & privacy
 

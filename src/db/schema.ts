@@ -9,6 +9,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -308,6 +309,20 @@ export const documents = pgTable(
     // Populated only when status = 'failed'. User-facing, so it must stay
     // readable — no stack traces.
     error: text('error'),
+    // The claim (spec 0034 FR4). A worker takes a document by conditionally
+    // stamping this, and refreshes it on every page it finishes, so a live
+    // run keeps its claim fresh while a dead one lets it expire. NULL means
+    // nothing holds this document.
+    //
+    // It is a lease, NOT a lock: a worker that hangs past the window has its
+    // document claimed by another and both may finish. That is safe only
+    // because the chunk write is a single delete-then-insert transaction
+    // (NFR5) — the second commit wins and neither leaves duplicates.
+    claimedAt: timestamp('claimed_at', { mode: 'date' }),
+    // How many times ingestion has been started for this document. Bounds
+    // automatic recovery (FR2): a file that reliably crashes the parser would
+    // otherwise be retried forever against a shared rate limit.
+    attempts: integer('attempts').notNull().default(0),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .notNull()
@@ -318,6 +333,10 @@ export const documents = pgTable(
     index('documents_owner_id_idx').on(table.ownerId),
     index('documents_status_idx').on(table.status),
     index('documents_knowledge_base_id_idx').on(table.knowledgeBaseId),
+    // The recovery sweep's only query: transient status, expired claim. Both
+    // columns together, because status alone selects every `ready` document
+    // in the table and there are far more of those.
+    index('documents_status_claimed_at_idx').on(table.status, table.claimedAt),
   ],
 )
 
@@ -359,10 +378,76 @@ export interface ExtractionPage {
  */
 export interface ExtractionSummary {
   pages: ExtractionPage[]
+  /** Pages that consumed cracking budget, cached or not — see `cachedPages`. */
   parseCalls: number
   describeCalls: number
+  /**
+   * Of `parseCalls`, how many were served from `parsedPages` instead of the
+   * endpoint (spec 0034 FR3). Optional because rows written before resumable
+   * ingestion existed do not have it, and absent is not the same as zero.
+   */
+  cachedPages?: number
   budgetExhausted: boolean
 }
+
+/**
+ * One element as the layout parser returned it.
+ *
+ * Structurally identical to `ParsedElement` in `src/lib/rag/parse-types.ts`,
+ * and deliberately re-declared rather than imported: drizzle-kit loads this
+ * file outside Next.js, where the `@/` alias is not guaranteed to resolve, and
+ * a schema that only compiles inside the app is a schema that cannot generate
+ * a migration.
+ */
+export interface ParsedPageElement {
+  type: string
+  text: string
+  bbox: ChunkBox
+}
+
+/**
+ * The parse cache — the half of resumability that actually saves money
+ * (spec 0034 FR3).
+ *
+ * Keyed by file and page, not by document: parser output is a pure function of
+ * the page image, and the page image is a pure function of the immutable
+ * uploaded bytes. So an entry can never be wrong for its key, only absent —
+ * which is why this needs no invalidation beyond `renderScale` below.
+ *
+ * Without it a restart mid-crack re-pays every parse call from page 1, because
+ * `crackDocument` holds its output in memory and only the final transaction
+ * persists anything. With it, a document that cracked 20 of 25 pages resumes
+ * having already bought those 20.
+ *
+ * Rows cascade with the file so the cache can never outlive the bytes it
+ * describes, and ingestion drops a document's entries once it reaches `ready` —
+ * at that point the chunks are the durable artefact and this is just bulk.
+ */
+export const parsedPages = pgTable(
+  'parsed_pages',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    /** 1-based, matching `ExtractionPage.page` and every citation. */
+    page: integer('page').notNull(),
+    // The render scale the parser actually saw. A page rasterised at 1.5x and
+    // one at 2.0x are different inputs, so an entry written under one scale
+    // must not be served under another — otherwise changing
+    // RAG_CRACK_RENDER_SCALE silently keeps serving the old resolution's
+    // output forever, and the setting appears to do nothing.
+    renderScale: real('render_scale').notNull(),
+    elements: jsonb('elements').$type<ParsedPageElement[]>().notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One row per page, so a re-parse overwrites rather than accumulating.
+    uniqueIndex('parsed_pages_file_id_page_idx').on(table.fileId, table.page),
+  ],
+)
 
 export const chunks = pgTable(
   'chunks',
@@ -418,6 +503,15 @@ export const chunks = pgTable(
     // needs — deferred in spec 0026 for exactly the reason that nothing was
     // capturing it.
     bbox: jsonb('bbox').$type<ChunkBox>(),
+    // The FULL list of regions this chunk came from (spec 0035 FR6).
+    //
+    // `bbox` above holds a single rectangle and cannot express a chunk that
+    // spans two columns — a union there covers the gutter and the wrong
+    // column, which is the "confidently wrong highlight" 0035 says is worse
+    // than no highlight at all. Both columns exist for as long as rows written
+    // before this do: `src/lib/citations/boxes.ts` is the single reader that
+    // reconciles them, and a null here falls back to `bbox`.
+    boxes: jsonb('boxes').$type<ChunkBox[]>(),
     embedding: halfvec('embedding', { dimensions: 2048 }).notNull(),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },
@@ -654,6 +748,8 @@ export type PushSubscription = typeof pushSubscriptions.$inferSelect
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert
 export type DocumentRecord = typeof documents.$inferSelect
 export type NewDocumentRecord = typeof documents.$inferInsert
+export type ParsedPageRecord = typeof parsedPages.$inferSelect
+export type NewParsedPageRecord = typeof parsedPages.$inferInsert
 export type ChunkRecord = typeof chunks.$inferSelect
 export type NewChunkRecord = typeof chunks.$inferInsert
 export type Conversation = typeof conversations.$inferSelect

@@ -7,9 +7,10 @@ import { countColumns, countDrawOps, textAreaRatio } from '@/lib/rag/signals'
  * PDF and is exercised end to end against `eval/corpus`; everything decidable
  * without one is pinned here.
  *
- * Both fixtures below are geometry measured off the eval corpus, not invented:
- * the whitespace filler and the operator counts are what pdf.js actually
- * returned on 2026-09-10.
+ * The fixtures below are geometry measured off real PDFs, not invented: the
+ * whitespace filler and the corpus operator counts are what pdf.js returned on
+ * 2026-09-10, and the header/footer/frame/chart boxes are what it returned for
+ * a realistically styled 8-page report on 2026-09-11.
  */
 
 const PAGE_WIDTH = 612
@@ -91,6 +92,11 @@ describe('countDrawOps', () => {
     beginText: 1,
     setFont: 2,
     showText: 3,
+    save: 10,
+    restore: 11,
+    transform: 12,
+    paintFormXObjectBegin: 74,
+    paintFormXObjectEnd: 75,
     constructPath: 91,
     rawFillPath: 94,
     shadingFill: 62,
@@ -98,9 +104,36 @@ describe('countDrawOps', () => {
     paintImageMaskXObject: 83,
   }
 
+  /**
+   * One `constructPath` with the given page-space box, in the argument shape
+   * pdf.js emits: `[pathOps, [coords], minMax]`.
+   */
+  const path = (
+    xMin: number,
+    yMin: number,
+    xMax: number,
+    yMax: number,
+  ): unknown => [
+    [0, 1],
+    [new Float32Array([xMin, yMin, xMax, yMax])],
+    [xMin, yMin, xMax, yMax],
+  ]
+
+  /** Boxes measured off `~/Desktop/rag-cracking-test.pdf`, scaled to Letter. */
+  const HEADER_RULE = path(51.7, 774, 544.5, 775)
+  const FRAME = path(46, 48, 566, 744)
+  const CHART_BAR = path(70, 400, 122, 560)
+  const CHART_AXIS = path(100, 400, 438, 400.5)
+  const TABLE_CELL_RULE = path(51, 500, 129, 501)
+
+  const count = (
+    fnArray: number[],
+    argsArray: unknown[],
+    ops: Record<string, number> = OPS,
+  ) => countDrawOps(fnArray, argsArray, ops, PAGE_WIDTH, PAGE_HEIGHT)
+
   it('counts nothing on a text-only page', () => {
-    const fnArray = [1, 2, 3, 3, 3]
-    expect(countDrawOps(fnArray, OPS)).toEqual({
+    expect(count([1, 2, 3, 3, 3], [null, null, null, null, null])).toEqual({
       imageCount: 0,
       vectorOpCount: 0,
     })
@@ -109,7 +142,8 @@ describe('countDrawOps', () => {
   it('counts the vector chart the corpus actually contains', () => {
     // Measured on site-operations-report p3: 7 constructPath, no images.
     const fnArray = [1, 2, ...Array<number>(7).fill(91), 3]
-    expect(countDrawOps(fnArray, OPS)).toEqual({
+    const argsArray = [null, null, ...Array<unknown>(7).fill(CHART_BAR), null]
+    expect(count(fnArray, argsArray)).toEqual({
       imageCount: 0,
       vectorOpCount: 7,
     })
@@ -117,19 +151,64 @@ describe('countDrawOps', () => {
 
   it('counts the scanned page the corpus actually contains', () => {
     // Measured on maintenance-log p2: a single paintImageXObject, no text.
-    expect(countDrawOps([85], OPS)).toEqual({
-      imageCount: 1,
-      vectorOpCount: 0,
-    })
+    expect(count([85], [null])).toEqual({ imageCount: 1, vectorOpCount: 0 })
   })
 
   it('ignores operators the running pdf.js does not define', () => {
     // Names are resolved from OPS at run time precisely so an absent one is
     // skipped rather than matching opcode `undefined`.
     const partial = { constructPath: 91 }
-    expect(countDrawOps([91, 85, 62], partial)).toEqual({
+    expect(count([91, 85, 62], [CHART_BAR, null, null], partial)).toEqual({
       imageCount: 0,
       vectorOpCount: 1,
     })
+  })
+
+  it('does not count the running header and footer rules', () => {
+    // The regression this exists for: a ruled header, a ruled footer and a
+    // border box appear on EVERY page of a corporate template, and three of
+    // them plus a logo cleared minVectorOps on pages of ordinary prose.
+    const FOOTER_RULE = path(51.7, 60, 544.5, 61)
+    expect(
+      count([91, 91, 91], [HEADER_RULE, FOOTER_RULE, FRAME]).vectorOpCount,
+    ).toBe(0)
+  })
+
+  it('still counts what a chart and a table draw', () => {
+    // The discrimination: a header rule spans the text column, a chart's
+    // paths are tall and a table's rules are short. Measured widths on the
+    // test document were 0.827 for the rules against 0.656 and 0.400.
+    expect(
+      count([91, 91, 91], [CHART_BAR, CHART_AXIS, TABLE_CELL_RULE])
+        .vectorOpCount,
+    ).toBe(3)
+  })
+
+  it('measures the box in page space, not the space it was drawn in', () => {
+    // pdf.js reports path bounds BEFORE the CTM: on the test document a
+    // header rule comes back as x 8..665 on a 596-point page. Untransformed
+    // it looks like a narrow mark and gets counted; transformed it is a rule.
+    const raw = path(5.17, 77.4, 54.45, 77.5)
+    const scale = [10, 0, 0, 10, 0, 0]
+
+    expect(count([91], [raw]).vectorOpCount).toBe(1)
+    expect(count([12, 91], [scale, raw]).vectorOpCount).toBe(0)
+  })
+
+  it('restores the CTM, so a transform cannot leak past its restore', () => {
+    const raw = path(5.17, 77.4, 54.45, 77.5)
+    const scale = [10, 0, 0, 10, 0, 0]
+    // save · transform · <path> · restore · <same path>: the first is a rule
+    // under the scale, the second is a narrow mark without it.
+    expect(
+      count([10, 12, 91, 11, 91], [null, scale, raw, null, raw]).vectorOpCount,
+    ).toBe(1)
+  })
+
+  it('counts an operation whose geometry cannot be established', () => {
+    // `shadingFill` carries no bounds, and a malformed argument list is a
+    // shape change in pdf.js we would rather over-count than silently drop:
+    // under-counting hides a figure, which is the failure this pipeline fixes.
+    expect(count([62, 91], [['pattern'], ['nonsense']]).vectorOpCount).toBe(2)
   })
 })

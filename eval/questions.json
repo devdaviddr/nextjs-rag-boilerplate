@@ -1,5 +1,7 @@
 {
-  "$comment": "Ground truth for the retrieval harness (spec 0027, Recommendation 0; spec 0029 Evaluation). Each question names the document and page that answers it. `answerable: false` means the corpus does not contain the answer and the system must refuse. `hard` labels why a case is included, so a regression report says what kind of retrieval broke. `type` is 'single-hop' (default, the original 20 — untouched, so the recorded baseline stays comparable), 'followup' (a two-turn fixture whose `turns` are prior conversation; the standalone `question` is a pronoun-bearing reference that only retrieves correctly once resolved — spec 0029's whole reason for existing), or 'multi-hop' (the answer needs facts from two documents, given as `answerDocuments`; a single `document`/`page` cannot express it).",
+  "$comment": "Ground truth for the retrieval harness (spec 0027, Recommendation 0; spec 0029 Evaluation). Each question names the document and page that answers it. `answerable: false` means the corpus does not contain the answer and the system must refuse. `hard` labels why a case is included, so a regression report says what kind of retrieval broke. `type` is 'single-hop' (default, the original 20 — untouched, so the recorded baseline stays comparable), 'followup' (a fixture whose `turns` are prior conversation; the standalone `question` is a reference that only retrieves correctly once resolved — spec 0029's whole reason for existing), or 'multi-hop' (the answer needs facts from more than one page, given as `answerDocuments`; a single `document`/`page` cannot express it).",
+  "$comment-0032": "Spec 0032 grew the two slices that carry the RAG_AGENTIC_ENABLED decision: followup 3 -> 20 and multi-hop 2 -> 15, so one question no longer moves a metric by a third. Every new fact is traceable to eval/make-corpus.mjs, or — for the maintenance log's scanned Appendix B — to eval/corpus-assets/make-appendix-b-scan.py, which was written for this change so that page's ground truth is readable in source instead of only inside a JPEG. No document was added: the retrieval pool is the same six the recorded baseline ran against. The followup slice spans four reference kinds (pronoun, elided subject, correction, and a referent two turns back rather than one) and the multi-hop slice spans three shapes (two facts in one document, two facts across two documents, and a fact needing a table or figure plus prose).",
+  "$comment-0032-refusals": "Four followups and three multi-hops are `answerable: false` so the refusal gate covers the new slices. NOTE for whoever owns eval/run.ts: `scoreQuestion` tests `type === 'multi-hop'` BEFORE it tests `!q.answerable`, so an unanswerable multi-hop takes the multi-hop branch, finds no `answerDocuments`, and scores `passed: false` however well the system refuses — multi-hop refusal accuracy reads 0.000 until those two branches are reordered. The questions below are shaped correctly (no `answerDocuments`, the same way an unanswerable single-hop carries no `document`/`page`); the scorer is what needs the fix.",
   "questions": [
     {
       "id": "leave-entitlement",
@@ -241,6 +243,366 @@
       "hard": "'that' must resolve to the salary review process — embedded literally the question names no topic at all"
     },
     {
+      "id": "followup-expense-deadline-elided",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "Who approves a claim over 500 dollars?"
+        },
+        {
+          "role": "assistant",
+          "content": "Claims over 500 dollars require director approval before payment."
+        }
+      ],
+      "question": "And the deadline?",
+      "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
+      "page": 2,
+      "answerable": true,
+      "hard": "elided subject, the shape spec 0032 FR1 names. Three words, none of them in the corpus — the handbook says 'within 30 days of the trip' and never writes 'deadline'. Embedded literally this is a near-empty query with nothing to match on; resolved, it is unambiguously the expense deadline."
+    },
+    {
+      "id": "followup-notice-after-probation",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How much notice do I have to give during probation?"
+        },
+        {
+          "role": "assistant",
+          "content": "Either party may end the appointment during probation with one week notice."
+        }
+      ],
+      "question": "And after that?",
+      "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
+      "page": 2,
+      "answerable": true,
+      "hard": "elision plus 'that'. The answer moves from Part A to Part B of the same contract, so a path that fails to resolve the reference lands back on the probation clause it was just given and repeats one week instead of four. Page-level scoring catches precisely that repeat."
+    },
+    {
+      "id": "followup-lift-capacity-correction",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is the rated capacity of the north wing lift?"
+        },
+        {
+          "role": "assistant",
+          "content": "The north wing lift's new rated capacity is 1600 kilograms."
+        }
+      ],
+      "question": "No, I meant the other one.",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "correction with no content word in it at all — 'the other one' is the south wing lift, 1000 kilograms. Embedded literally the query matches nothing, so the fixed path misses the page outright. Both lifts sit on page 1, so once resolved the page-level score cannot tell 1600 from 1000: what this measures is whether the reference resolved, not which number came back."
+    },
+    {
+      "id": "followup-setpoint-building-b-correction",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is Building A's chilled water setpoint?"
+        },
+        {
+          "role": "assistant",
+          "content": "Building A's chilled water setpoint is 6.5 degrees."
+        }
+      ],
+      "question": "Sorry, I meant Building B.",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "correction that names the new entity but not the topic. 'Building B' occurs once in the corpus, on this page, so the retrieval is winnable lexically — but the facilities guide's 'The building is open from 6am to 8pm' is a strong decoy for a two-word query, which makes this the correction case where the fixed path can land on the wrong document rather than on nothing."
+    },
+    {
+      "id": "followup-probation-notice-two-back",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How long is the probation period?"
+        },
+        {
+          "role": "assistant",
+          "content": "The probation period is six months from the commencement date."
+        },
+        {
+          "role": "user",
+          "content": "And when is salary reviewed?"
+        },
+        {
+          "role": "assistant",
+          "content": "Salary is reviewed annually in July."
+        }
+      ],
+      "question": "How much notice ends it early?",
+      "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
+      "page": 1,
+      "answerable": true,
+      "hard": "referent two turns back, the fourth shape in spec 0032 FR1. 'It' is the probation period, not the salary review the assistant just described. The nearest antecedent lives on page 3 and the answer on page 1 of the same contract, so a rewriter that reaches for the most recent noun phrase is scored wrong rather than merely lucky."
+    },
+    {
+      "id": "followup-lift-certification-two-back",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is the rated capacity of the north wing lift?"
+        },
+        {
+          "role": "assistant",
+          "content": "The north wing lift's new rated capacity is 1600 kilograms."
+        },
+        {
+          "role": "user",
+          "content": "How many unplanned downtime hours did Geelong record?"
+        },
+        {
+          "role": "assistant",
+          "content": "Geelong recorded 388 unplanned downtime hours."
+        }
+      ],
+      "question": "Until when is it certified?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "referent two turns back, inside one report: 'it' is the north wing lift (certified until 2031, page 1) while the intervening turn was the Geelong row of the table on page 2. 'Certified' does appear on page 1, so the fixed path can reach the right page by lexical luck — kept deliberately, because a slice where every question fails for one identical reason measures one thing fifteen times."
+    },
+    {
+      "id": "followup-parking-permit-pronoun",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "Where do staff park?"
+        },
+        {
+          "role": "assistant",
+          "content": "Staff parking is the car park on Wellington Street."
+        }
+      ],
+      "question": "How do I get one?",
+      "document": "facilities-guide",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "'one' is a parking permit — a noun neither turn actually uses, so the reference has to be inferred rather than copied. The standalone question carries no corpus vocabulary whatever, and the nearest plausible match is 'Access cards are issued by reception' on page 1 of the same guide: an unresolved pronoun scores as the wrong page, not as no page."
+    },
+    {
+      "id": "followup-access-card-that-one",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "The building closes at 8pm — what if I need to get in at 9pm?"
+        },
+        {
+          "role": "assistant",
+          "content": "After hours entry requires a card and a PIN."
+        }
+      ],
+      "question": "Where do I get that one?",
+      "document": "facilities-guide",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "'that one', the demonstrative form spec 0032 FR1 asks for, pointing at the access card. Not one word of the standalone question appears in the corpus. The decoy is the permit ballot on page 2, which is the guide's other 'how do I obtain a thing' sentence, so an unresolved demonstrative lands one page off."
+    },
+    {
+      "id": "followup-password-rotation",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How long do passwords need to be?"
+        },
+        {
+          "role": "assistant",
+          "content": "Passwords must be at least 14 characters."
+        }
+      ],
+      "question": "How often are they changed?",
+      "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
+      "page": 4,
+      "answerable": true,
+      "hard": "'they' is passwords, and the answer word is 'annually' — which the corpus uses four times over: password rotation (handbook page 4), salary review (contract page 3), parking permits (facilities guide page 2) and the leave year (handbook page 1). Unresolved this is a four-way coin flip spanning both knowledge bases; resolved it is unambiguous."
+    },
+    {
+      "id": "followup-geelong-planned-elided",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How many unplanned downtime hours did Geelong record?"
+        },
+        {
+          "role": "assistant",
+          "content": "Geelong recorded 388 unplanned downtime hours."
+        }
+      ],
+      "question": "And planned?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "elision down to a single adjective. 'Planned' is a sub-column header in the merged table on page 2 and occurs nowhere else, so the page is reachable lexically; what this scores is whether the SITE survives into the rewritten query, because 210, 140 and 95 all sit in that column and only one of them is Geelong's."
+    },
+    {
+      "id": "followup-summary-dismissal",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is the notice period after probation?"
+        },
+        {
+          "role": "assistant",
+          "content": "After probation the notice period is four weeks in writing."
+        }
+      ],
+      "question": "When does that not apply?",
+      "document": "employment-contract",
+      "knowledgeBase": "HR & Employment",
+      "page": 2,
+      "answerable": true,
+      "hard": "'that' is the four-week notice, and the answer — summary dismissal for serious misconduct — shares no vocabulary with the question. Embedded literally, 'When does that not apply?' is a query about nothing at all: there is no lexical route to the right chunk, only a resolved one."
+    },
+    {
+      "id": "followup-lift-funding",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is the rated capacity of the north wing lift?"
+        },
+        {
+          "role": "assistant",
+          "content": "The north wing lift's new rated capacity is 1600 kilograms."
+        }
+      ],
+      "question": "Where did the money come from?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "the referent is an event rather than a noun the turns name: 'the money' presupposes the upgrade that produced the new capacity. 'Money', 'cost' and 'paid' appear nowhere in the corpus — the page says 'funded from the capital reserve' — so there is no lexical handhold and the loop has to work out what was bought before it can search."
+    },
+    {
+      "id": "followup-december-shutdown-two-back",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How much notice do I need to book annual leave?"
+        },
+        {
+          "role": "assistant",
+          "content": "Leave must be approved by your manager at least two weeks in advance."
+        },
+        {
+          "role": "user",
+          "content": "And what is the notice period after probation?"
+        },
+        {
+          "role": "assistant",
+          "content": "After probation the notice period is four weeks in writing."
+        }
+      ],
+      "question": "Are there times of year I can't take it?",
+      "document": "staff-handbook",
+      "knowledgeBase": "HR & Employment",
+      "page": 1,
+      "answerable": true,
+      "hard": "referent two turns back AND across documents: 'it' is annual leave (handbook page 1, the December shutdown), while the most recent antecedent is the contract's notice period. Both turns are about 'notice', the corpus's densest collision — handbook page 1, contract pages 1 and 2, facilities guide page 3 — so recency-based resolution is punished with the wrong document, not just the wrong page."
+    },
+    {
+      "id": "followup-no-answer-mileage-history",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is the mileage reimbursement rate?"
+        },
+        {
+          "role": "assistant",
+          "content": "Mileage is reimbursed at 78 cents per kilometre."
+        }
+      ],
+      "question": "When was it last increased?",
+      "answerable": false,
+      "hard": "refusal behind a pronoun. 'It' resolves cleanly to the mileage rate and the corpus still cannot answer: the handbook states the rate and never dates it. This is the case where resolving a reference must not turn into inventing history — the loop ends up holding a well-formed query about a real fact and has to come back empty anyway."
+    },
+    {
+      "id": "followup-no-answer-probation-extension",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How long is the probation period?"
+        },
+        {
+          "role": "assistant",
+          "content": "The probation period is six months from the commencement date."
+        }
+      ],
+      "question": "And can it be extended?",
+      "answerable": false,
+      "hard": "elision plus refusal. Part A fixes probation at six months and says nothing about extending it; the tempting neighbour is the one-week probation notice in the very same paragraph. A path that resolves the reference and then answers from the nearest probation sentence fails this one and learns nothing from passing the others."
+    },
+    {
+      "id": "followup-no-answer-night-shift",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What is the weekend overtime rate for plumbing?"
+        },
+        {
+          "role": "assistant",
+          "content": "The weekend overtime rate for plumbing is 165 dollars per hour."
+        }
+      ],
+      "question": "No, I meant the night shift rate.",
+      "answerable": false,
+      "hard": "a correction pointing at a column that does not exist. Table 2.1 has Weekday, Weekend and Public holiday and nothing for nights — but the same page reads 'Overtime applies after eight hours on any shift', so the word 'shift' is sitting right there next to six real dollar figures. The refusal has to survive a near-miss lexical match."
+    },
+    {
+      "id": "followup-no-answer-assembly-capacity",
+      "type": "followup",
+      "turns": [
+        {
+          "role": "user",
+          "content": "Where is the fire assembly point?"
+        },
+        {
+          "role": "assistant",
+          "content": "The fire assembly point is the grassed area on Wellington Street."
+        },
+        {
+          "role": "user",
+          "content": "How long are visitor bays limited to?"
+        },
+        {
+          "role": "assistant",
+          "content": "Visitor bays are limited to two hours."
+        }
+      ],
+      "question": "How many people does it hold?",
+      "answerable": false,
+      "hard": "refusal with a two-turns-back referent and a plausible wrong answer waiting one document away. 'It' is the fire assembly point, whose capacity the handbook never states, and 'How many people does it hold' is almost word for word the boardroom question whose answer is fourteen. Passing means resolving the reference and then refusing anyway."
+    },
+    {
       "id": "multi-hop-overtime-expenses",
       "type": "multi-hop",
       "question": "Is overtime paid as cash under my contract, and separately, how many days do I have to submit a travel expense claim under the handbook?",
@@ -275,6 +637,206 @@
       "knowledgeBase": "HR & Employment",
       "answerable": true,
       "hard": "requires comparing the contract's probation notice (page 1) against the handbook's leave-approval notice (page 1) — genuinely two documents, not a paraphrase of one"
+    },
+    {
+      "id": "multi-hop-phishing-and-injury",
+      "type": "multi-hop",
+      "question": "If I get a phishing email and someone is injured on site the same day, who do I report each one to?",
+      "answerDocuments": [
+        {
+          "document": "staff-handbook",
+          "page": 4
+        },
+        {
+          "document": "staff-handbook",
+          "page": 3
+        }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "two facts in ONE document — the shape spec 0032 FR2 adds and the shape a single-search path half-answers most often. Section 4 sends phishing to the service desk (page 4); section 3 sends incidents to the safety officer within 24 hours (page 3). One search returns whichever section embeds closer and stops there, and full-match scoring gives no credit for the half."
+    },
+    {
+      "id": "multi-hop-probation-then-notice",
+      "type": "multi-hop",
+      "question": "How long is probation, and what notice applies once I am past it?",
+      "answerDocuments": [
+        {
+          "document": "employment-contract",
+          "page": 1
+        },
+        {
+          "document": "employment-contract",
+          "page": 2
+        }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "two consecutive pages of one contract: six months on page 1, four weeks in writing on page 2. The trap is that page 1 also carries a notice period — one week, during probation — so a single search that lands on Part A returns a complete-looking answer whose second half is wrong. Only retrieving both pages can distinguish them."
+    },
+    {
+      "id": "multi-hop-after-hours-and-parking",
+      "type": "multi-hop",
+      "question": "I am arriving at 7pm and driving — what do I need to get in, and where do I leave the car?",
+      "answerDocuments": [
+        {
+          "document": "facilities-guide",
+          "page": 1
+        },
+        {
+          "document": "facilities-guide",
+          "page": 2
+        }
+      ],
+      "knowledgeBase": "Facilities & Operations",
+      "answerable": true,
+      "hard": "one document, two pages, and neither half's vocabulary appears on the other's page: card-and-PIN after-hours entry is page 1, the Wellington Street car park is page 2. Added because both pre-0032 multi-hops were cross-document, which left 'can it stitch two pages of the same PDF' entirely untested."
+    },
+    {
+      "id": "multi-hop-spike-site-and-hours",
+      "type": "multi-hop",
+      "question": "Which site caused the quarterly downtime spike, and how many unplanned downtime hours does the utilisation table record against that site?",
+      "answerDocuments": [
+        {
+          "document": "site-operations-report",
+          "page": 3
+        },
+        {
+          "document": "site-operations-report",
+          "page": 2
+        }
+      ],
+      "knowledgeBase": "Facilities & Operations",
+      "answerable": true,
+      "hard": "figure plus table — spec 0032 FR2's third shape — and a real bridge rather than a conjunction. The first half is only in Figure 3.2's caption on page 3 ('The Q3 spike corresponds to the Geelong furnace outage'), and that caption is what tells you which ROW of Table 3.1 on page 2 to read (Geelong, 388). Without hop one there is nothing to look up in hop two."
+    },
+    {
+      "id": "multi-hop-hartley-setpoint-and-lift",
+      "type": "multi-hop",
+      "question": "Hartley Mechanical recommissioned Building A — what chilled water setpoint did they leave it at, and what rated capacity did the same contractor give the north wing lift?",
+      "answerDocuments": [
+        {
+          "document": "plant-services-manual",
+          "page": 1
+        },
+        {
+          "document": "site-operations-report",
+          "page": 1
+        }
+      ],
+      "knowledgeBase": "Facilities & Operations",
+      "answerable": true,
+      "hard": "two documents joined by an entity the corpus actually shares rather than by 'and separately': Hartley Mechanical appears in the plant services manual (Building A, 6.5 degrees) and in the site operations report (north wing lift, 1600 kilograms). Both facts also sit on interleaved two-column pages, so this is the one multi-hop that has to survive column flattening twice."
+    },
+    {
+      "id": "multi-hop-scan-to-lift",
+      "type": "multi-hop",
+      "question": "Appendix B names the contractor that removed the old chiller — what did that same contractor do to the north wing lift?",
+      "answerDocuments": [
+        {
+          "document": "maintenance-log",
+          "page": 2
+        },
+        {
+          "document": "site-operations-report",
+          "page": 1
+        }
+      ],
+      "knowledgeBase": "Facilities & Operations",
+      "answerable": true,
+      "hard": "the loop-and-cracking interaction spec 0032 FR6 exists to measure, in one question. Hop one is only on the scanned page of the maintenance log (Hartley Mechanical removed the old unit), reachable at all with cracking ON; hop two is ordinary prose in another document. Expected to fail with cracking OFF on both paths, which is the point — and why it belongs in the multi-hop slice rather than the headline one."
+    },
+    {
+      "id": "multi-hop-wellington-street",
+      "type": "multi-hop",
+      "question": "Two different documents put something on Wellington Street — what does each one put there?",
+      "answerDocuments": [
+        {
+          "document": "staff-handbook",
+          "page": 3
+        },
+        {
+          "document": "facilities-guide",
+          "page": 2
+        }
+      ],
+      "answerable": true,
+      "hard": "the corpus's built-in collision turned into a multi-hop, and the only one that spans both knowledge bases (HR & Employment and Facilities & Operations), which is why it carries no single `knowledgeBase`. The fire assembly point and the staff car park share a street name and nothing else, so one similarity search returns both pages in embedding order and either one alone answers confidently and half-wrongly."
+    },
+    {
+      "id": "multi-hop-leave-payout-vs-carryover",
+      "type": "multi-hop",
+      "question": "My contract says untaken leave is paid out when I leave — does the handbook let me carry it into next year while I am still employed?",
+      "answerDocuments": [
+        {
+          "document": "employment-contract",
+          "page": 2
+        },
+        {
+          "document": "staff-handbook",
+          "page": 1
+        }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "two documents whose halves relate to each other instead of being bolted together with 'and': the contract's payout-on-termination clause (page 2) is what makes the handbook's no-carryover rule (page 1) worth asking about. A path that finds only the contract answers 'yes, you are paid for it' — true, and not the question."
+    },
+    {
+      "id": "multi-hop-two-kinds-of-notice",
+      "type": "multi-hop",
+      "question": "How quickly must I report a workplace incident, and how much notice must I give to resign after probation?",
+      "answerDocuments": [
+        {
+          "document": "staff-handbook",
+          "page": 3
+        },
+        {
+          "document": "employment-contract",
+          "page": 2
+        }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "both halves are 'notice'-shaped and the corpus holds four notice periods across three documents: 24 hours for incidents (handbook page 3), one week in probation and four weeks after (contract pages 1 and 2), two weeks for leave (handbook page 1). Retrieving one of them and reporting it as both is the specific wrong answer this scores as a miss."
+    },
+    {
+      "id": "multi-hop-two-approvals",
+      "type": "multi-hop",
+      "question": "Who signs off on annual leave, and who signs off on an expense claim over 500 dollars?",
+      "answerDocuments": [
+        {
+          "document": "staff-handbook",
+          "page": 1
+        },
+        {
+          "document": "staff-handbook",
+          "page": 2
+        }
+      ],
+      "knowledgeBase": "HR & Employment",
+      "answerable": true,
+      "hard": "two approvals one page apart in the same handbook — the manager for leave (page 1), a director for claims over 500 dollars (page 2). The risk is near-identical phrasing: both chunks read as 'the approval one', so a single search returns two lookalikes and the answer collapses to whichever ranked first."
+    },
+    {
+      "id": "multi-hop-no-answer-parking-cost",
+      "type": "multi-hop",
+      "question": "Which costs more per year, a staff parking permit or a visitor bay?",
+      "answerable": false,
+      "hard": "a two-fact comparison where NEITHER fact exists: the guide allocates permits by ballot and limits visitor bays to two hours, and prices nothing anywhere in the corpus. The multi-hop shape is what makes it a good refusal case — a loop that searches twice gets two chances to talk itself into enough, and the contractor rate table is full of dollar figures to borrow."
+    },
+    {
+      "id": "multi-hop-no-answer-public-holidays",
+      "type": "multi-hop",
+      "question": "How does my annual leave entitlement compare with the public holiday allowance in my contract?",
+      "answerable": false,
+      "hard": "one half exists and one half does not, which is the harder refusal. Twenty days of annual leave is handbook page 1; the contract has no public holiday clause at all. The decoy is real — 'Public holiday' is a column header in the contractor rate table — so searching the missing half returns a confident-looking page about somebody else's pay."
+    },
+    {
+      "id": "multi-hop-no-answer-boardroom-av",
+      "type": "multi-hop",
+      "question": "Who maintains the boardroom's video conferencing, and what does that contract cost?",
+      "answerable": false,
+      "hard": "neither fact exists, and both sit one plausible sentence away from facts that do: the guide says the boardroom HAS video conferencing, and Hartley Mechanical is named as the contractor in three other documents. A loop that has already learned who the corpus's contractor is, is exactly the thing most likely to answer this one."
     },
     {
       "id": "layout-lift-capacity-north",

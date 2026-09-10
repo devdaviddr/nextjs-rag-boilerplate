@@ -9,6 +9,10 @@ const eslintConfig = [
     ignores: [
       '.next/**',
       'node_modules/**',
+      // Agent worktrees are full checkouts of this repo, node_modules and all.
+      // They live here only while an agent is running and are never committed
+      // (see .gitignore) — linting them scans the whole dependency tree.
+      '.claude/worktrees/**',
       'drizzle/**',
       'coverage/**',
       'playwright-report/**',

@@ -272,11 +272,27 @@ const envSchema = z
     // Off by default. The agentic path must earn its place against the fixed
     // pipeline on the same eval questions before it becomes the default; with
     // this false, the existing path runs byte-identically.
+    // ON by default since 2026-09-11, on measurement rather than preference.
+    //
+    // The fixed pipeline embeds the question literally, so a follow-up carrying
+    // a pronoun retrieves nothing: measured over 16 answerable follow-ups it
+    // scored hit@1 **0.062** against the loop's **0.938**. That is not a
+    // percentage difference, it is a capability the fixed path does not have —
+    // and the one question it did win was reachable by lexical luck rather
+    // than by resolving anything.
+    //
+    // The cost is real and is named here rather than hidden: single-hop hit@1
+    // 0.882 -> 0.824, one question of seventeen, and roughly 11s per question
+    // against 0.15s. A deployment that only ever asks standalone questions
+    // should set this back to false and will lose nothing.
+    //
+    // Refusal accuracy is 1.000 on both paths, which is what makes the trade
+    // safe to take at all.
     RAG_AGENTIC_ENABLED: z
       .string()
       .optional()
-      .default('false')
-      .transform((v) => v === 'true'),
+      .default('true')
+      .transform((v) => v !== 'false'),
     // Planning and prose are separate roles and need not be the same model.
     // Measured over 40 native tool-call attempts: lightning 10/10 and 5/5 on a
     // two-round tool loop; the default chat model 8/10, its failures clean
@@ -325,6 +341,69 @@ const envSchema = z
       .positive()
       .optional()
       .default(8000),
+
+    // --- Reranking (spec 0036) ---------------------------------------------
+    // Off by default, same posture as RAG_AGENTIC_ENABLED and RAG_CRACK_ENABLED
+    // above: with this false, `retrieveForOwner` returns the fused order
+    // byte-identically and spends no extra call.
+    //
+    // Turning it on only PERMUTES the fused candidates — see rerank.ts for why
+    // that means the similarity gate admits exactly the same set either way,
+    // and therefore why this knob cannot move refusal accuracy.
+    RAG_RERANK_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // How many fused candidates get re-scored, counted from the top.
+    //
+    // This SIZES THE RETRIEVED POOL, it does not merely cap a window over an
+    // already-cut list. With reranking on, `retrieveForOwner` fuses, keeps
+    // this many candidates, reranks them, applies the similarity gate and only
+    // then cuts to `RAG_TOP_K`. Above `RAG_TOP_K` (8) that is the entire
+    // point: at 20 the reranker can promote a chunk that fusion ranked 9th
+    // into the answer, which is the only thing reranking is actually for.
+    //
+    // Values below `RAG_TOP_K` are raised to it — a pool smaller than the
+    // answer would discard chunks the gate would have kept.
+    RAG_RERANK_CANDIDATES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(20),
+
+    // --- HyDE (spec 0033 FR6, 0027 1g) -------------------------------------
+    // Embed a hypothetical ANSWER instead of the question, because an answer
+    // looks more like the passage containing it than a question does.
+    //
+    // Off by default, and this flag is a bigger lever than RAG_RERANK_ENABLED.
+    // Reranking only permutes, so the gate admits the same set either way.
+    // HyDE replaces the vector the gate's `similarity` is computed from, so it
+    // moves what RAG_MIN_SIMILARITY MEANS — see hyde.ts. Refusal accuracy must
+    // be re-measured before this is turned on anywhere real.
+    //
+    // It also COMPETES with scope.ts rather than complementing it (both fix
+    // "the question does not look like the passage"), so spec 0033 FR6 wants a
+    // head-to-head: scope.ts alone, HyDE alone, both. Do not turn this on and
+    // report a combined number.
+    RAG_HYDE_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // Separate from RAG_PLANNER_MODEL, and NOT defaulted to it, on measurement
+    // rather than on principle. Probed 2026-09-11 over four questions each:
+    // the 120B chat model ran a median 9.5s (4.7-15.8s) while the 30B
+    // "lightning" planner model ran 18.3s (12.1-45.5s) — slower and far less
+    // predictable, with its worst case on the summarise question HyDE exists
+    // to fix. Writing a passage is prose generation, which is what the chat
+    // model is for; the planner model is tuned for tool-call judgement.
+    RAG_HYDE_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('nvidia/nemotron-3-super-120b-a12b'),
 
     // --- Build identity (baked into the image at CI build time) ------------
     // ci.yml passes these as Docker build-args (APP_VERSION=git ref name,

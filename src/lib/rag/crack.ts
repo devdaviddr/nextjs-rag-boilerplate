@@ -4,11 +4,12 @@ import type { ChunkKind, ExtractionPage, ExtractionSummary } from '@/db/schema'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { type Chunk, chunkElements, chunkPages } from './chunk'
-import type { PageText } from './chunk'
+import type { PageText, PositionedItem } from './chunk'
 import { extractPdf } from './extract'
 import { describeFigure, isDescribableFigure } from './describe'
 import { type NormalizedElement, normalizePage } from './normalize'
 import { ParseError, parseRenderedPage } from './parse'
+import type { ParsedElement } from './parse-types'
 import { RenderError, renderPage } from './render'
 import { collectPageSignals } from './signals'
 import { type PageRoute, classifyPage, requiresCracking } from './triage'
@@ -49,13 +50,50 @@ function textLayerChunks(
   }))
 }
 
+/**
+ * Somewhere durable to keep a page's parser output between runs (spec 0034).
+ *
+ * A port, not a table: `crack.ts` never touches the database — that is the
+ * contract in this module's header, and it is what keeps the whole routing and
+ * budgeting sequence unit-testable with no DB and no network. `ingest.ts`
+ * supplies the Postgres-backed implementation; `eval/run.ts` supplies none and
+ * behaves exactly as it did before.
+ *
+ * Both methods are best-effort by construction. A cache that throws must never
+ * fail a document — the worst a miss can do is cost a parse call.
+ */
+export interface ParsedPageCache {
+  get(page: number): Promise<ParsedElement[] | null>
+  set(page: number, elements: readonly ParsedElement[]): Promise<void>
+}
+
 export interface CrackOptions {
   chunkTokens: number
   overlapTokens: number
+  /**
+   * Positioned text items per page, for the pages that take the text-layer
+   * path (spec 0035 FR1).
+   *
+   * Without these, a document with cracking ON gets boxes on its parsed pages
+   * and none on its clean-text ones — a highlight that works on some pages of
+   * a document and silently does nothing on others, which is worse than no
+   * highlight at all because the reader cannot tell "no box" from "no match".
+   */
+  pageItems?: readonly (readonly PositionedItem[])[]
   /** Used to give a caption-less figure context in its description. */
   documentTitle?: string
-  /** Called after each page, so ingestion can report progress (FR13). */
-  onPageProcessed?: (pagesProcessed: number) => Promise<void> | void
+  /**
+   * Called after each page, so ingestion can report progress (FR13) and
+   * persist the partial record (spec 0034). The second argument is the summary
+   * *so far* — a truthful account of the pages done, which is what a run
+   * interrupted here leaves behind on the document row.
+   */
+  onPageProcessed?: (
+    pagesProcessed: number,
+    summarySoFar: ExtractionSummary,
+  ) => Promise<void> | void
+  /** Absent means "never resume" — every routed page pays for its parse. */
+  parseCache?: ParsedPageCache
   signal?: AbortSignal
 }
 
@@ -116,6 +154,48 @@ async function describeFigures(
 }
 
 /**
+ * Cache access that can never fail a document.
+ *
+ * A cache is an optimisation, and an optimisation that can take down an
+ * ingestion is a downgrade. A read that throws is a miss; a write that throws
+ * costs a re-parse on the next attempt and nothing else. Both are logged,
+ * because a cache that is silently always missing looks exactly like a cache
+ * that is working and would hide the regression this spec exists to fix.
+ */
+async function readCache(
+  cache: ParsedPageCache | undefined,
+  page: number,
+): Promise<ParsedElement[] | null> {
+  if (!cache) return null
+  try {
+    const hit = await cache.get(page)
+    return hit && hit.length > 0 ? hit : null
+  } catch (error) {
+    logger.warn('Parse cache read failed', {
+      page,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+async function writeCache(
+  cache: ParsedPageCache | undefined,
+  page: number,
+  elements: readonly ParsedElement[],
+): Promise<void> {
+  if (!cache || elements.length === 0) return
+  try {
+    await cache.set(page, elements)
+  } catch (error) {
+    logger.warn('Parse cache write failed', {
+      page,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+/**
  * Crack a document, page by page.
  *
  * `pageTexts` must be the FULL page sequence including empty pages — a scanned
@@ -132,8 +212,10 @@ export async function crackDocument(
     chunkTokens,
     overlapTokens,
     onPageProcessed,
+    parseCache,
     signal,
     documentTitle = '',
+    pageItems,
   } = options
 
   const signals = await collectPageSignals(pdf, pageTexts)
@@ -143,13 +225,24 @@ export async function crackDocument(
   const pages: ExtractionPage[] = []
   let parseCalls = 0
   let describeCalls = 0
+  let cachedPages = 0
   let budgetExhausted = false
+
+  const summarySoFar = (): ExtractionSummary => ({
+    pages: [...pages],
+    parseCalls,
+    describeCalls,
+    cachedPages,
+    budgetExhausted,
+  })
 
   for (const [index, route] of routes.entries()) {
     const pageNumber = index + 1
     const page: PageText = {
       pageNumber,
       text: (pageTexts[index] ?? '').trim(),
+      // Present only when the caller had them; absent is FR4's fallback.
+      ...(pageItems?.[index] ? { items: pageItems[index] } : {}),
     }
 
     const record = (outcome: ExtractionPage['outcome'], reason?: string) => {
@@ -166,10 +259,15 @@ export async function crackDocument(
     if (!requiresCracking(route)) {
       chunks.push(...textLayerChunks(page, chunks.length, options))
       record('text-layer')
-      await onPageProcessed?.(pageNumber)
+      await onPageProcessed?.(pageNumber, summarySoFar())
       continue
     }
 
+    // A cache hit still spends budget. The budget decides WHICH pages of a
+    // document get cracked, so if a resumed run got its first 25 pages free
+    // and then cracked 15 more, it would produce a different — more
+    // expensive — document than the uninterrupted run it is resuming. The
+    // resume must be invisible in the output, not just cheaper.
     if (parseCalls >= env.RAG_CRACK_MAX_PAGES) {
       budgetExhausted = true
       chunks.push(...textLayerChunks(page, chunks.length, options))
@@ -177,16 +275,35 @@ export async function crackDocument(
         'budget-skipped',
         `Document reached its ${env.RAG_CRACK_MAX_PAGES}-page cracking budget.`,
       )
-      await onPageProcessed?.(pageNumber)
+      await onPageProcessed?.(pageNumber, summarySoFar())
       continue
     }
 
     try {
       parseCalls++
-      // Rendered ONCE and reused: parsing needs the page, and describing a
-      // figure needs a crop of the same pixels.
-      const png = await renderPage(pdf, pageNumber)
-      const { elements } = await parseRenderedPage(png, pageNumber, { signal })
+
+      // Rendering is local (pdf.js) and parsing is a billed call, so the cache
+      // is checked first and the page is rendered only if something still
+      // needs its pixels — a resumed page with no caption-less figure on it
+      // costs neither.
+      let png: Buffer | null = null
+      const renderOnce = async (): Promise<Buffer> =>
+        (png ??= await renderPage(pdf, pageNumber))
+
+      let elements = await readCache(parseCache, pageNumber)
+      if (elements) {
+        cachedPages++
+      } else {
+        elements = (
+          await parseRenderedPage(await renderOnce(), pageNumber, {
+            signal,
+          })
+        ).elements
+        // Written before the page's chunks exist, and outside every
+        // transaction: this is the record that survives the process dying
+        // three pages later, which is the entire point of it.
+        await writeCache(parseCache, pageNumber, elements)
+      }
 
       const normalised = normalizePage(elements).filter(
         // A logo or a rule is a `Picture` too. Dropping it here keeps a chunk
@@ -195,12 +312,21 @@ export async function crackDocument(
           element.type !== 'Picture' || isDescribableFigure(element.bbox),
       )
 
-      const described = await describeFigures(normalised, {
-        png,
-        documentTitle,
-        remainingBudget: env.RAG_DESCRIBE_MAX_FIGURES - describeCalls,
-        signal,
-      })
+      const describeBudget = env.RAG_DESCRIBE_MAX_FIGURES - describeCalls
+      const wantsDescription = normalised.some(
+        (element) =>
+          element.type === 'Picture' && !element.caption && describeBudget > 0,
+      )
+      const described = wantsDescription
+        ? await describeFigures(normalised, {
+            // Reused for the crop when the page was parsed above; rendered now
+            // when it came from cache.
+            png: await renderOnce(),
+            documentTitle,
+            remainingBudget: describeBudget,
+            signal,
+          })
+        : { elements: normalised, calls: 0 }
       describeCalls += described.calls
 
       // A page with no text layer was read from its pixels; saying so lets a
@@ -240,18 +366,10 @@ export async function crackDocument(
       })
     }
 
-    await onPageProcessed?.(pageNumber)
+    await onPageProcessed?.(pageNumber, summarySoFar())
   }
 
-  return {
-    chunks,
-    summary: {
-      pages,
-      parseCalls,
-      describeCalls,
-      budgetExhausted,
-    },
-  }
+  return { chunks, summary: summarySoFar() }
 }
 
 /** Pages this document would spend a parse call on, before spending any. */
@@ -287,14 +405,19 @@ export async function chunksFromPdf(
   options: CrackOptions,
 ): Promise<DocumentChunks> {
   const cracking = env.RAG_CRACK_ENABLED
-  const { pages, pageCount, allPageTexts, pdf } = await extractPdf(buffer, {
-    allowImageOnly: cracking,
-  })
+  const { pages, pageCount, allPageTexts, pdf, itemsByPage } = await extractPdf(
+    buffer,
+    { allowImageOnly: cracking },
+  )
 
   if (!cracking) {
     return { chunks: chunkPages(pages, options), pageCount }
   }
 
-  const { chunks, summary } = await crackDocument(pdf, allPageTexts, options)
+  const { chunks, summary } = await crackDocument(pdf, allPageTexts, {
+    ...options,
+    // Only when the caller did not supply its own.
+    pageItems: options.pageItems ?? itemsByPage,
+  })
   return { chunks, pageCount, extraction: summary }
 }

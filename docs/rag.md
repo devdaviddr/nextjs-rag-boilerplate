@@ -187,7 +187,7 @@ flowchart LR
     A -->|yes| K["Emit"]
     A -->|no| B{"Sentence fits?"}
     B -->|yes| K
-    B -->|no| H["Hard slice at<br>budget × 4 chars"]
+    B -->|no| H["Hard slice at the text's<br>own measured density"]
     H --> K
 ```
 
@@ -197,11 +197,39 @@ not fit. The third step matters: a table, an OCR run or minified text can be one
 or emit an over-budget chunk.
 
 The budget is measured in **tokens** — the unit a language model counts text in,
-roughly a word-piece. **Token counts are estimated at ~4 characters per token**,
-not tokenised. Shipping a real tokenizer would add megabytes of dependency to
-size a chunk, and the chunker only needs to be roughly right — the model's
-context is far larger than any single chunk. The function is named
-`estimateTokens` because that is what it is.
+roughly a word-piece. Counts are **estimated, not tokenised**: the function is
+named `estimateTokens` because that is what it is, and shipping the model's
+actual vocabulary would add megabytes of dependency to size a chunk.
+
+The estimate used to be `length / 4`, and document cracking broke it. Measured
+against the embedding endpoint's own reported `usage` counts on 15 samples,
+`length / 4` was out by **48% on average and 60% at worst on table markup** —
+LaTeX `tabular` and pipe tables run at about **two** characters per token, not
+four, because a digit costs a token each. A chunk the system believed was 512
+tokens was really about a thousand, so every budget, overlap tail and boundary
+computed over it was wrong by a factor of two. That went unnoticed while the
+corpus was prose; [spec 0031](../specs/0031-tables-figures-and-complex-layouts.md)
+put tables and OCR text into it.
+
+What replaced it counts the things a tokenizer actually charges for — a token
+per ~6.6 letters, one per digit, one per ~2.5 symbol characters — with the
+constants fitted to minimise the **worst** error rather than the mean, because a
+chunk that overshoots its budget is the failure that matters. That brings table
+markup to 8% worst case and everything to ~10%.
+
+**It is still an estimate, and ~10% is not what
+[spec 0033](../specs/0033-retrieval-fundamentals.md) asked for** — it set "within
+a few percent" as the bar for keeping a calibration instead of shipping a real
+tokenizer, and this is about four times that. The calibration is a six-fold
+improvement that costs no dependency, and it is not the requirement. A real
+tokenizer at ingestion time is still the open answer.
+
+One consequence worth knowing if you are reading the code: the **hard slice**
+in the diagram above is where this mattered most. It used to size its first
+guess at `budget × 4` characters — the same fixed ratio, on the one path that
+exists precisely for the oversized table and OCR runs where the ratio is worst.
+It now takes that guess from the text's own measured density and walks it down
+until it fits.
 
 | Knob                       | Default | Effect                                                |
 | -------------------------- | ------- | ----------------------------------------------------- |
@@ -1198,18 +1226,28 @@ fixed pipeline judges it.
 needing facts from two different places joined together — the case a single
 search cannot satisfy.
 
-| Metric                                   | Baseline       | Agentic                               | Δ          |
-| ---------------------------------------- | -------------- | ------------------------------------- | ---------- |
-| hit@1 / hit@3 / MRR _(single-hop, n=20)_ | 0.941          | 0.882                                 | −0.059     |
-| Refusal accuracy                         | 1.000          | 1.000                                 | ±0         |
-| Cross-KB leakage                         | 0              | 0                                     | ±0         |
-| Follow-up hit@1 _(n=3)_                  | 0.000          | 0.667                                 | **+0.667** |
-| Multi-hop full match _(n=2)_             | 0.000          | 1.000                                 | **+1.000** |
-| Multi-hop fact recall                    | 0.500          | 1.000                                 | **+0.500** |
-| Cost per question                        | ~1 search, ~1s | 1.44 searches, **11.1s**, 1617 tokens | —          |
+> **Historical — recorded 2026-09-07, superseded 2026-09-11.** Kept because it
+> is the run the loop was designed against, and because its follow-up and
+> multi-hop slices (n=3, n=2) are the reason a bigger corpus was built. The
+> current default and the numbers behind it are in
+> _[Which path answers](#which-path-answers)_. The baseline cost cell read
+> "~1 search, ~1s" until the harness was taught to time the fixed pass at all —
+> that figure was prose, and a median printed under a "mean" heading.
 
-**The flag stays off by default**, and the reason is the trade rather than a
-failure: agentic retrieval is dramatically better at what it was built for —
+| Metric                                   | Baseline     | Agentic                               | Δ          |
+| ---------------------------------------- | ------------ | ------------------------------------- | ---------- |
+| hit@1 / hit@3 / MRR _(single-hop, n=20)_ | 0.941        | 0.882                                 | −0.059     |
+| Refusal accuracy                         | 1.000        | 1.000                                 | ±0         |
+| Cross-KB leakage                         | 0            | 0                                     | ±0         |
+| Follow-up hit@1 _(n=3)_                  | 0.000        | 0.667                                 | **+0.667** |
+| Multi-hop full match _(n=2)_             | 0.000        | 1.000                                 | **+1.000** |
+| Multi-hop fact recall                    | 0.500        | 1.000                                 | **+0.500** |
+| Cost per question                        | not measured | 1.44 searches, **11.1s**, 1617 tokens | —          |
+
+**The flag defaulted OFF on the strength of this run**, and was flipped on in
+2026-09-11 once the follow-up slice grew from 3 questions to 16 and the gap held
+(0.062 against 0.938). The reasoning below was right about the trade and wrong
+only about how confident three questions let you be: agentic retrieval is dramatically better at what it was built for —
 follow-ups and multi-hop questions — slightly worse on single-hop, and about
 **ten times slower**. Most questions in this corpus are single-hop, so the
 default favours the cheap path. Turn it on for conversational use where
@@ -1375,21 +1413,52 @@ than hidden.
 
 ---
 
+### Which path answers
+
+Two retrieval paths exist and `RAG_AGENTIC_ENABLED` chooses between them. Since
+2026-09-11 it defaults to **on**, and the reason is one slice:
+
+| slice               | n             | fixed pipeline | agentic loop |
+| ------------------- | ------------- | -------------- | ------------ |
+| **follow-up** hit@1 | 16 answerable | **0.062**      | **0.938**    |
+| single-hop hit@1    | 17 answerable | 0.882          | 0.824        |
+| refusal accuracy    | both          | 1.000          | 1.000        |
+
+One of sixteen against fifteen of sixteen. The fixed pipeline embeds your
+question literally, so "what about carrying it over?" searches for those words
+rather than for annual leave — it is not worse at follow-ups, it cannot do them.
+
+What it costs: single-hop drops by one question of seventeen, and a question
+takes ~11s instead of ~0.15s. **If your users only ever ask standalone
+questions, set `RAG_AGENTIC_ENABLED=false`** — you lose nothing and get the
+latency back.
+
+Refusal accuracy is 1.000 either way, which is what makes the trade safe to
+take: the loop searching more never became the loop answering when it should
+not.
+
+> Measured with `RAG_CRACK_ENABLED=true`. The equivalent cracking-off reference
+> has not been recorded, and the multi-hop slice is unmeasured at its current
+> size — see [`specs/0032`](../specs/0032-settle-the-agentic-trade.md).
+
 ## Known gaps
 
 Named rather than hidden.
 
-- **The agentic path is ~10× slower.** Median 9–11s per question against ~1s,
-  because every planner call is a round trip to a reasoning model. A question
-  that reads a figure is slower again — 20–60s — since a vision call over a
-  cropped page image is the single most expensive thing this system does. The label on
+- **The agentic path is far slower**, and it is now the default. Roughly 11s
+  per question against ~0.15s for the fixed pipeline, because every planner
+  call is a round trip to a reasoning model. A question that reads a figure is
+  slower again — 20–60s — since a vision call over a cropped page image is the
+  single most expensive thing this system does. Set `RAG_AGENTIC_ENABLED=false`
+  if your users only ever ask standalone questions; see _Which path answers_. The label on
   the thinking indicator is what stops that reading as a hang.
 - **The sidebar can lag a readable answer** by the length of citation
   verification, because refreshing Recents under a live stream aborts it. See
   _When things go wrong_.
-- **The follow-up and multi-hop evaluation slices are n=3 and n=2.** One
-  question moves those metrics by a third or a half. Direction real, magnitude
-  provisional.
+- **The multi-hop evaluation slice is unmeasured at its new size.** It holds 15
+  questions; the comparison that produced the current default was stopped after
+  4 of them had been scored on the agentic side, so no multi-hop number is
+  quoted anywhere. The follow-up slice IS measured, at n=16 answerable.
 - **No OCR by default.** With `RAG_CRACK_ENABLED` unset, scanned PDFs are
   rejected rather than half-ingested. Turning it on adds OCR and figures — see
   _Document cracking_.
@@ -1399,10 +1468,22 @@ Named rather than hidden.
   destructive corpora, it did not: the chat model reconstructed both reliably.
   Cracking still produces better chunks; it has not been shown to produce better
   answers for those two cases.
-- **No reranking.** A reranker is a second, slower model — a cross-encoder —
-  that re-scores retrieved candidates by reading question and passage together.
-  None is reachable on a free NIM account, so retrieval quality rests on
-  chunking and `top_k`.
+- **Reranking exists but is unmeasured, and off.** A reranker is a second,
+  slower model that re-scores retrieved candidates by reading question and
+  passage together. No dedicated reranker endpoint is reachable on a free NIM
+  account, so what shipped instead is a stage that asks the **chat model** to
+  score the fused candidates, between fusion and the similarity gate, behind
+  `RAG_RERANK_ENABLED` (default off). It is failure-open: a backend that throws,
+  times out or is disabled leaves the fusion order exactly as it was.
+
+  Nothing about it has been measured — not hit@1, not MRR, not refusal
+  accuracy — and the evaluation harness cannot yet run with it on. One hand
+  probe put a single call at a median of **8.4s**, with a tail past 30s, which
+  is comparable to the entire agentic loop's budget. So in practice retrieval
+  quality still rests on chunking and `top_k`, and turning this on is an
+  experiment rather than an upgrade. The local cross-encoder that would need no
+  account at all, and would send nothing anywhere, has not been built.
+
 - **An exact identifier below the similarity floor still refuses.** A lexical
   hit is not allowed to admit a chunk on its own, because on the evaluation
   corpus **no lexical-rank threshold separates true from false positives**:
@@ -1419,10 +1500,34 @@ Named rather than hidden.
   four turns (`PLANNER_CONTEXT_TURNS`) and resolves the reference inside its
   tool call. That is why follow-up hit@1 moves from 0.000 to 0.667 in the A/B
   above.
-- **Citations resolve to a page, not a sentence.** Chunking records
-  `page_number` but never captured bounding boxes.
-- **A process restart mid-ingestion strands a document** in a transient status,
-  because there is no queue. Recovery is delete and re-upload.
+- **A cited passage spanning two columns gets no highlight.** Citations do now
+  resolve below the page: the panel renders the page as an image and draws the
+  cited region on it. But the chunker computes a **list** of rectangles while
+  `chunks.bbox` stores **one**, and rather than union rectangles from two
+  columns — which would cover the gutter and the wrong column — the code stores
+  nothing. So a multi-column passage silently falls back to page-level
+  behaviour. That is the safe failure, since a confidently misplaced box is
+  worse than no box, but it is a fallback rather than the feature. Closing it
+  needs a `boxes` column.
+- **A cited page is a picture.** Because the highlight needs somewhere to be
+  drawn, the panel shows a server-rendered PNG rather than the framed PDF
+  viewer, so text in it cannot be selected, searched or copied. "Open in new
+  tab" still serves the real document to the browser's own viewer. This was a
+  deliberate security trade, not an oversight — rendering server-side keeps an
+  untrusted PDF out of the authenticated origin's JavaScript context, and the
+  server already opens every one of these files with pdf.js at ingestion, so it
+  adds no exposure that did not already exist.
+- **Documents ingested before span-level citations have no boxes**, so their
+  citations stay page-level until they are re-ingested. Nothing breaks; the
+  highlight is simply absent.
+- **Ingestion recovery has not been exercised against a real restart.** A
+  process restart mid-ingestion no longer strands a document: a claim expires,
+  a sweep on boot and every 60 seconds picks the document up, and it resumes
+  from the parse cache instead of re-paying for pages already cracked. The unit
+  suite covers the claim protocol, the fencing, the attempt cap and the
+  concurrency limit — but it mocks the database driver, so what is proven is
+  that the SQL is shaped correctly, **not** that Postgres serialises two racing
+  claims as intended. The kill-the-container-and-restart check has not been run.
 
 ---
 
