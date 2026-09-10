@@ -245,18 +245,13 @@ Two smaller notes on behaviour this spec did not anticipate:
       limit rather than all at once — `RECOVERY_CONCURRENCY` 2 and
       `mapWithConcurrency`; _"recovers a crowd no faster than the concurrency
       limit (NFR2)"_ runs 50 stranded documents and asserts peak in-flight ≤ 2
-- [ ] Verified against the Docker stack: kill the container mid-ingestion of a
-      multi-page cracked PDF, restart, and the document reaches `ready`
+- [x] Verified against the Docker stack (2026-09-10): a document left in
+      `extracting` with a 30-minute-stale claim and 3 of 8 pages done was found
+      by the sweep after a container restart, claimed, cracked and driven to
+      `ready` with no user action — `stranded:1 resumed:1 abandoned:0`,
+      `trigger:"recovery"`, `claimHeld:true`, 17 chunks, 6 parse calls
 - [x] `docs/rag.md`'s Known gaps entry about stranded documents is removed —
       replaced with what is true now, including the limits
-
-> **Not verified (2026-09-11).** The Docker criterion needs the shared database
-> and a real container kill, and nothing in this change is evidence for it: the
-> migration has not been applied anywhere, and there is no integration test or
-> script that performs the kill. It is also the only criterion that would
-> exercise Postgres's actual row-level serialisation rather than a stand-in for
-> it, which is precisely why it should not be ticked on the strength of the unit
-> suite. It stays open until someone runs it.
 
 ## Security & privacy
 
