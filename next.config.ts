@@ -9,9 +9,15 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: import.meta.dirname,
   // Emit a minimal standalone server bundle for small, secure Docker images.
   output: 'standalone',
-  // Keep the native argon2 addon out of the bundler so its platform-specific
-  // .node binary is resolved from node_modules (and traced into standalone).
-  serverExternalPackages: ['@node-rs/argon2'],
+  // Keep native addons out of the bundler so their platform-specific .node
+  // binaries are resolved from node_modules (and traced into standalone).
+  //
+  // @napi-rs/canvas renders PDF pages for document cracking (spec 0031).
+  // Without it here the Turbopack build fails outright — "non-ecmascript
+  // placeable asset ... doesn't have a module id" — because the binding is not
+  // JavaScript and cannot be placed in an ESM chunk. It fails at BUILD time,
+  // not at run time, so it cannot slip through unnoticed.
+  serverExternalPackages: ['@node-rs/argon2', '@napi-rs/canvas'],
   // File uploads go through a Server Action (src/lib/storage/actions.ts) as a
   // multipart body — the 1 MB default is far too small. Matches the app's own
   // UPLOAD_MAX_SIZE_MB ceiling (see src/lib/env.ts); bump both together.

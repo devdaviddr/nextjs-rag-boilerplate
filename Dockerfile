@@ -47,8 +47,11 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# The standalone output includes a minimal node_modules (with the traced
-# native argon2 binary). Copy migrations + runner deps so we can migrate too.
+# The standalone output includes a minimal node_modules with the traced native
+# binaries — argon2, and @napi-rs/canvas for PDF page rendering (spec 0031).
+# Both are listed in next.config.ts's serverExternalPackages, which is what
+# makes them resolvable rather than bundled. Copy migrations + runner deps so
+# we can migrate too.
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

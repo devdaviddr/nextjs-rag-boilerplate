@@ -23,6 +23,20 @@ export class ExtractionError extends Error {
 export interface ExtractionResult {
   pages: PageText[]
   pageCount: number
+  /**
+   * Every page's text in order, INCLUDING the empty ones (spec 0031).
+   *
+   * `pages` above drops empties, which is right for the text-layer path and
+   * wrong for cracking: an empty entry is a scanned page, and dropping it
+   * renumbers every page after it. A citation pointing at the wrong page is
+   * worse than one pointing at nothing.
+   */
+  allPageTexts: string[]
+  /**
+   * The open pdf.js document, so a caller that goes on to crack pages renders
+   * from the same proxy rather than re-parsing the file.
+   */
+  pdf: unknown
 }
 
 /**
@@ -39,7 +53,20 @@ export function isImageOnly(
   return total / pages.length < minCharsPerPage
 }
 
-export async function extractPdf(buffer: Buffer): Promise<ExtractionResult> {
+export async function extractPdf(
+  buffer: Buffer,
+  {
+    /**
+     * Skip the image-only rejection (spec 0031 FR1).
+     *
+     * The rejection exists because a knowledge base that quietly contains
+     * nothing is worse than one that refuses an upload. Once pages can be
+     * cracked individually that reasoning inverts: a scanned page is readable,
+     * so refusing the document is the behaviour that loses information.
+     */
+    allowImageOnly = false,
+  }: { allowImageOnly?: boolean } = {},
+): Promise<ExtractionResult> {
   // Imported lazily so the PDF machinery is not pulled into every route that
   // happens to touch this module's siblings.
   const { extractText, getDocumentProxy } = await import('unpdf')
@@ -66,11 +93,16 @@ export async function extractPdf(buffer: Buffer): Promise<ExtractionResult> {
     text: (pageText ?? '').replace(/\r\n/g, '\n').trim(),
   }))
 
-  if (isImageOnly(pages, env.RAG_MIN_CHARS_PER_PAGE)) {
+  if (!allowImageOnly && isImageOnly(pages, env.RAG_MIN_CHARS_PER_PAGE)) {
     throw new ExtractionError(
       'No selectable text found — this looks like a scanned PDF. OCR is not supported yet, so it cannot be added to your knowledge base.',
     )
   }
 
-  return { pages: pages.filter((p) => p.text.length > 0), pageCount }
+  return {
+    pages: pages.filter((p) => p.text.length > 0),
+    pageCount,
+    allPageTexts: pages.map((p) => p.text),
+    pdf,
+  }
 }

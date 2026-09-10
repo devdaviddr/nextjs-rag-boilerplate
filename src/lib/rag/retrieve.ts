@@ -3,6 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
+import type { ChunkKind } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
 
@@ -43,6 +44,13 @@ export interface RetrievedChunk {
   lexicalRank?: number
   /** Which channel(s) surfaced it. Useful in evaluation and debugging. */
   source?: 'vector' | 'lexical' | 'both'
+  /**
+   * What this chunk is (spec 0031). Carried through retrieval because a
+   * `figure` chunk's content is a SEARCH KEY, not the document's words — the
+   * planner needs to know it can look at the picture instead of quoting the
+   * text, and a citation needs to know not to present it as a quotation.
+   */
+  kind?: ChunkKind
 }
 
 export interface RetrieveOptions {
@@ -69,6 +77,7 @@ interface Row extends Record<string, unknown> {
   document_title: string
   content: string
   page_number: number
+  kind: ChunkKind
   similarity: number
   lexical_rank: number
   vec_rank: number | null
@@ -81,6 +90,7 @@ interface DocumentChunkRow extends Record<string, unknown> {
   document_title: string
   content: string
   page_number: number
+  kind: ChunkKind
 }
 
 interface ReadyDocumentRow extends Record<string, unknown> {
@@ -221,6 +231,7 @@ export async function retrieveForOwner(
       d.title         AS document_title,
       c.content       AS content,
       c.page_number   AS page_number,
+      c.kind          AS kind,
       1 - (c.embedding <=> ${queryVector}::halfvec) AS similarity,
       f.lexical_rank  AS lexical_rank,
       f.vec_rank      AS vec_rank,
@@ -244,6 +255,7 @@ export async function retrieveForOwner(
         documentTitle: r.document_title,
         content: r.content,
         pageNumber: Number(r.page_number),
+        kind: r.kind,
         similarity: Number(r.similarity),
         lexicalRank: Number(r.lexical_rank),
         source: (inVector && inLexical
@@ -327,7 +339,8 @@ export async function retrieveDocumentChunks(
            c.document_id   AS document_id,
            d.title         AS document_title,
            c.content       AS content,
-           c.page_number   AS page_number
+           c.page_number   AS page_number,
+           c.kind          AS kind
     FROM chunks c
     JOIN documents d ON d.id = c.document_id
     WHERE c.owner_id = ${ownerId}
@@ -347,5 +360,6 @@ export async function retrieveDocumentChunks(
     content: r.content,
     pageNumber: Number(r.page_number),
     similarity: 1,
+    kind: r.kind,
   }))
 }

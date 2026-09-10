@@ -4,13 +4,14 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { chunks as chunksTable, documents, files } from '@/db/schema'
-import type { DocumentStatus } from '@/db/schema'
+import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
-import { buildEmbeddingText, chunkPages } from './chunk'
+import { buildEmbeddingText } from './chunk'
+import { chunksFromPdf } from './crack'
 import { embedPassages } from './embed'
-import { ExtractionError, extractPdf } from './extract'
+import { ExtractionError } from './extract'
 
 /**
  * The ingestion state machine (spec 0025 FR4).
@@ -28,7 +29,12 @@ import { ExtractionError, extractPdf } from './extract'
 async function setStatus(
   documentId: string,
   status: DocumentStatus,
-  extra: { error?: string | null; pageCount?: number } = {},
+  extra: {
+    error?: string | null
+    pageCount?: number
+    pagesProcessed?: number
+    extraction?: ExtractionSummary
+  } = {},
 ): Promise<void> {
   await db
     .update(documents)
@@ -36,7 +42,25 @@ async function setStatus(
       status,
       error: extra.error ?? null,
       ...(extra.pageCount !== undefined ? { pageCount: extra.pageCount } : {}),
+      ...(extra.pagesProcessed !== undefined
+        ? { pagesProcessed: extra.pagesProcessed }
+        : {}),
+      ...(extra.extraction !== undefined
+        ? { extraction: extra.extraction }
+        : {}),
     })
+    .where(eq(documents.id, documentId))
+}
+
+/** Progress only — deliberately not routed through `setStatus`, which clears
+ *  `error` on every write and would erase a failure mid-run (FR13). */
+async function setPagesProcessed(
+  documentId: string,
+  pagesProcessed: number,
+): Promise<void> {
+  await db
+    .update(documents)
+    .set({ pagesProcessed })
     .where(eq(documents.id, documentId))
 }
 
@@ -60,19 +84,24 @@ export async function ingestDocument(documentId: string): Promise<void> {
       throw new ExtractionError('The uploaded file is no longer available.')
 
     const buffer = await getObjectBuffer(file.bucketKey)
-    const { pages, pageCount } = await extractPdf(buffer)
-
-    const pieces = chunkPages(pages, {
+    const {
+      chunks: pieces,
+      pageCount,
+      extraction,
+    } = await chunksFromPdf(buffer, {
       chunkTokens: env.RAG_CHUNK_TOKENS,
       overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
+      documentTitle: doc.title,
+      onPageProcessed: (processed) => setPagesProcessed(documentId, processed),
     })
+
     if (pieces.length === 0) {
       throw new ExtractionError(
         'No readable text could be extracted from this PDF.',
       )
     }
 
-    await setStatus(documentId, 'embedding', { pageCount })
+    await setStatus(documentId, 'embedding', { pageCount, extraction })
 
     // Embed the composed text (title + heading + content), store the original.
     // A citation must show the document's own words, not this preamble.
@@ -81,6 +110,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         buildEmbeddingText({
           documentTitle: doc.title,
           heading: piece.heading,
+          caption: piece.caption,
           content: piece.content,
         }),
       ),
@@ -103,16 +133,27 @@ export async function ingestDocument(documentId: string): Promise<void> {
           pageNumber: piece.pageNumber,
           chunkIndex: piece.chunkIndex,
           tokenCount: piece.tokenCount,
+          // 'text' when the text-layer path produced this chunk, which is
+          // also the column default — so nothing about an uncracked document
+          // changes shape.
+          kind: piece.kind ?? 'text',
+          bbox: piece.bbox ?? null,
           embedding: vectors[i] as number[],
         })),
       )
     })
 
-    await setStatus(documentId, 'ready', { pageCount })
+    await setStatus(documentId, 'ready', {
+      pageCount,
+      pagesProcessed: pageCount,
+      extraction,
+    })
     logger.info('Document ingested', {
       documentId,
       pageCount,
       chunkCount: pieces.length,
+      parseCalls: extraction?.parseCalls ?? 0,
+      budgetExhausted: extraction?.budgetExhausted ?? false,
     })
   } catch (error) {
     // ExtractionError messages are written for the user and are safe to show.

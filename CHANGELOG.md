@@ -8,6 +8,52 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Tables, figures and scanned pages can be indexed**
+  ([spec 0031](specs/0031-tables-figures-and-complex-layouts.md)), behind
+  `RAG_CRACK_ENABLED` (default off). Each page is triaged locally, for free, and
+  only pages that need help — multi-column, tabular, image-bearing or scanned —
+  are sent to `nvidia/nemotron-parse`, which returns typed, boxed elements
+  instead of a flat string. On the evaluation corpus that is 4 parse calls
+  across 6 documents; three documents spend nothing, which is the property that
+  makes it affordable on a rate-limited tier. A scanned appendix that previously
+  ingested as "success" while contributing nothing to the index is now read.
+  Chunks gain `kind` and `bbox`, the latter being what span-level citation
+  highlighting will need.
+
+  A figure is indexed by a **search key** — its caption where it has one, free
+  and in the document's own words, and a generated one-sentence label where it
+  does not. What the figure _shows_ is read at answer time by the new
+  `read_figure` tool on the agentic loop (`RAG_READ_FIGURE_ENABLED`). That split
+  is measured: transcribing a chart blind at ingestion was wrong by 15–30% and
+  took 40s, while a specific question against a cropped region was correct in
+  4s. Unlabelled quantities remain unreliable under any instruction tested, so a
+  deterministic guard replaces any number the figure does not print with
+  `[unlabelled]`.
+
+  Budgets degrade rather than fail: past `RAG_CRACK_MAX_PAGES` or
+  `RAG_DESCRIBE_MAX_FIGURES` the remaining pages take the text-layer path, the
+  document still reaches `ready`, and `documents.extraction` records per page
+  which route it took and why.
+
+- **`pnpm rag:eval --answers`** generates an answer from the retrieved context
+  and asserts against it, reported separately from `hit@k` because it measures
+  generation rather than retrieval.
+
+### Changed
+
+- **Scanned PDFs are no longer rejected outright** when cracking is enabled.
+  With it off, the existing rejection is unchanged.
+
+### Notes
+
+- Spec 0031 asserted that flattened tables and interleaved columns cost answers.
+  Two deliberately destructive evaluation corpora failed to reproduce that: the
+  chat model reconstructed both reliably. OCR and figures justify this feature;
+  tables and columns are better chunks that have not been shown to be better
+  answers. The spec records the contradiction rather than editing its premise.
+
 ## [0.20.1] - 2026-09-10
 
 ### Fixed

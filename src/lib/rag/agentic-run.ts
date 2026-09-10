@@ -4,6 +4,7 @@ import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { type LoopStep, effectiveFloor, runAgenticLoop } from './agentic'
 import { createChatCompletion } from './client'
+import { READ_FIGURE_TOOL, readFigure } from './figure'
 import {
   type PlannerDecision,
   SEARCH_TOOL,
@@ -44,7 +45,9 @@ The search has NO memory of the conversation. Resolve pronouns and references fr
 Look at what previous searches returned. If they found nothing useful, try a DIFFERENT phrasing or a more specific term rather than repeating the same query.
 When you have enough to answer, reply with a short confirmation instead of calling the tool.
 
-Never invent document ids. Only pass documentId if one was given to you.`
+When a search result is marked FIGURE, its text is only a label — call read_figure with the id shown and a specific question to see what the figure actually contains. Never guess a value from a figure you have not looked at.
+
+Never invent document ids or figure ids. Only pass an id that was given to you.`
 
 function historyPrompt(
   question: string,
@@ -147,6 +150,11 @@ export async function runAgenticRetrieval(input: {
   // 3. The bounded loop. Reference resolution happens INSIDE it, not as a
   //    separate call — see the note on `effectiveQuery` below.
   let tokens = 0
+  // Figures are only worth offering when something could have produced one.
+  // With cracking off no chunk is a figure, so advertising the tool would cost
+  // planner tokens on every question to describe something that cannot exist.
+  const figureReadingEnabled =
+    env.RAG_READ_FIGURE_ENABLED && env.RAG_CRACK_ENABLED
   const outcome = await runAgenticLoop(
     {
       maxSearches: env.RAG_MAX_SEARCHES,
@@ -163,7 +171,9 @@ export async function runAgenticRetrieval(input: {
           ],
           {
             model: env.RAG_PLANNER_MODEL,
-            tools: [SEARCH_TOOL],
+            tools: figureReadingEnabled
+              ? [SEARCH_TOOL, READ_FIGURE_TOOL]
+              : [SEARCH_TOOL],
             maxTokens: 800,
             signal: planSignal,
           },
@@ -194,6 +204,23 @@ export async function runAgenticRetrieval(input: {
         documentId
           ? retrieveDocumentChunks(userId, documentId, permittedKbIds)
           : retrieveForOwner(userId, searchQuery, permittedKbIds),
+      // Omitted entirely when disabled, so the loop never advertises a tool it
+      // cannot service.
+      ...(figureReadingEnabled
+        ? {
+            readFigure: (chunkId: string, figureQuestion: string) =>
+              readFigure(
+                {
+                  ownerId: userId,
+                  chunkId,
+                  question: figureQuestion,
+                  // Bound HERE, from the conversation — never from the model.
+                  knowledgeBaseIds: permittedKbIds,
+                },
+                { signal },
+              ),
+          }
+        : {}),
     },
     signal,
   )

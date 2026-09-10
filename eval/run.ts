@@ -15,9 +15,10 @@ import { db } from '@/db'
 import { chunks, documents, files, knowledgeBases, users } from '@/db/schema'
 import { env } from '@/lib/env'
 import { runAgenticRetrieval } from '@/lib/rag/agentic-run'
-import { buildEmbeddingText, chunkPages } from '@/lib/rag/chunk'
+import { buildEmbeddingText } from '@/lib/rag/chunk'
+import { createChatCompletion } from '@/lib/rag/client'
+import { chunksFromPdf } from '@/lib/rag/crack'
 import { embedPassages } from '@/lib/rag/embed'
-import { extractPdf } from '@/lib/rag/extract'
 import {
   listReadyDocuments,
   retrieveDocumentChunks,
@@ -25,7 +26,9 @@ import {
   type RetrievedChunk,
 } from '@/lib/rag/retrieve'
 import type { RewriteTurn } from '@/lib/rag/rewrite'
+import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
 import { resolveScope } from '@/lib/rag/scope'
+import { putObject } from '@/lib/storage/client'
 
 /**
  * Retrieval evaluation harness (spec 0027, Recommendation 0; spec 0028 NFR4;
@@ -56,6 +59,11 @@ import { resolveScope } from '@/lib/rag/scope'
  *   pnpm rag:eval --no-ingest     # reuse what is already indexed
  *   pnpm rag:eval --label X --baseline Y   # gate X's refusal accuracy against
  *                                           # saved eval/results/Y.json (default Y=baseline)
+ *   pnpm rag:eval --answers       # ALSO generate answers and assert against
+ *                                 # them (spec 0031). Measures GENERATION, so
+ *                                 # it is reported separately and never folded
+ *                                 # into hit@k. Costs one chat call per
+ *                                 # checked question.
  *   pnpm rag:eval --compare       # ALSO run the agentic path; save
  *                                 # eval/results/{baseline,agentic}.json; gate
  *                                 # on refusal accuracy in the SAME run (0029 NFR3)
@@ -93,7 +101,16 @@ const KNOWLEDGE_BASES = [
   },
   {
     name: 'Facilities & Operations',
-    documents: ['facilities-guide'],
+    documents: [
+      'facilities-guide',
+      // Spec 0031's layout documents. Filed here because they are
+      // facilities-flavoured, and because keeping them out of the HR knowledge
+      // base leaves the existing cross-KB leakage checks measuring exactly what
+      // they measured before.
+      'site-operations-report',
+      'maintenance-log',
+      'plant-services-manual',
+    ],
   },
 ] as const
 
@@ -122,7 +139,7 @@ interface AnswerFact {
   page: number
 }
 
-type QuestionType = 'single-hop' | 'followup' | 'multi-hop'
+type QuestionType = 'single-hop' | 'followup' | 'multi-hop' | 'layout'
 
 interface Question {
   id: string
@@ -148,6 +165,22 @@ interface Question {
    * multi-hop questions use this instead and leave `document`/`page` unset.
    */
   answerDocuments?: AnswerFact[]
+  /**
+   * Substrings the generated answer must contain (spec 0031).
+   *
+   * Retrieval metrics cannot see a flattened table or interleaved columns: the
+   * right page comes back either way, so hit@1 reports a pass while the chunk
+   * is unusable. Only an ANSWER can show the difference — "388" is either in it
+   * or it is not.
+   */
+  answerMustContain?: string[]
+  /**
+   * A regex the generated answer must NOT match.
+   *
+   * The guard for a value that exists only as a bar height: the answer must
+   * decline rather than state a number nobody wrote down.
+   */
+  answerMustNotMatch?: string
 }
 
 function questionType(q: Question): QuestionType {
@@ -189,6 +222,16 @@ interface LeakDetail {
 }
 
 /** A question whose OWN knowledge base, scoped alone, still failed to retrieve it. */
+/** One answer-level check and what it found. */
+interface AnswerCheck {
+  questionId: string
+  question: string
+  passed: boolean
+  answer: string
+  /** Which expectation failed, for a report that says what broke. */
+  detail: string
+}
+
 interface ComplementFailure {
   questionId: string
   question: string
@@ -250,18 +293,33 @@ async function ingestCorpus(): Promise<void> {
     const knowledgeBaseId = kbIdByName.get(kbName)!
 
     const buffer = readFileSync(join(CORPUS_DIR, name))
-    const { pages, pageCount } = await extractPdf(buffer)
-
-    const pieces = chunkPages(pages, {
+    // The SAME path production ingestion takes, cracking included (spec 0031).
+    // This used to be a local copy of extract-then-chunk, which quietly stopped
+    // matching `ingest.ts` the moment cracking existed — the harness reported
+    // no change because it was still measuring the old pipeline.
+    const {
+      chunks: pieces,
+      pageCount,
+      extraction,
+    } = await chunksFromPdf(buffer, {
       chunkTokens: env.RAG_CHUNK_TOKENS,
       overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
     })
+
+    // Upload the PDF for real. `read_figure` (spec 0031 FR9) fetches the
+    // stored object to re-render a page, so a `files` row pointing at a key
+    // that was never written makes the tool untestable here — the harness
+    // would report "could not read the figure" for a reason that exists only
+    // in the harness. Same principle as routing ingestion through
+    // `chunksFromPdf`: measure the real path or do not claim to measure it.
+    const bucketKey = `${EVAL_USER_ID}/${title}-${Date.now()}.pdf`
+    await putObject(bucketKey, buffer, 'application/pdf')
 
     const [fileRow] = await db
       .insert(files)
       .values({
         ownerId: EVAL_USER_ID,
-        bucketKey: `${EVAL_USER_ID}/${title}-${Date.now()}.pdf`,
+        bucketKey,
         originalName: name,
         mimeType: 'application/pdf',
         sizeBytes: buffer.length,
@@ -277,6 +335,8 @@ async function ingestCorpus(): Promise<void> {
         title,
         status: 'ready',
         pageCount,
+        pagesProcessed: pageCount,
+        extraction,
       })
       .returning()
 
@@ -285,6 +345,7 @@ async function ingestCorpus(): Promise<void> {
         buildEmbeddingText({
           documentTitle: title,
           heading: piece.heading,
+          caption: piece.caption,
           content: piece.content,
         }),
       ),
@@ -299,12 +360,18 @@ async function ingestCorpus(): Promise<void> {
         pageNumber: piece.pageNumber,
         chunkIndex: piece.chunkIndex,
         tokenCount: piece.tokenCount,
+        kind: piece.kind ?? 'text',
+        bbox: piece.bbox ?? null,
         embedding: vectors[i] as number[],
       })),
     )
 
     console.log(
-      `  ingested ${title} -> "${kbName}": ${pageCount} pages, ${pieces.length} chunks`,
+      `  ingested ${title} -> "${kbName}": ${pageCount} pages, ${pieces.length} chunks` +
+        (extraction
+          ? ` (${extraction.parseCalls} parse calls, ` +
+            `${extraction.pages.filter((p) => p.outcome === 'parsed').length} pages cracked)`
+          : ''),
     )
   }
 }
@@ -485,6 +552,77 @@ async function agenticRetrieve(
   } finally {
     clearTimeout(timeout)
   }
+}
+
+/**
+ * Generate an answer and check it against the question's expectations.
+ *
+ * Deliberately NOT folded into hit@k. This measures generation, the harness's
+ * headline numbers measure retrieval, and mixing them would make one number
+ * move for two unrelated reasons. It also costs a chat call per checked
+ * question, which is why it is opt-in behind `--answers`.
+ *
+ * The prompt is the app's own `SYSTEM_PROMPT` + `buildUserMessage`, not a
+ * variant written for the harness — the same reason ingestion goes through
+ * `chunksFromPdf`.
+ */
+async function runAnswerChecks(
+  questions: readonly Question[],
+  retrievedById: Map<string, RetrievedChunk[]>,
+): Promise<AnswerCheck[]> {
+  const checks: AnswerCheck[] = []
+
+  for (const q of questions) {
+    const wants = q.answerMustContain ?? []
+    const forbids = q.answerMustNotMatch
+    if (wants.length === 0 && !forbids) continue
+
+    const chunks = retrievedById.get(q.id) ?? []
+    if (chunks.length === 0) {
+      checks.push({
+        questionId: q.id,
+        question: q.question,
+        passed: !q.answerable,
+        answer:
+          '(nothing retrieved — the system refuses without calling the model)',
+        detail: q.answerable
+          ? 'expected an answer but retrieval returned nothing'
+          : 'refused, as required',
+      })
+      continue
+    }
+
+    const { choice } = await createChatCompletion(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserMessage(q.question, chunks) },
+      ],
+      { maxTokens: 400, temperature: 0.2 },
+    )
+    const answer = (choice.message?.content ?? '').trim()
+
+    const missing = wants.filter((want) => !answer.includes(want))
+    const forbidden = forbids ? new RegExp(forbids, 'i').exec(answer) : null
+
+    checks.push({
+      questionId: q.id,
+      question: q.question,
+      passed: missing.length === 0 && !forbidden,
+      answer,
+      detail:
+        missing.length > 0
+          ? `missing ${missing.map((m) => JSON.stringify(m)).join(', ')}`
+          : forbidden
+            ? `stated ${JSON.stringify(forbidden[0])}, which the documents never print`
+            : 'ok',
+    })
+
+    // Spaced out, same as the agentic pass: a free tier rate-limits rather
+    // than bills, so a burst is the thing to avoid.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+  }
+
+  return checks
 }
 
 interface CoreMetrics {
@@ -861,6 +999,9 @@ async function main(): Promise<void> {
   // search twice does on exactly the cases designed to need that.
   console.log('Baseline (fixed pipeline) — per question:')
   const baselineResults: QuestionResult[] = []
+  // Kept so `--answers` can generate from exactly what retrieval returned,
+  // rather than retrieving a second time and scoring a different context.
+  const retrievedById = new Map<string, RetrievedChunk[]>()
   for (const q of questions) {
     const retrieved = await baselineRetrieve(
       q,
@@ -868,6 +1009,7 @@ async function main(): Promise<void> {
       allKbIds,
       docsInScope,
     )
+    retrievedById.set(q.id, retrieved)
     const result = buildResult(q, retrieved, titleById)
     baselineResults.push(result)
     logResult(result)
@@ -931,9 +1073,37 @@ async function main(): Promise<void> {
     (r) => r.type === 'single-hop',
   )
   const baselineFollowup = baselineResults.filter((r) => r.type === 'followup')
+  // Spec 0031. Kept out of the headline pool for the same reason `followup` and
+  // `multi-hop` are: these questions are designed to FAIL until cracking ships,
+  // and folding them into the single-hop numbers would show up as a retrieval
+  // regression against the recorded baseline that nothing regressed.
+  const baselineLayout = baselineResults.filter((r) => r.type === 'layout')
   const baselineCore = coreMetrics(baselineSingleHop)
   const baselineFollowupCore = coreMetrics(baselineFollowup)
+  const baselineLayoutCore = coreMetrics(baselineLayout)
   const baselineMultiHop = multiHopMetrics(baselineResults)
+
+  // --- Answer-level checks (spec 0031). Opt-in: they cost a chat call per
+  // checked question, and they measure generation rather than retrieval.
+  let answerChecks: AnswerCheck[] = []
+  if (hasFlag('answers')) {
+    console.log('\nAnswer checks — generating from the retrieved context:')
+    answerChecks = await runAnswerChecks(questions, retrievedById)
+    for (const check of answerChecks) {
+      console.log(
+        `  ${check.passed ? 'PASS' : 'FAIL'}  ${check.questionId} — ${check.detail}`,
+      )
+      if (!check.passed) {
+        console.log(
+          `        answer: ${check.answer.replace(/\s+/g, ' ').slice(0, 220)}`,
+        )
+      }
+    }
+    const failed = answerChecks.filter((c) => !c.passed).length
+    console.log(
+      `  ${answerChecks.length - failed}/${answerChecks.length} answer checks passed`,
+    )
+  }
 
   const baselineSummary = {
     label: compare ? 'baseline' : label,
@@ -960,9 +1130,11 @@ async function main(): Promise<void> {
       crossKbComplementFailures: complementFailures.length,
     },
     followup: baselineFollowupCore,
+    layout: baselineLayoutCore,
     multiHop: baselineMultiHop,
     crossKbLeaks: leaks,
     crossKbComplementDetails: complementFailures,
+    answerChecks,
     results: baselineResults,
   }
 
@@ -981,6 +1153,14 @@ async function main(): Promise<void> {
     `Baseline multi-hop (n=${baselineMultiHop.count}): full-match ${baselineMultiHop.fullMatchRate}  ` +
       `fact recall ${baselineMultiHop.factRecall}`,
   )
+  console.log(
+    `Baseline layout (n=${baselineLayout.length}): hit@1 ${baselineLayoutCore.hitAt1}  ` +
+      `hit@3 ${baselineLayoutCore.hitAt3}  MRR ${baselineLayoutCore.mrr}  ` +
+      `refusal ${baselineLayoutCore.refusalAccuracy}`,
+  )
+  for (const row of baselineLayout.filter((r) => !r.passed)) {
+    console.log(`    ✗ ${row.id} — ${row.hard ?? 'no note'}`)
+  }
 
   mkdirSync(RESULTS_DIR, { recursive: true })
   writeFileSync(

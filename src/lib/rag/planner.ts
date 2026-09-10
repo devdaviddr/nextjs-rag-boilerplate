@@ -22,7 +22,7 @@
  * because it is safer.
  */
 
-export type PlannerAction = 'search' | 'answer' | 'refuse'
+export type PlannerAction = 'search' | 'answer' | 'refuse' | 'read-figure'
 
 export interface PlannerDecision {
   action: PlannerAction
@@ -39,7 +39,28 @@ export interface PlannerDecision {
    * conversation, never from this object. See spec 0028's boundary statement.
    */
   documentId?: string
+  /**
+   * Present when `action === 'read-figure'` (spec 0031 FR9): which figure to
+   * look at, and what to look for.
+   *
+   * `chunkId` is subject to exactly the caveat above — it is a hint the model
+   * supplies, validated server-side against the caller's own chunks and
+   * permitted knowledge bases in `resolveFigure`. It decides nothing about
+   * scope.
+   */
+  chunkId?: string
+  figureQuestion?: string
 }
+
+/**
+ * Name of the figure tool, duplicated here rather than imported from
+ * `figure.ts`.
+ *
+ * `figure.ts` reaches the database and object storage; this module is pure and
+ * unit-tested without either. Importing the constant would drag all of that
+ * into every test that parses a decision, to share one string.
+ */
+export const READ_FIGURE_TOOL_NAME = 'read_figure'
 
 /** The tool schema advertised to the model. */
 export const SEARCH_TOOL = {
@@ -90,6 +111,27 @@ function cleanQuery(value: unknown): string | undefined {
   return query ? query.slice(0, 500) : undefined
 }
 
+/** Read a `read_figure` call, or null if it is not usable. */
+function parseFigureArguments(argumentsJson: string): PlannerDecision | null {
+  let args: unknown
+  try {
+    args = JSON.parse(argumentsJson)
+  } catch {
+    return null
+  }
+  if (!args || typeof args !== 'object') return null
+  const record = args as Record<string, unknown>
+
+  const chunkId = cleanDocumentId(record.chunkId)
+  const figureQuestion = cleanQuery(record.question)
+  // Both halves are required: a figure with no question gets a blind
+  // description, which is precisely the 15-30%-wrong path this tool exists to
+  // avoid.
+  if (!chunkId || !figureQuestion) return null
+
+  return { action: 'read-figure', chunkId, figureQuestion }
+}
+
 function cleanDocumentId(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const id = value.trim()
@@ -109,9 +151,20 @@ function cleanDocumentId(value: unknown): string | undefined {
 export function parseToolCallDecision(
   choice: RawChoice | undefined,
 ): PlannerDecision | null {
-  const call = choice?.message?.tool_calls?.find(
-    (c) => c.function?.name === SEARCH_TOOL.function.name,
+  const calls = choice?.message?.tool_calls ?? []
+
+  // A figure read is checked first: when the model asks to look at something,
+  // that is the more specific intent and searching again would waste a step it
+  // has already decided it does not need.
+  const figureCall = calls.find(
+    (c) => c.function?.name === READ_FIGURE_TOOL_NAME,
   )
+  if (figureCall?.function?.arguments) {
+    const decision = parseFigureArguments(figureCall.function.arguments)
+    if (decision) return decision
+  }
+
+  const call = calls.find((c) => c.function?.name === SEARCH_TOOL.function.name)
   if (!call?.function?.arguments) {
     // No tool call. A finish_reason of 'stop' with content means the model
     // chose to answer rather than search — a legitimate decision, not a

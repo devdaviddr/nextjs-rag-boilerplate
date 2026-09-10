@@ -1,0 +1,62 @@
+[
+  {
+    "bbox": {
+      "xmin": 0.0195,
+      "ymin": 0.029301287553648088,
+      "xmax": 0.1719,
+      "ymax": 0.040376309012875554
+    },
+    "text": "APPENDIX D - LANDSCAPE SCHEDULE",
+    "type": "Page-header"
+  },
+  {
+    "bbox": {
+      "xmin": 0.0195,
+      "ymin": 0.05813150214592276,
+      "xmax": 0.3105,
+      "ymax": 0.07887519313304718
+    },
+    "text": "D.1 Ingestion flow and cutover schedule",
+    "type": "Section-header"
+  },
+  {
+    "bbox": {
+      "xmin": 0.0195,
+      "ymin": 0.45103107296137335,
+      "xmax": 0.124,
+      "ymax": 0.463336652360515
+    },
+    "text": "Confidential — D-4 — Rev 2",
+    "type": "Page-footer"
+  },
+  {
+    "bbox": {
+      "xmin": 0.0195,
+      "ymin": 0.3218224892703862,
+      "xmax": 0.9775,
+      "ymax": 0.4441751072961374
+    },
+    "text": "\\begin{tabular}{ccccc}\n\\multirow{2}{*}{**Wave**} & \\multicolumn{3}{c}{**Cutover window (AEST)**} & \\multirow{2}{*}{**Owner**} \\\\\n & **Start** & **End** & **Freeze** & \\\\\nWave 1 — internal & 02:00 & 04:30 & Yes & Platform \\\\\nWave 2 — pilot tenants & 04:30 & 07:00 & Yes & Delivery \\\\\nWave 3 — general & 07:00 & 11:15 & No & Delivery \\\\\n\\end{tabular}",
+    "type": "Table"
+  },
+  {
+    "bbox": {
+      "xmin": 0.0205,
+      "ymin": 0.0966303862660944,
+      "xmax": 0.6621,
+      "ymax": 0.28754266094420605
+    },
+    "text": "Text layer\nclean\nTriage (per page)\nUpload PDF\nNormalise\nscansel\nParse image",
+    "type": "Picture"
+  },
+  {
+    "bbox": {
+      "xmin": 0.0195,
+      "ymin": 0.297211330472103,
+      "xmax": 0.2695,
+      "ymax": 0.3123296137339056
+    },
+    "text": "Figure D.1: Per-page routing. Clean pages bypass the parser entirely.",
+    "type": "Caption"
+  }
+]

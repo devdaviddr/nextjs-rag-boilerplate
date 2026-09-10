@@ -245,8 +245,14 @@
       "type": "multi-hop",
       "question": "Is overtime paid as cash under my contract, and separately, how many days do I have to submit a travel expense claim under the handbook?",
       "answerDocuments": [
-        { "document": "employment-contract", "page": 3 },
-        { "document": "staff-handbook", "page": 2 }
+        {
+          "document": "employment-contract",
+          "page": 3
+        },
+        {
+          "document": "staff-handbook",
+          "page": 2
+        }
       ],
       "knowledgeBase": "HR & Employment",
       "answerable": true,
@@ -257,12 +263,104 @@
       "type": "multi-hop",
       "question": "Which requires more advance notice: ending my employment during probation, or booking a day of annual leave?",
       "answerDocuments": [
-        { "document": "employment-contract", "page": 1 },
-        { "document": "staff-handbook", "page": 1 }
+        {
+          "document": "employment-contract",
+          "page": 1
+        },
+        {
+          "document": "staff-handbook",
+          "page": 1
+        }
       ],
       "knowledgeBase": "HR & Employment",
       "answerable": true,
       "hard": "requires comparing the contract's probation notice (page 1) against the handbook's leave-approval notice (page 1) — genuinely two documents, not a paraphrase of one"
+    },
+    {
+      "id": "layout-lift-capacity-north",
+      "type": "layout",
+      "question": "What is the rated capacity of the north wing lift?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "Two-column page emitted row-major, so extractText interleaves the columns: the chunk reads 'Its new rated capacity is 1600 Its rated capacity is unchanged at / kilograms. 1000 kilograms.' Both capacities sit adjacent, so a retrieved chunk supports either answer.",
+      "answerMustContain": ["1600"]
+    },
+    {
+      "id": "layout-geelong-unplanned-downtime",
+      "type": "layout",
+      "question": "How many unplanned downtime hours did Geelong record?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "Merged-cell table. Flattened, the row is 'Geelong 63.0 61.5 210 388' with 'Planned Unplanned' on a separate line, so 388 has lost its column header entirely.",
+      "answerMustContain": ["388"]
+    },
+    {
+      "id": "layout-downtime-spike-quarter",
+      "type": "layout",
+      "question": "Which quarter had the spike in unplanned downtime?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 3,
+      "answerable": true,
+      "hard": "Landscape page. The answer is in the figure's caption, which IS text — this is the case spec 0031 FR6 expects to cost nothing, because a caption makes a figure findable without a vision call.",
+      "answerMustContain": ["Q3"]
+    },
+    {
+      "id": "layout-q2-downtime-hours",
+      "type": "layout",
+      "question": "How many hours of unplanned downtime were recorded in Q2?",
+      "knowledgeBase": "Facilities & Operations",
+      "answerable": false,
+      "hard": "The value exists ONLY as a bar height (308) — no text on any page carries it. Marked unanswerable because the corpus contains no TEXT answer, which is what the retrieval metrics score; expect the retrieval-level refusal check to fail, because the figure's caption is legitimately about quarters and downtime. The real guarantee is at the ANSWER level (spec 0031 FR7): answerMustNotMatch forbids a number in the same clause as Q2, so quoting the table's printed per-site hours is allowed and inventing a Q2 value is not.",
+      "answerMustNotMatch": "(Q2[^.]{0,60}?\\d{2,4}|\\d{2,4}[^.]{0,60}?Q2)"
+    },
+    {
+      "id": "layout-chiller-warranty",
+      "type": "layout",
+      "question": "What is the warranty period on the replacement chiller?",
+      "document": "maintenance-log",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "The answer is on a SCANNED page. maintenance-log averages 120 chars/page against RAG_MIN_CHARS_PER_PAGE=50, so the document ingests and reports success while page 2 contributes nothing — the silent-appendix failure spec 0031 FR1 exists to fix.",
+      "answerMustContain": ["60"]
+    },
+    {
+      "id": "layout-setpoint-building-a",
+      "type": "layout",
+      "question": "What is Building A's chilled water setpoint?",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "Two columns whose sentences are word-for-word parallel, emitted row-major. Flattened, the page reads 'Its chilled water setpoint is Its chilled water setpoint is / 6.5 degrees. 9.0 degrees.' — two setpoints adjacent with no lexical cue attaching either to a building. The earlier two-column fixture failed to discriminate because 'unchanged at' gave the answer away; this one has no such tell.",
+      "answerMustContain": ["6.5"]
+    },
+    {
+      "id": "layout-condenser-approach-building-b",
+      "type": "layout",
+      "question": "What is Building B's condenser approach?",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "Second sample of the same interleaving failure, to distinguish a real fix from one lucky guess between two adjacent numbers.",
+      "answerMustContain": ["2.8"]
+    },
+    {
+      "id": "layout-weekend-overtime-plumbing",
+      "type": "layout",
+      "question": "What is the weekend overtime rate for plumbing?",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "A seven-column table with three two-column spans. Flattened, the row is 'Plumbing 88 132 110 165 154 231' and the two header rows are separate lines, so the answer requires mapping the fourth of six sub-columns to the second of three spans with nothing to count from.",
+      "answerMustContain": ["165"]
     }
   ]
 }
