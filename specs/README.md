@@ -39,9 +39,10 @@ recorded in either, so they were removed rather than left as decoration.
 
 1. Copy [`TEMPLATE.md`](TEMPLATE.md) to `NNNN-slug.md` (next free 4-digit id).
 2. Fill it in; open it for review as `Proposed`.
-3. On agreement, set `Accepted` and implement — ideally on a `feature/<slug>`
-   branch (see the [contributing guide](../CONTRIBUTING.md) for the trunk-based
-   workflow).
+3. On agreement, implement it — ideally on a `feature/<slug>` branch (see the
+   [contributing guide](../CONTRIBUTING.md) for the trunk-based workflow). The
+   status stays `Proposed` throughout; there is no in-flight state, and
+   `pnpm specs:check` rejects any status outside the four above.
 4. On release, set `Shipped`, fill `release:`, and **close out the acceptance
    criteria** — tick what is done, and move anything that is not into
    "Out of scope / future" with a reason. Add the matching

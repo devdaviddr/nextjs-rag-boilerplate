@@ -28,7 +28,7 @@ import {
 import type { RewriteTurn } from '@/lib/rag/rewrite'
 import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
 import { resolveScope } from '@/lib/rag/scope'
-import { putObject } from '@/lib/storage/client'
+import { deleteObjectsUnderPrefix, putObject } from '@/lib/storage/client'
 
 /**
  * Retrieval evaluation harness (spec 0027, Recommendation 0; spec 0028 NFR4;
@@ -84,6 +84,12 @@ import { putObject } from '@/lib/storage/client'
 
 const EVAL_USER_ID = 'eval-harness-user'
 const EVAL_USER_EMAIL = 'eval-harness@example.invalid'
+/**
+ * Every object this harness writes lives under this prefix, and `clearCorpus`
+ * deletes exactly this prefix. The trailing slash is load-bearing — see
+ * `listObjectKeys`.
+ */
+const EVAL_BUCKET_PREFIX = `${EVAL_USER_ID}/`
 const CORPUS_DIR = 'eval/corpus'
 const RESULTS_DIR = 'eval/results'
 
@@ -297,6 +303,18 @@ async function ensureEvalUser(): Promise<void> {
  * first anyway, explicitly, rather than relying solely on the KB cascade: the
  * same belt-and-braces shape as the rest of this file. Safe to re-run: every
  * delete is scoped to EVAL_USER_ID, and deleting nothing is not an error.
+ *
+ * **The bucket is cleared too, and by prefix rather than from the `files`
+ * rows.** `ingestCorpus` uploads each corpus PDF for real so `read_figure` has
+ * something to fetch; clearing only the rows left one object per document
+ * behind on every `pnpm rag:eval`. Listing the prefix rather than reading the
+ * rows also collects the objects earlier runs already orphaned, whose rows are
+ * long gone.
+ *
+ * The prefix is the whole safety argument: `EVAL_BUCKET_PREFIX` is the eval
+ * user's own folder, `listObjectKeys` refuses a prefix that is not
+ * folder-bounded, and it re-checks every key the endpoint returns. Nothing
+ * outside this harness's own uploads is reachable from here.
  */
 async function clearCorpus(): Promise<void> {
   await db.delete(documents).where(eq(documents.ownerId, EVAL_USER_ID))
@@ -304,6 +322,11 @@ async function clearCorpus(): Promise<void> {
   await db
     .delete(knowledgeBases)
     .where(eq(knowledgeBases.ownerId, EVAL_USER_ID))
+
+  const removed = await deleteObjectsUnderPrefix(EVAL_BUCKET_PREFIX)
+  if (removed > 0) {
+    console.log(`  cleared ${removed} object(s) under ${EVAL_BUCKET_PREFIX}`)
+  }
 }
 
 async function ingestCorpus(): Promise<void> {
@@ -347,7 +370,7 @@ async function ingestCorpus(): Promise<void> {
     // would report "could not read the figure" for a reason that exists only
     // in the harness. Same principle as routing ingestion through
     // `chunksFromPdf`: measure the real path or do not claim to measure it.
-    const bucketKey = `${EVAL_USER_ID}/${title}-${Date.now()}.pdf`
+    const bucketKey = `${EVAL_BUCKET_PREFIX}${title}-${Date.now()}.pdf`
     await putObject(bucketKey, buffer, 'application/pdf')
 
     const [fileRow] = await db
