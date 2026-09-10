@@ -350,3 +350,83 @@ describe('runAgenticLoop — the planner may not answer before searching', () =>
     expect(out.termination).toBe('planner-refused')
   })
 })
+
+describe('runAgenticLoop — the wall-clock budget actually binds', () => {
+  it('gives each call a signal carrying the remaining budget', async () => {
+    // Before this, `maxMs` was only read BETWEEN iterations, so one slow call
+    // overran it by however long that call took — measured at 102s against a
+    // 45s budget. The bound has to reach the call itself.
+    let seen: AbortSignal | undefined
+    const plan = vi.fn(async (_steps: unknown, callSignal: AbortSignal) => {
+      seen = callSignal
+      return { decision: { action: 'answer' as const }, tokens: 10 }
+    })
+
+    await runAgenticLoop(BUDGET, deps({ plan }), signal)
+
+    expect(seen).toBeInstanceOf(AbortSignal)
+    expect(seen?.aborted).toBe(false)
+  })
+
+  it('aborts a call that outlives the budget', async () => {
+    vi.useFakeTimers()
+    try {
+      const plan = vi.fn(
+        (_steps: unknown, callSignal: AbortSignal) =>
+          new Promise((_resolve, reject) => {
+            callSignal.addEventListener('abort', () =>
+              reject(callSignal.reason),
+            )
+          }) as Promise<never>,
+      )
+
+      const outcome = runAgenticLoop(
+        { maxSearches: 3, maxMs: 5_000, maxTokens: 8_000 },
+        deps({ plan }),
+        signal,
+      )
+      await vi.advanceTimersByTimeAsync(6_000)
+
+      // A planner that never returns is a planner failure, not a hang.
+      const result = await outcome
+      expect(result.termination).toBe('planner-unavailable')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds a figure read the same way it bounds planning', async () => {
+    let figureSignal: AbortSignal | undefined
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        decision: {
+          action: 'read-figure',
+          chunkId: 'chunk-1',
+          figureQuestion: 'what does it show?',
+        },
+        tokens: 10,
+      })
+      .mockResolvedValue({ decision: { action: 'answer' }, tokens: 10 })
+
+    const readFigure = vi.fn(
+      async (_id: string, _q: string, callSignal: AbortSignal) => {
+        figureSignal = callSignal
+        return {
+          text: 'a bar chart',
+          documentTitle: 'report',
+          pageNumber: 4,
+          tokens: 6600,
+        }
+      },
+    )
+
+    const out = await runAgenticLoop(BUDGET, deps({ plan, readFigure }), signal)
+
+    expect(readFigure).toHaveBeenCalledTimes(1)
+    expect(figureSignal).toBeInstanceOf(AbortSignal)
+    // A vision call is expensive in tokens as well as seconds — the loop must
+    // count it, or the token budget silently means nothing.
+    expect(out.tokensUsed).toBeGreaterThanOrEqual(6600)
+  })
+})

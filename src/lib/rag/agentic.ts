@@ -103,6 +103,8 @@ export interface LoopDeps {
   readFigure?: (
     chunkId: string,
     question: string,
+    /** Carries whatever is left of the wall-clock budget. */
+    signal: AbortSignal,
   ) => Promise<{
     text: string
     documentTitle: string
@@ -189,6 +191,30 @@ export async function runAgenticLoop(
   let searches = 0
 
   const elapsed = () => now() - startedAt
+
+  /**
+   * A signal for ONE call, bounded by whatever is left of the wall-clock
+   * budget.
+   *
+   * Without this `maxMs` is a checkpoint, not a bound: it is read between
+   * iterations, so a single slow call overruns it by however long that call
+   * takes. Measured 2026-09-10 with a 45s budget — a figure question finished
+   * at 102s, because the budget had no way to interrupt work already in
+   * flight. Composing the remaining time into the call's own signal is what
+   * turns the number into a promise.
+   */
+  const callSignal = (): { signal: AbortSignal; clear: () => void } => {
+    const remaining = Math.max(0, budget.maxMs - elapsed())
+    const controller = new AbortController()
+    const timer = setTimeout(
+      () => controller.abort(new Error('Loop time budget exhausted')),
+      remaining,
+    )
+    return {
+      signal: AbortSignal.any([signal, controller.signal]),
+      clear: () => clearTimeout(timer),
+    }
+  }
   const finish = (termination: LoopTermination): LoopOutcome => ({
     chunks,
     termination,
@@ -207,7 +233,12 @@ export async function runAgenticLoop(
 
     let result: PlanResult
     try {
-      result = await deps.plan(steps, signal)
+      const call = callSignal()
+      try {
+        result = await deps.plan(steps, call.signal)
+      } finally {
+        call.clear()
+      }
     } catch (error) {
       // The planner failing is not the request failing. Whatever was gathered
       // so far still stands, and the caller decides whether it is enough.
@@ -252,7 +283,17 @@ export async function runAgenticLoop(
       }
 
       searches += 1
-      const reading = await deps.readFigure(chunkId, figureQuestion)
+      const figureCall = callSignal()
+      let reading
+      try {
+        reading = await deps.readFigure(
+          chunkId,
+          figureQuestion,
+          figureCall.signal,
+        )
+      } finally {
+        figureCall.clear()
+      }
       if (reading) tokensUsed += reading.tokens
 
       steps.push({
