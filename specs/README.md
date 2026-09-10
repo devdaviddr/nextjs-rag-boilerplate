@@ -95,6 +95,10 @@ other — one isn't a substitute for the other.
 | [0029](0029-agentic-retrieval-loop.md)                | Agentic retrieval loop                                                               | Shipped  | v0.20.0 |
 | [0030](0030-invalidate-sessions-for-deleted-users.md) | Invalidate sessions whose user no longer exists                                      | Shipped  | v0.20.1 |
 | [0031](0031-tables-figures-and-complex-layouts.md)    | Index tables, figures and complex layouts                                            | Proposed | —       |
+| [0032](0032-settle-the-agentic-trade.md)              | Settle whether the agentic path should be the default                                | Proposed | —       |
+| [0033](0033-retrieval-fundamentals.md)                | The retrieval fundamentals that were skipped                                         | Proposed | —       |
+| [0034](0034-resumable-ingestion.md)                   | Resumable ingestion                                                                  | Proposed | —       |
+| [0035](0035-span-level-citations.md)                  | Highlight the cited span, not just the page                                          | Proposed | —       |
 
 <!-- specs:index:end -->
 
