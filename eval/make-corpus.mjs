@@ -82,15 +82,18 @@ function tableOps({ x, y, colWidths, rowHeight, header, subHeader, rows }) {
     }
   })
 
-  // Header row 1: spanning labels.
+  // Header row 1: spanning labels. Tracks the cumulative COLUMN offset, not
+  // the header's own index — with spans wider than one column the two diverge,
+  // and every label after the first span lands in the wrong place.
   let hx = x + 4
+  let columnOffset = 0
   header.forEach(({ label, span }) => {
     const width = colWidths
-      .slice(header.indexOf(header.find((h) => h.label === label)))
-      .slice(0, span)
+      .slice(columnOffset, columnOffset + span)
       .reduce((a, b) => a + b, 0)
     ops.push(draw.text(hx, top - rowHeight + 5, 9, label))
     hx += width
+    columnOffset += span
   })
 
   // Header row 2: the sub-columns underneath a span.
@@ -420,6 +423,85 @@ const MAINTENANCE_LOG_PAGES = [
     ops: [draw.image('Im0', 0, 0, 612, 792)],
   },
 ]
+
+// A second layout document, built specifically to make flattening DESTROY the
+// answer rather than merely degrade it.
+//
+// The first attempt did not: the model answered correctly from both the
+// flattened table and the interleaved columns, because a five-column table
+// keeps its header row intact on its own line and because the two columns
+// happened to use different phrasing ("unchanged at") that disambiguated them.
+// Measured 2026-09-10 — four of five answer checks passed with cracking OFF.
+//
+// Both pages below remove that slack.
+const PLANT_SERVICES_PAGES = [
+  // Page 1 — two columns whose sentences are WORD-FOR-WORD parallel. There is
+  // no lexical cue to tell them apart, so a reader of the interleaved text sees
+  // "Its chilled water setpoint" twice with two setpoints adjacent and nothing
+  // to attach either one to.
+  {
+    ops: [
+      draw.text(60, 740, 15, 'PLANT SERVICES MANUAL - SECTION 2'),
+      draw.text(60, 716, 11, 'Chilled water plant'),
+      ...[
+        [
+          'Building A was recommissioned in',
+          'Building B was recommissioned in',
+        ],
+        ['March by Hartley Mechanical.', 'August by Hartley Mechanical.'],
+        ['Its chilled water setpoint is', 'Its chilled water setpoint is'],
+        ['6.5 degrees.', '9.0 degrees.'],
+        ['Its condenser approach is', 'Its condenser approach is'],
+        ['1.2 degrees.', '2.8 degrees.'],
+      ].flatMap(([leftLine, rightLine], row) => {
+        const y = 686 - row * 15
+        return [
+          draw.text(60, y, 10, leftLine),
+          draw.text(330, y, 10, rightLine),
+        ]
+      }),
+    ],
+  },
+  // Page 2 — a seven-column rate table with THREE two-column spans. Flattened,
+  // a row is six similar numbers and the two header rows are separate lines:
+  // recovering "weekend overtime" means counting to the fourth of six columns
+  // under the second of three spans, with no anchor to count from.
+  {
+    ops: [
+      draw.text(60, 740, 13, 'Table 2.1 - Contractor rates by trade and shift'),
+      draw.text(60, 722, 9, 'Rates are in dollars per hour, excluding GST.'),
+      ...tableOps({
+        x: 60,
+        y: 690,
+        colWidths: [95, 62, 62, 62, 62, 62, 62],
+        rowHeight: 22,
+        header: [
+          { label: 'Trade', span: 1 },
+          { label: 'Weekday', span: 2 },
+          { label: 'Weekend', span: 2 },
+          { label: 'Public holiday', span: 2 },
+        ],
+        subHeader: [
+          '',
+          'Normal',
+          'Overtime',
+          'Normal',
+          'Overtime',
+          'Normal',
+          'Overtime',
+        ],
+        rows: [
+          ['Electrical', '96', '144', '120', '180', '168', '252'],
+          ['Plumbing', '88', '132', '110', '165', '154', '231'],
+          ['Rigging', '104', '156', '130', '195', '182', '273'],
+        ],
+      }),
+      draw.text(60, 545, 9, 'Overtime applies after eight hours on any shift.'),
+    ],
+  },
+]
+
+DOCS['plant-services-manual.pdf'] = PLANT_SERVICES_PAGES
 
 DOCS['site-operations-report.pdf'] = SITE_REPORT_PAGES
 DOCS['maintenance-log.pdf'] = MAINTENANCE_LOG_PAGES

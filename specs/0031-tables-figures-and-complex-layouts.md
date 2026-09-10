@@ -11,9 +11,11 @@ updated: 2026-09-10
 
 ## Summary
 
-Ingestion today reduces every PDF to one plain string per page, so a table
-becomes a run of unassociated numbers, a chart contributes nothing at all, and a
-scanned page is refused. This spec replaces that single call with a **routed,
+Ingestion today reduces every PDF to one plain string per page, so a chart
+contributes nothing at all, a scanned page is refused, and a table becomes a run
+of unassociated numbers. Measured afterwards, only the first two of those turned
+out to cost an answer — see "A second, deliberately harder corpus" below, which
+contradicts the third and is left in place rather than quietly dropped. This spec replaces that single call with a **routed,
 budgeted cracking pipeline**: cheap local triage decides which pages need help,
 `nvidia/nemotron-parse` returns typed and boxed elements for the ones that do,
 and a deterministic normalisation stage repairs the parser's own defects before
@@ -30,7 +32,13 @@ question is on the table is evidence.
 
 `src/lib/rag/extract.ts` calls `extractText(pdf, { mergePages: false })` and
 hands the result to `chunkPages`. That one call sets the ceiling on everything
-downstream, and it loses four things measurably.
+downstream, and it loses four things.
+
+> **Read the measurements before the argument.** Two of the four losses below
+> were later shown NOT to change an answer on any corpus this project could
+> construct. The section is kept as written, with that correction recorded
+> under the evidence, because a spec that silently edits its own premise after
+> the fact teaches nobody anything.
 
 Probed against the live account on **2026-09-10** with a generated page carrying
 a merged-cell table, a bar chart, two-column body text and a header/footer. What
@@ -560,6 +568,56 @@ than proofs, which is a legitimate thing for a test to be, and the distinction
 is recorded here so nobody later reads "5/5 passed" as evidence cracking was
 required for all five.
 
+### A second, deliberately harder corpus — and the result that should change the plan
+
+The first layout corpus failed to discriminate on tables and columns, and the
+obvious explanation was that it was too easy. So `plant-services-manual` was
+built specifically to make flattening destroy the answer:
+
+- **Two columns whose sentences are word-for-word parallel.** Flattened, page 1
+  reads `Its chilled water setpoint is Its chilled water setpoint is / 6.5
+degrees. 9.0 degrees.` — two values adjacent, with no lexical cue attaching
+  either to a building. The earlier fixture had one ("unchanged at"); this one
+  does not.
+- **A seven-column table with three two-column spans.** Flattened, a row is
+  `Plumbing 88 132 110 165 154 231` with the two header rows on separate lines,
+  so "weekend overtime" means the fourth of six sub-columns under the second of
+  three spans, with nothing to count from.
+
+**All three questions pass with cracking OFF**, and the answers are correct, not
+accidentally-matching:
+
+    Building A's chilled water setpoint is 6.5 degrees. [1]
+    Building B's condenser approach is 2.8 degrees. [1]
+    The weekend overtime rate for plumbing is $165 per hour [1].
+
+So across two independently designed destructive fixtures and five questions,
+the table-and-column gap **did not appear once**. `nvidia/nemotron-3-super-120b`
+reconstructs row-major interleaving and multi-level table headers from flattened
+text reliably. That is the opposite of what this spec's Problem section asserts,
+and it was asserted from inspection of the text rather than from measurement.
+
+**What still stands, on evidence:**
+
+| claim                                             | status                                           |
+| ------------------------------------------------- | ------------------------------------------------ |
+| Scanned pages are invisible and cracking fixes it | **Proven**, retrieval and answer level           |
+| Figures are absent from the index entirely        | **Proven** — new capability, no baseline to beat |
+| Flattened tables mislead                          | **Not reproduced**, twice, deliberately          |
+| Interleaved columns mislead                       | **Not reproduced**, twice, deliberately          |
+
+**What that implies.** If this feature were being justified today, OCR and
+figures would justify it and tables and columns would not. They are already
+built, they cost nothing extra at run time (the same parse call returns all of
+it), and better chunks are still better chunks — so nothing here argues for
+removing them. It argues against ever citing them as the reason, and against
+spending more on that half.
+
+Honest limits on the negative result: three-row tables, a single large chat
+model, and interleaving that alternates cleanly line by line. A forty-row table,
+a smaller model, or messier interleaving could all behave differently. What has
+been shown is that the failure is not easy to produce, not that it cannot exist.
+
 > **The harness cannot see two of these gaps.** It scores retrieval, and the
 > last three rows above _pass_ retrieval while returning corrupted content:
 > interleaved columns and a header-less table read as hits, because the right
@@ -643,11 +701,11 @@ larger disclosure per call and should be stated plainly in
 - A worker queue, if per-page cracking makes ingestion long enough that
   `pages_processed` polling stops being adequate.
 - Re-probing for a reranker, and for the multimodal embedder above.
-- **A corpus that can demonstrate the table and column gaps end to end.** The
-  present one cannot: the model recovers both answers without cracking. A table
-  with genuinely ambiguous merged headers, or a two-column spread where a fact
-  spans the gutter, would settle whether those improvements are worth their
-  cost — right now only the chunk quality argues for them, not a measurement.
+- **Establishing whether the table and column gaps exist at all at scale.** Two
+  deliberately destructive fixtures did not reproduce them. The remaining
+  candidates are a table long enough to exhaust the model's patience, a smaller
+  chat model, and interleaving that does not alternate cleanly — none of which
+  this corpus tests.
 - **Quantitative reading of unlabelled charts.** Out of reach of this model, and
   `redactUnlabelledNumbers` is the honest response rather than a workaround. A
   chart whose values are printed reads correctly today.

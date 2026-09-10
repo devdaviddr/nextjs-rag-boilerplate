@@ -109,6 +109,7 @@ const KNOWLEDGE_BASES = [
       // they measured before.
       'site-operations-report',
       'maintenance-log',
+      'plant-services-manual',
     ],
   },
 ] as const

@@ -328,6 +328,39 @@
       "answerable": true,
       "hard": "The answer is on a SCANNED page. maintenance-log averages 120 chars/page against RAG_MIN_CHARS_PER_PAGE=50, so the document ingests and reports success while page 2 contributes nothing — the silent-appendix failure spec 0031 FR1 exists to fix.",
       "answerMustContain": ["60"]
+    },
+    {
+      "id": "layout-setpoint-building-a",
+      "type": "layout",
+      "question": "What is Building A's chilled water setpoint?",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "Two columns whose sentences are word-for-word parallel, emitted row-major. Flattened, the page reads 'Its chilled water setpoint is Its chilled water setpoint is / 6.5 degrees. 9.0 degrees.' — two setpoints adjacent with no lexical cue attaching either to a building. The earlier two-column fixture failed to discriminate because 'unchanged at' gave the answer away; this one has no such tell.",
+      "answerMustContain": ["6.5"]
+    },
+    {
+      "id": "layout-condenser-approach-building-b",
+      "type": "layout",
+      "question": "What is Building B's condenser approach?",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "Second sample of the same interleaving failure, to distinguish a real fix from one lucky guess between two adjacent numbers.",
+      "answerMustContain": ["2.8"]
+    },
+    {
+      "id": "layout-weekend-overtime-plumbing",
+      "type": "layout",
+      "question": "What is the weekend overtime rate for plumbing?",
+      "document": "plant-services-manual",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "A seven-column table with three two-column spans. Flattened, the row is 'Plumbing 88 132 110 165 154 231' and the two header rows are separate lines, so the answer requires mapping the fourth of six sub-columns to the second of three spans with nothing to count from.",
+      "answerMustContain": ["165"]
     }
   ]
 }
