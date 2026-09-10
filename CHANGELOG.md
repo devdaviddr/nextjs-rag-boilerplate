@@ -68,6 +68,27 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   and asserts against it, reported separately from `hit@k` because it measures
   generation rather than retrieval.
 
+- **Ingestion survives a restart, and resumes instead of starting over**
+  ([spec 0034](specs/0034-resumable-ingestion.md)). A deploy or a crash
+  partway through a document used to leave it in "extracting" forever, with
+  nothing running and nothing that would ever run again — the only way out was
+  deleting it and uploading it again. Now a worker takes a document with a
+  10-minute lease, a sweep on boot and every minute afterwards picks up anything
+  whose lease has expired, and a document that repeatedly fails to complete ends
+  as "failed" with a reason you can read rather than cycling forever.
+
+  Resuming does not re-buy what the interrupted run already paid for. Parser
+  output is cached per page, so a document that cracked 20 of 25 pages before a
+  restart pays for the remaining 5. A resumed run also spends the same cracking
+  budget the original would have, so an interruption cannot quietly produce a
+  better-indexed document than an uninterrupted run of the same file.
+
+  This needs no queue, no broker and no second container — the lease is one
+  conditional `UPDATE` that Postgres serialises. **Not yet verified against a
+  real container kill**: the unit suite mocks the database driver, so it proves
+  the SQL is shaped correctly rather than that Postgres serialises two racing
+  claims as intended.
+
 ### Changed
 
 - **Scanned PDFs are no longer rejected outright** when cracking is enabled.
@@ -98,6 +119,24 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - **The upload panel no longer claims scanned documents are unsupported** when
   cracking is enabled — the copy now reflects what the deployment actually
   does.
+
+- **Page furniture no longer sends every page to the parser.** With cracking
+  enabled, triage counted the ruled header, ruled footer and border box that
+  nearly every corporate PDF carries on every page as though they were content,
+  so ordinary prose pages cleared the "this page is drawing something"
+  threshold on decoration alone. On a realistically styled 8-page report that
+  meant **all 8 pages bought a parse call; now 6 do** — the two prose pages are
+  free, while the chart, the flowchart, both table pages and the scanned page
+  still route. Full-width rules and page-size frames are discounted before
+  triage sees them, and the item count no longer includes the empty spacers the
+  PDF text layer emits.
+
+  The threshold itself is unchanged, so this narrows what triggers a parse call
+  rather than weakening the trigger: the evaluation corpus routes exactly the
+  same 6 of 17 pages by exactly the same route as before. That corpus never
+  caught the defect because its fixtures have no page template at all, and the
+  8-page report it was measured on is not in the repository — so the numbers
+  above are not reproducible from a checkout.
 
 ### Notes
 
