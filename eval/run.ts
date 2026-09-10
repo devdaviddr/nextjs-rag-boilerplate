@@ -26,6 +26,7 @@ import {
 } from '@/lib/rag/retrieve'
 import type { RewriteTurn } from '@/lib/rag/rewrite'
 import { resolveScope } from '@/lib/rag/scope'
+import { putObject } from '@/lib/storage/client'
 
 /**
  * Retrieval evaluation harness (spec 0027, Recommendation 0; spec 0028 NFR4;
@@ -271,11 +272,20 @@ async function ingestCorpus(): Promise<void> {
       overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
     })
 
+    // Upload the PDF for real. `read_figure` (spec 0031 FR9) fetches the
+    // stored object to re-render a page, so a `files` row pointing at a key
+    // that was never written makes the tool untestable here — the harness
+    // would report "could not read the figure" for a reason that exists only
+    // in the harness. Same principle as routing ingestion through
+    // `chunksFromPdf`: measure the real path or do not claim to measure it.
+    const bucketKey = `${EVAL_USER_ID}/${title}-${Date.now()}.pdf`
+    await putObject(bucketKey, buffer, 'application/pdf')
+
     const [fileRow] = await db
       .insert(files)
       .values({
         ownerId: EVAL_USER_ID,
-        bucketKey: `${EVAL_USER_ID}/${title}-${Date.now()}.pdf`,
+        bucketKey,
         originalName: name,
         mimeType: 'application/pdf',
         sizeBytes: buffer.length,

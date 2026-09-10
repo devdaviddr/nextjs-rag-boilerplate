@@ -129,6 +129,39 @@ That last figure is the strongest evidence for the answer-time split: a narrow
 question against a small crop is an order of magnitude faster than blind
 description _and_ it was right, where blind description was wrong.
 
+### `read_figure`, and the one thing a prompt could not fix
+
+Built and measured 2026-09-10 against the corpus's chart (five bars, quarter
+labels, **no axis values printed at all**):
+
+| asked                                                              | answer                        |                   |
+| ------------------------------------------------------------------ | ----------------------------- | ----------------- |
+| "which box does a scanned page go to, and where next?" (flowchart) | "Parse image, then Normalise" | ✅ correct, 4.0s  |
+| "which quarter has the tallest bar?"                               | "Q3"                          | ✅ correct        |
+| "…and roughly what value does it reach?"                           | "approximately 90"            | ❌ true value 363 |
+
+The relational answers are right. The quantitative one is not, and **three
+prompt phrasings produced the identical wrong number** — including one that
+handed the model the complete list of text printed on the figure and told it a
+number may only be stated if it appears there. A prompt does not hold this line.
+
+So the guard is deterministic instead, in the spirit of `verify.ts` stripping
+unsupported sentences: `redactUnlabelledNumbers` compares every number in the
+reading against the text the parser extracted from the figure, and replaces any
+that was never printed with `[unlabelled]`. It redacts in place rather than
+dropping the sentence, because the relational half is usually correct and worth
+keeping — the same reading that invented 90 correctly identified Q3.
+
+    before   "The tallest bar is Q3, and it reaches a value of approximately 90."
+    after    "The tallest bar is Q3, and it reaches a value of [unlabelled]."
+
+**What this means for what the feature can claim.** `read_figure` makes a
+figure's _structure_ readable — which bar, which box, what connects to what,
+what the labels say. It does not make an unlabelled chart quantitative, and the
+redaction is what stops it pretending otherwise. A question whose answer is a
+number nobody wrote down still cannot be answered from the document, which is
+the correct outcome and the same one the spec started from.
+
 ## Goals
 
 - A PDF containing tables, figures, multi-column layout or scanned pages is
@@ -406,12 +439,14 @@ measurement in **Problem** exists to justify.
 - [x] A captioned figure produces a `figure` chunk with **no** vision call —
       the corpus's chart page indexes as `kind='figure'` with its caption bound
       and zero vision calls; `tests/unit/rag-normalize.test.ts` covers binding
-- [ ] A figure description containing digits read off the chart is rejected or
-      stripped before indexing (FR7) — `tests/unit/rag-describe.test.ts`
-      (caption-less figures are not yet described; see Out of scope)
-- [ ] `read_figure` refuses a chunk outside the caller's knowledge-base scope,
-      with the same filter `search_documents` uses —
-      `tests/unit/rag-read-figure.test.ts`
+- [x] A number that the figure does not print cannot reach an answer (FR7) —
+      `redactUnlabelledNumbers`, `tests/unit/rag-figure.test.ts`; the guard is
+      deterministic because three prompt phrasings did not hold it
+- [x] `read_figure` refuses a chunk outside the caller's knowledge-base scope,
+      with the same filter `search_documents` uses — `resolveFigure` gates on
+      `owner_id` AND `knowledge_base_id` AND `kind='figure'`; verified live
+      against the eval corpus, where a wrong owner and a wrong knowledge base
+      each return `null`
 - [x] Exceeding `RAG_CRACK_MAX_PAGES` leaves the document `ready` with the
       shortfall recorded in `documents.extraction` — `tests/unit/rag-crack.test.ts`
 - [x] A document with a scanned appendix indexes both its text pages and its
@@ -429,9 +464,10 @@ measurement in **Problem** exists to justify.
       accuracy (1.000, unchanged) and retrieves the scanned page it previously
       could not — layout hit@1 0.750 → 1.000; see the measurement above for the
       one single-hop reordering that came with it
-- [ ] A question whose only answer is a value inside a chart **refuses** when
-      `read_figure` is disabled, rather than returning a described number —
-      needs an answer-level check; see the harness note above
+- [ ] A question whose only answer is a value inside a chart **refuses**,
+      rather than returning a described number — needs an answer-level check;
+      see the harness note above. The mechanism is in place and unit-tested;
+      what is missing is a harness that scores answers rather than retrieval
 
 > **Not verifiable by the retrieval harness (2026-09-10).** "Answers a table
 > question the current pipeline cannot" was an acceptance criterion in the first
@@ -572,10 +608,13 @@ larger disclosure per call and should be stated plainly in
 - A worker queue, if per-page cracking makes ingestion long enough that
   `pages_processed` polling stops being adequate.
 - Re-probing for a reranker, and for the multimodal embedder above.
-- **Describing caption-less figures** (FR6's second half) and the `read_figure`
-  tool (FR9). Everything a figure needs to be findable BY ITS CAPTION and to be
-  read later — `kind`, `bbox`, the bound caption — is in place; the vision calls
-  on top of it are not.
+- **Describing caption-less figures** (FR6's second half). A figure with a
+  caption is findable for free and `read_figure` covers the rest; generating a
+  description for the caption-less case is the remaining piece, and it is the
+  one that spends ~40s per figure at ingestion.
+- **Quantitative reading of unlabelled charts.** Out of reach of this model, and
+  `redactUnlabelledNumbers` is the honest response rather than a workaround. A
+  chart whose values are printed reads correctly today.
 - **An answer-level assertion in `eval/run.ts`.** The harness scores retrieval
   only, so a chunk containing a flattened table or interleaved columns counts as
   a hit. Checking that an expected string appears in the drafted answer — with

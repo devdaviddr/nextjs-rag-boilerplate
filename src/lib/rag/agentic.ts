@@ -91,6 +91,25 @@ export interface LoopDeps {
    */
   search: (query: string, documentId?: string) => Promise<RetrievedChunk[]>
   /**
+   * Look at one figure and answer one question about it (spec 0031 FR9).
+   *
+   * Optional: when absent the tool is simply not offered, and a planner that
+   * asks for it anyway is told there is nothing to look at. Scope is bound by
+   * the CALLER exactly as `search` is — the model supplies a chunk id, which
+   * is validated server-side, and nothing that decides what it may reach.
+   *
+   * Returns the reading as text, or null when the figure could not be read.
+   */
+  readFigure?: (
+    chunkId: string,
+    question: string,
+  ) => Promise<{
+    text: string
+    documentTitle: string
+    pageNumber: number
+    tokens: number
+  } | null>
+  /**
    * Called when a planning attempt fails or returns nothing usable.
    *
    * The loop treats both as "stop", which is correct — retrying a planner that
@@ -219,6 +238,41 @@ export async function runAgenticLoop(
     }
     if (decision.action === 'refuse') return finish('planner-refused')
 
+    // Looking at a figure costs a step and a vision call, so it is bounded by
+    // the SAME search budget rather than getting its own. Measured at ~4s for
+    // a cropped region against a specific question — cheap next to a blind
+    // description, expensive next to a text search, and either way it must not
+    // be free to repeat.
+    if (decision.action === 'read-figure') {
+      const chunkId = decision.chunkId?.trim()
+      const figureQuestion = decision.figureQuestion?.trim()
+      if (!chunkId || !figureQuestion || !deps.readFigure) {
+        deps.onPlanFailure?.('figure decision was not usable')
+        return finish('planner-unavailable')
+      }
+
+      searches += 1
+      const reading = await deps.readFigure(chunkId, figureQuestion)
+      if (reading) tokensUsed += reading.tokens
+
+      steps.push({
+        iteration: searches,
+        query: `read_figure: ${figureQuestion}`,
+        resultCount: reading ? 1 : 0,
+        bestSimilarity: null,
+        // The reading is reported back to the planner as evidence, so it can
+        // decide whether it now has enough. It is deliberately NOT accumulated
+        // into `chunks`: a figure reading is not a retrieved passage, it has
+        // no similarity, and citing it as one would present a model's reading
+        // of a picture as the document's own words.
+        found: reading
+          ? `    [${reading.documentTitle} p${reading.pageNumber}, figure] ${reading.text.replace(/\s+/g, ' ').slice(0, 400)}`
+          : '    (the figure could not be read)',
+        elapsedMs: elapsed(),
+      })
+      continue
+    }
+
     const query = decision.query?.trim()
     if (!query) {
       deps.onPlanFailure?.('search decision carried no query')
@@ -242,9 +296,15 @@ export async function runAgenticLoop(
       // simultaneously being measured against.
       found: found
         .slice(0, 3)
-        .map(
-          (c) =>
-            `    [${c.documentTitle} p${c.pageNumber}] ${c.content.replace(/\s+/g, ' ').slice(0, 240)}`,
+        .map((c) =>
+          c.kind === 'figure'
+            ? // A figure's indexed text is a search key, not its content, so
+              // quoting it back would invite the planner to answer from a
+              // label. It is shown as something to LOOK AT instead, with the
+              // id read_figure needs — the only place the model ever learns a
+              // chunk id, and still no more authority than a hint.
+              `    [${c.documentTitle} p${c.pageNumber}] FIGURE (id ${c.chunkId}) — ${c.content.replace(/\s+/g, ' ').slice(0, 120)}. Use read_figure to see what it shows.`
+            : `    [${c.documentTitle} p${c.pageNumber}] ${c.content.replace(/\s+/g, ' ').slice(0, 240)}`,
         )
         .join('\n'),
       elapsedMs: elapsed(),

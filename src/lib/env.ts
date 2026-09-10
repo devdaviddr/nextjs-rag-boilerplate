@@ -257,6 +257,16 @@ const envSchema = z
       .nonnegative()
       .optional()
       .default(8),
+    // The answer-time `read_figure` tool on the 0029 loop. Separate from
+    // RAG_CRACK_ENABLED because it is a different cost in a different place:
+    // cracking spends at ingestion, this spends per question, inside a loop
+    // that is already budgeted. Requires cracking, since without it no chunk
+    // is ever a figure.
+    RAG_READ_FIGURE_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     // --- Agentic retrieval (spec 0029) -------------------------------------
     // Off by default. The agentic path must earn its place against the fixed
