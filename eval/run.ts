@@ -93,7 +93,15 @@ const KNOWLEDGE_BASES = [
   },
   {
     name: 'Facilities & Operations',
-    documents: ['facilities-guide'],
+    documents: [
+      'facilities-guide',
+      // Spec 0031's layout documents. Filed here because they are
+      // facilities-flavoured, and because keeping them out of the HR knowledge
+      // base leaves the existing cross-KB leakage checks measuring exactly what
+      // they measured before.
+      'site-operations-report',
+      'maintenance-log',
+    ],
   },
 ] as const
 
@@ -122,7 +130,7 @@ interface AnswerFact {
   page: number
 }
 
-type QuestionType = 'single-hop' | 'followup' | 'multi-hop'
+type QuestionType = 'single-hop' | 'followup' | 'multi-hop' | 'layout'
 
 interface Question {
   id: string
@@ -931,8 +939,14 @@ async function main(): Promise<void> {
     (r) => r.type === 'single-hop',
   )
   const baselineFollowup = baselineResults.filter((r) => r.type === 'followup')
+  // Spec 0031. Kept out of the headline pool for the same reason `followup` and
+  // `multi-hop` are: these questions are designed to FAIL until cracking ships,
+  // and folding them into the single-hop numbers would show up as a retrieval
+  // regression against the recorded baseline that nothing regressed.
+  const baselineLayout = baselineResults.filter((r) => r.type === 'layout')
   const baselineCore = coreMetrics(baselineSingleHop)
   const baselineFollowupCore = coreMetrics(baselineFollowup)
+  const baselineLayoutCore = coreMetrics(baselineLayout)
   const baselineMultiHop = multiHopMetrics(baselineResults)
 
   const baselineSummary = {
@@ -960,6 +974,7 @@ async function main(): Promise<void> {
       crossKbComplementFailures: complementFailures.length,
     },
     followup: baselineFollowupCore,
+    layout: baselineLayoutCore,
     multiHop: baselineMultiHop,
     crossKbLeaks: leaks,
     crossKbComplementDetails: complementFailures,
@@ -981,6 +996,14 @@ async function main(): Promise<void> {
     `Baseline multi-hop (n=${baselineMultiHop.count}): full-match ${baselineMultiHop.fullMatchRate}  ` +
       `fact recall ${baselineMultiHop.factRecall}`,
   )
+  console.log(
+    `Baseline layout (n=${baselineLayout.length}): hit@1 ${baselineLayoutCore.hitAt1}  ` +
+      `hit@3 ${baselineLayoutCore.hitAt3}  MRR ${baselineLayoutCore.mrr}  ` +
+      `refusal ${baselineLayoutCore.refusalAccuracy}`,
+  )
+  for (const row of baselineLayout.filter((r) => !r.passed)) {
+    console.log(`    ✗ ${row.id} — ${row.hard ?? 'no note'}`)
+  }
 
   mkdirSync(RESULTS_DIR, { recursive: true })
   writeFileSync(

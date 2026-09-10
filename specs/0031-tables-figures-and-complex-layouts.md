@@ -414,12 +414,54 @@ measurement in **Problem** exists to justify.
       `tests/unit/rag-ingest-cracking.test.ts`
 - [ ] A document with a scanned appendix indexes both its text pages and its
       scanned pages — `tests/unit/rag-ingest-cracking.test.ts`
+- [x] The corpus contains documents the current pipeline provably cannot index,
+      and the gap is recorded before it is closed —
+      `eval/results/layout-gap.json`, `eval/questions.json` (`type: layout`)
+- [x] Extending the corpus leaves the single-hop baseline untouched, so the
+      recorded numbers stay comparable — `eval/results/layout-gap.json`
+      (hit@1 0.941, MRR 0.941, refusal 1.000, leakage 0)
 - [ ] `pnpm rag:eval` on the extended corpus shows no regression in refusal
-      accuracy, and answers a table question and a figure question that the
-      current pipeline cannot — `eval/run.ts`
+      accuracy, and **retrieves** the scanned page it currently cannot —
+      `eval/run.ts`
 - [ ] A question whose only answer is a value inside a chart **refuses** when
       `read_figure` is disabled, rather than returning a described number —
-      `eval/run.ts`
+      needs an answer-level check; see the harness note above
+
+> **Not verifiable by the retrieval harness (2026-09-10).** "Answers a table
+> question the current pipeline cannot" was an acceptance criterion in the first
+> draft of this spec and has been removed, because `eval/run.ts` scores which
+> chunk came back, not what was said about it. A flattened table and interleaved
+> columns both retrieve at rank 1 today. Proving those are fixed needs an
+> answer-level assertion the harness does not currently make — listed under
+> Out of scope.
+
+### Measured gap, before any cracking (2026-09-10)
+
+The corpus was extended with `site-operations-report` (row-major two columns, a
+merged-cell table, a landscape chart page) and `maintenance-log` (a text page
+followed by a scanned one), plus five `layout` questions. Recorded as
+`eval/results/layout-gap.json`:
+
+| question                            | retrieved            | what it proves                                                                                                                                             |
+| ----------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout-chiller-warranty`           | **nothing**          | The scanned page produced no chunks at all. The document ingested and reported success — FR1's silent appendix, demonstrated.                              |
+| `layout-q2-downtime-hours`          | figure page at 0.531 | Above the 0.35 floor, so the system will **not** refuse. The guard against inventing a chart value has to live in the answer path (FR7), not in retrieval. |
+| `layout-lift-capacity-north`        | rank 1               | Passes retrieval while the chunk reads `…capacity is 1600 Its rated capacity is unchanged at / kilograms. 1000 kilograms.`                                 |
+| `layout-geelong-unplanned-downtime` | rank 1               | Passes retrieval while the chunk is a flattened table whose `388` has lost its column header.                                                              |
+| `layout-downtime-spike-quarter`     | rank 1               | The caption case — already free, and the reason FR6 prefers a caption over a vision call.                                                                  |
+
+Single-hop metrics were **unchanged** by the extension (hit@1 0.941, MRR 0.941,
+refusal 1.000, cross-KB leakage 0), which is what keeps the recorded baseline
+comparable.
+
+> **The harness cannot see two of these gaps.** It scores retrieval, and the
+> last three rows above _pass_ retrieval while returning corrupted content:
+> interleaved columns and a header-less table read as hits, because the right
+> page came back. Column association and reading order are answer-quality
+> failures, and proving they are fixed needs an answer-level check this harness
+> does not have. The two rows it does catch — the scanned page and the
+> unrefused chart value — are genuine, and they are caught for the right
+> reasons.
 
 > **Corpus first.** None of the last three can be evaluated against today's
 > `eval/corpus`, which is three clean-text documents. Extending it with a
@@ -495,6 +537,12 @@ larger disclosure per call and should be stated plainly in
 - A worker queue, if per-page cracking makes ingestion long enough that
   `pages_processed` polling stops being adequate.
 - Re-probing for a reranker, and for the multimodal embedder above.
+- **An answer-level assertion in `eval/run.ts`.** The harness scores retrieval
+  only, so a chunk containing a flattened table or interleaved columns counts as
+  a hit. Checking that an expected string appears in the drafted answer — with
+  the model call that implies — is what would make the table and column gaps
+  measurable, and it is a change to the harness's contract rather than to this
+  pipeline.
 - **Pages carrying a `/Rotate` attribute.** Landscape _page geometry_ is
   verified; a portrait page whose content is rotated 90° is a different case
   and is untested. It needs a decision about whether `renderPageAsImage`

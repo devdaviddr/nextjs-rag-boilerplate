@@ -245,8 +245,14 @@
       "type": "multi-hop",
       "question": "Is overtime paid as cash under my contract, and separately, how many days do I have to submit a travel expense claim under the handbook?",
       "answerDocuments": [
-        { "document": "employment-contract", "page": 3 },
-        { "document": "staff-handbook", "page": 2 }
+        {
+          "document": "employment-contract",
+          "page": 3
+        },
+        {
+          "document": "staff-handbook",
+          "page": 2
+        }
       ],
       "knowledgeBase": "HR & Employment",
       "answerable": true,
@@ -257,12 +263,66 @@
       "type": "multi-hop",
       "question": "Which requires more advance notice: ending my employment during probation, or booking a day of annual leave?",
       "answerDocuments": [
-        { "document": "employment-contract", "page": 1 },
-        { "document": "staff-handbook", "page": 1 }
+        {
+          "document": "employment-contract",
+          "page": 1
+        },
+        {
+          "document": "staff-handbook",
+          "page": 1
+        }
       ],
       "knowledgeBase": "HR & Employment",
       "answerable": true,
       "hard": "requires comparing the contract's probation notice (page 1) against the handbook's leave-approval notice (page 1) — genuinely two documents, not a paraphrase of one"
+    },
+    {
+      "id": "layout-lift-capacity-north",
+      "type": "layout",
+      "question": "What is the rated capacity of the north wing lift?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 1,
+      "answerable": true,
+      "hard": "Two-column page emitted row-major, so extractText interleaves the columns: the chunk reads 'Its new rated capacity is 1600 Its rated capacity is unchanged at / kilograms. 1000 kilograms.' Both capacities sit adjacent, so a retrieved chunk supports either answer."
+    },
+    {
+      "id": "layout-geelong-unplanned-downtime",
+      "type": "layout",
+      "question": "How many unplanned downtime hours did Geelong record?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "Merged-cell table. Flattened, the row is 'Geelong 63.0 61.5 210 388' with 'Planned Unplanned' on a separate line, so 388 has lost its column header entirely."
+    },
+    {
+      "id": "layout-downtime-spike-quarter",
+      "type": "layout",
+      "question": "Which quarter had the spike in unplanned downtime?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 3,
+      "answerable": true,
+      "hard": "Landscape page. The answer is in the figure's caption, which IS text — this is the case spec 0031 FR6 expects to cost nothing, because a caption makes a figure findable without a vision call."
+    },
+    {
+      "id": "layout-q2-downtime-hours",
+      "type": "layout",
+      "question": "How many hours of unplanned downtime were recorded in Q2?",
+      "knowledgeBase": "Facilities & Operations",
+      "answerable": false,
+      "hard": "The value exists ONLY as a bar height (308) — no text on any page carries it. Marked unanswerable because the corpus contains no TEXT answer, which is what this harness scores. Expect it to fail the refusal check today: retrieval surfaces the figure's caption, which is about quarters and downtime. That failure is the finding, not a defect in the fixture — it says the guard against inventing a chart value has to live in the answer path (spec 0031 FR7), not in retrieval. Under read_figure it becomes answerable."
+    },
+    {
+      "id": "layout-chiller-warranty",
+      "type": "layout",
+      "question": "What is the warranty period on the replacement chiller?",
+      "document": "maintenance-log",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "The answer is on a SCANNED page. maintenance-log averages 120 chars/page against RAG_MIN_CHARS_PER_PAGE=50, so the document ingests and reports success while page 2 contributes nothing — the silent-appendix failure spec 0031 FR1 exists to fix."
     }
   ]
 }
