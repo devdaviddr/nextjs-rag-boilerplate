@@ -78,8 +78,11 @@ Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 ## Git & workflow
 
 - **Spec-driven.** Non-trivial features start with a spec in [`specs/`](specs/)
-  (copy `specs/TEMPLATE.md`, status `Proposed` → `Accepted` → `Shipped`). See
-  [`specs/README.md`](specs/README.md).
+  (copy `specs/TEMPLATE.md`, status `Proposed` → `Shipped`, with `Superseded`
+  and `Rejected` for a spec that stops being the plan of record). There is no
+  `Accepted` state — `scripts/specs-index.mjs` rejects it and `pnpm specs:check`
+  fails. A spec stays `Proposed` while it is implemented and flips to `Shipped`
+  in the release commit. See [`specs/README.md`](specs/README.md).
 - **Trunk-based.** `main` is the only long-lived branch (no `develop`).
   Feature work branches off `main` as `feature/<slug>` and PRs back into
   `main`. A **release is a `vX.Y.Z` tag on a `main` commit** — bump the version,
