@@ -23,17 +23,26 @@
 export interface PageSignals {
   /** Characters in the text layer, whitespace trimmed. */
   charCount: number
-  /** Positioned text items from `extractTextItems`. */
+  /**
+   * Positioned text items from `extractTextItems`, **excluding pdf.js's
+   * synthetic whitespace spacers** — those carry no area and so would only
+   * inflate the density ratio below.
+   */
   itemCount: number
   /** Raster images painted on the page. */
   imageCount: number
   /**
-   * Vector drawing operations on the page.
+   * Vector drawing operations that draw page **content**.
    *
    * Without this, a chart is invisible. Measured on the eval corpus: the
    * chart page reports **zero** embedded images, because a chart drawn by
    * Excel, matplotlib or Illustrator is paths, not pixels. `imageCount` alone
    * routed it to the free path and its figure was never indexed.
+   *
+   * The page template does not count towards it. `signals.ts` discounts
+   * full-width rules and page-size frames, because otherwise the running
+   * header, footer and border that nearly every corporate PDF carries clear
+   * `minVectorOps` on their own and every prose page buys a parse call.
    */
   vectorOpCount: number
   /**
@@ -64,10 +73,14 @@ export interface TriageOptions {
   /** Images beyond this many mean the page is carrying visual content. */
   minImages?: number
   /**
-   * Vector operations above which the page is drawing something, not
+   * Content vector operations above which the page is drawing something, not
    * decorating. A heuristic, tuned on the eval corpus: a chart page reports 7
    * and a ruled table 12, while a heading rule or a boxed callout is 1–5. It
    * errs toward spending a call, because the failure being fixed is silence.
+   *
+   * This counts content only — see `PageSignals.vectorOpCount`. Before the
+   * page template was discounted, a styled prose page reported 7 from its
+   * header rule, footer rule and border box alone.
    */
   minVectorOps?: number
   /**
@@ -85,7 +98,13 @@ export const TRIAGE_DEFAULTS: Required<TriageOptions> = {
   minColumns: 2,
   minImages: 1,
   minVectorOps: 6,
-  denseItemRatio: 8,
+  // Recalibrated when `itemCount` stopped counting whitespace spacers, which
+  // roughly halved the ratio on any producer that emits one item per word.
+  // Measured across `eval/corpus` and a realistically styled 8-page report:
+  // prose lands at 1.4–8.5 and genuinely tabular pages at 12.1–12.5, so 10
+  // sits inside the observed gap rather than on the edge of it. Ruled tables
+  // below it are still caught, by their rules.
+  denseItemRatio: 10,
 }
 
 /**

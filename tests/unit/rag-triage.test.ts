@@ -59,6 +59,25 @@ describe('classifyPage', () => {
     )
   })
 
+  it('does not call word-granular prose tabular', () => {
+    // Measured on `~/Desktop/rag-cracking-test.pdf` p2, a page of plain prose
+    // from a producer that emits one item per word: 43 text items over 5.1% of
+    // covered area, a ratio of 8.4. The eval corpus emits one item per
+    // PARAGRAPH and lands at 1.4–3.8, which is why the threshold was first set
+    // where a real document's prose fell foul of it.
+    expect(
+      classifyPage(cleanPage({ itemCount: 43, textAreaRatio: 0.051 })),
+    ).toBe('clean-text')
+  })
+
+  it('still calls a genuinely tabular page tabular', () => {
+    // Same document, p3 — two stacked tables: 60 items over 5.0%, a ratio of
+    // 12.1. The corpus's own table pages sit at 12.1 and 12.5.
+    expect(
+      classifyPage(cleanPage({ itemCount: 60, textAreaRatio: 0.05 })),
+    ).toBe('structured')
+  })
+
   it('never divides by a zero text area', () => {
     const route = classifyPage(
       cleanPage({ itemCount: 100, textAreaRatio: 0, charCount: 900 }),
@@ -81,6 +100,9 @@ describe('classifyPage', () => {
   })
 
   it('does not treat a few decorative rules as a figure', () => {
+    // 3 is what a corner logo contributes once `signals.ts` has discounted the
+    // page template's header rule, footer rule and border box. Before it did,
+    // that page reported 7 and bought a parse call for a page of prose.
     expect(classifyPage(cleanPage({ vectorOpCount: 3 }))).toBe('clean-text')
   })
 
