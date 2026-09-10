@@ -1198,18 +1198,28 @@ fixed pipeline judges it.
 needing facts from two different places joined together — the case a single
 search cannot satisfy.
 
-| Metric                                   | Baseline       | Agentic                               | Δ          |
-| ---------------------------------------- | -------------- | ------------------------------------- | ---------- |
-| hit@1 / hit@3 / MRR _(single-hop, n=20)_ | 0.941          | 0.882                                 | −0.059     |
-| Refusal accuracy                         | 1.000          | 1.000                                 | ±0         |
-| Cross-KB leakage                         | 0              | 0                                     | ±0         |
-| Follow-up hit@1 _(n=3)_                  | 0.000          | 0.667                                 | **+0.667** |
-| Multi-hop full match _(n=2)_             | 0.000          | 1.000                                 | **+1.000** |
-| Multi-hop fact recall                    | 0.500          | 1.000                                 | **+0.500** |
-| Cost per question                        | ~1 search, ~1s | 1.44 searches, **11.1s**, 1617 tokens | —          |
+> **Historical — recorded 2026-09-07, superseded 2026-09-11.** Kept because it
+> is the run the loop was designed against, and because its follow-up and
+> multi-hop slices (n=3, n=2) are the reason a bigger corpus was built. The
+> current default and the numbers behind it are in
+> _[Which path answers](#which-path-answers)_. The baseline cost cell read
+> "~1 search, ~1s" until the harness was taught to time the fixed pass at all —
+> that figure was prose, and a median printed under a "mean" heading.
 
-**The flag stays off by default**, and the reason is the trade rather than a
-failure: agentic retrieval is dramatically better at what it was built for —
+| Metric                                   | Baseline     | Agentic                               | Δ          |
+| ---------------------------------------- | ------------ | ------------------------------------- | ---------- |
+| hit@1 / hit@3 / MRR _(single-hop, n=20)_ | 0.941        | 0.882                                 | −0.059     |
+| Refusal accuracy                         | 1.000        | 1.000                                 | ±0         |
+| Cross-KB leakage                         | 0            | 0                                     | ±0         |
+| Follow-up hit@1 _(n=3)_                  | 0.000        | 0.667                                 | **+0.667** |
+| Multi-hop full match _(n=2)_             | 0.000        | 1.000                                 | **+1.000** |
+| Multi-hop fact recall                    | 0.500        | 1.000                                 | **+0.500** |
+| Cost per question                        | not measured | 1.44 searches, **11.1s**, 1617 tokens | —          |
+
+**The flag defaulted OFF on the strength of this run**, and was flipped on in
+2026-09-11 once the follow-up slice grew from 3 questions to 16 and the gap held
+(0.062 against 0.938). The reasoning below was right about the trade and wrong
+only about how confident three questions let you be: agentic retrieval is dramatically better at what it was built for —
 follow-ups and multi-hop questions — slightly worse on single-hop, and about
 **ten times slower**. Most questions in this corpus are single-hop, so the
 default favours the cheap path. Turn it on for conversational use where
@@ -1375,21 +1385,52 @@ than hidden.
 
 ---
 
+### Which path answers
+
+Two retrieval paths exist and `RAG_AGENTIC_ENABLED` chooses between them. Since
+2026-09-11 it defaults to **on**, and the reason is one slice:
+
+| slice               | n             | fixed pipeline | agentic loop |
+| ------------------- | ------------- | -------------- | ------------ |
+| **follow-up** hit@1 | 16 answerable | **0.062**      | **0.938**    |
+| single-hop hit@1    | 17 answerable | 0.882          | 0.824        |
+| refusal accuracy    | both          | 1.000          | 1.000        |
+
+One of sixteen against fifteen of sixteen. The fixed pipeline embeds your
+question literally, so "what about carrying it over?" searches for those words
+rather than for annual leave — it is not worse at follow-ups, it cannot do them.
+
+What it costs: single-hop drops by one question of seventeen, and a question
+takes ~11s instead of ~0.15s. **If your users only ever ask standalone
+questions, set `RAG_AGENTIC_ENABLED=false`** — you lose nothing and get the
+latency back.
+
+Refusal accuracy is 1.000 either way, which is what makes the trade safe to
+take: the loop searching more never became the loop answering when it should
+not.
+
+> Measured with `RAG_CRACK_ENABLED=true`. The equivalent cracking-off reference
+> has not been recorded, and the multi-hop slice is unmeasured at its current
+> size — see [`specs/0032`](../specs/0032-settle-the-agentic-trade.md).
+
 ## Known gaps
 
 Named rather than hidden.
 
-- **The agentic path is ~10× slower.** Median 9–11s per question against ~1s,
-  because every planner call is a round trip to a reasoning model. A question
-  that reads a figure is slower again — 20–60s — since a vision call over a
-  cropped page image is the single most expensive thing this system does. The label on
+- **The agentic path is far slower**, and it is now the default. Roughly 11s
+  per question against ~0.15s for the fixed pipeline, because every planner
+  call is a round trip to a reasoning model. A question that reads a figure is
+  slower again — 20–60s — since a vision call over a cropped page image is the
+  single most expensive thing this system does. Set `RAG_AGENTIC_ENABLED=false`
+  if your users only ever ask standalone questions; see _Which path answers_. The label on
   the thinking indicator is what stops that reading as a hang.
 - **The sidebar can lag a readable answer** by the length of citation
   verification, because refreshing Recents under a live stream aborts it. See
   _When things go wrong_.
-- **The follow-up and multi-hop evaluation slices are n=3 and n=2.** One
-  question moves those metrics by a third or a half. Direction real, magnitude
-  provisional.
+- **The multi-hop evaluation slice is unmeasured at its new size.** It holds 15
+  questions; the comparison that produced the current default was stopped after
+  4 of them had been scored on the agentic side, so no multi-hop number is
+  quoted anywhere. The follow-up slice IS measured, at n=16 answerable.
 - **No OCR by default.** With `RAG_CRACK_ENABLED` unset, scanned PDFs are
   rejected rather than half-ingested. Turning it on adds OCR and figures — see
   _Document cracking_.

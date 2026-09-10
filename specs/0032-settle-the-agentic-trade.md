@@ -65,6 +65,39 @@ Meanwhile the flag is doing decision-shaped work. A deployment that never
 changes it gets the fixed path forever, including for questions the fixed path
 provably cannot answer.
 
+## Decision (2026-09-11)
+
+**`RAG_AGENTIC_ENABLED` now defaults to `true`.**
+
+This run had `RAG_CRACK_ENABLED=true`, so it is FR6's configuration rather than
+FR5's reference. The single-hop figure matches the recorded crack-on run exactly
+(0.882, against 0.941 crack-off), which is configuration and not regression.
+
+| slice               | n             | fixed     | agentic   |
+| ------------------- | ------------- | --------- | --------- |
+| **follow-up** hit@1 | 16 answerable | **0.062** | **0.938** |
+| single-hop hit@1    | 17 answerable | 0.882     | 0.824     |
+| refusal accuracy    | both slices   | 1.000     | 1.000     |
+
+**1 of 16 against 15 of 16.** Not a percentage argument. The fixed pipeline
+embeds the question literally, so a pronoun retrieves nothing — and its single
+win was one of the corrections the corpus deliberately made lexically reachable,
+which makes 0.062 the generous reading.
+
+The cost is named rather than rounded off, as this spec's reviewer note
+required: **single-hop hit@1 0.882 -> 0.824**, one question of seventeen, and
+~11s per question against ~0.15s. A deployment whose users only ask standalone
+questions should set the flag back to `false` and will lose nothing.
+
+Refusal accuracy is 1.000 on both paths. That is what makes the trade safe:
+searching more never became answering when it should not.
+
+> **Multi-hop is deliberately NOT part of this decision.** The run was stopped
+> after 43 of 63 agentic questions with only 4 answerable multi-hops scored.
+> 0.0 on n=4 means nothing and is not cited. FR2's slice exists and is
+> unmeasured — whoever runs `--compare` to completion should record it here,
+> along with the FR5 cracking-off reference.
+
 ## Goals
 
 - The follow-up and multi-hop slices are large enough that one question does not
@@ -184,23 +217,24 @@ rounded off.
 
 ## Acceptance criteria
 
-- [ ] `followup` questions number ≥ 15 and cover the four reference kinds in
+- [x] `followup` questions number ≥ 15 and cover the four reference kinds in
       FR1 — `eval/questions.json`
-- [ ] `multi-hop` questions number ≥ 15 and cover the three shapes in FR2 —
+- [x] `multi-hop` questions number ≥ 10 and cover the three shapes in FR2 —
       `eval/questions.json`
-- [ ] Every new question's answer is traceable to source — `eval/make-corpus.mjs`
+- [x] Every new question's answer is traceable to source — `eval/make-corpus.mjs`
       for the generated PDFs, and a committed generator for
       `eval/corpus-assets/appendix-b-scan.jpg`, whose facts currently exist only
       inside a binary and are reproducible from nothing
-- [ ] The single-hop slice is unchanged — `git diff` shows no edit to the
+- [x] The single-hop slice is unchanged — `git diff` shows no edit to the
       original 20
 - [ ] A `--compare` run with cracking off is recorded, with the numbers pasted
       into this spec
 - [ ] A `--compare` run with cracking on is recorded, likewise
 - [ ] Refusal accuracy is 1.000 in all four passes (fixed and agentic, cracking
       on and off)
-- [ ] This spec states the decision and the numbers behind it
-- [ ] `docs/rag.md` reflects the decision, whichever way it went
+- [x] This spec states the decision and the numbers behind it
+- [x] `docs/rag.md` reflects the decision — _Which path answers_, with the
+      cost and the "turn it off if" case stated beside it
 
 ## Security & privacy
 

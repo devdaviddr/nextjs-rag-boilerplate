@@ -272,11 +272,27 @@ const envSchema = z
     // Off by default. The agentic path must earn its place against the fixed
     // pipeline on the same eval questions before it becomes the default; with
     // this false, the existing path runs byte-identically.
+    // ON by default since 2026-09-11, on measurement rather than preference.
+    //
+    // The fixed pipeline embeds the question literally, so a follow-up carrying
+    // a pronoun retrieves nothing: measured over 16 answerable follow-ups it
+    // scored hit@1 **0.062** against the loop's **0.938**. That is not a
+    // percentage difference, it is a capability the fixed path does not have —
+    // and the one question it did win was reachable by lexical luck rather
+    // than by resolving anything.
+    //
+    // The cost is real and is named here rather than hidden: single-hop hit@1
+    // 0.882 -> 0.824, one question of seventeen, and roughly 11s per question
+    // against 0.15s. A deployment that only ever asks standalone questions
+    // should set this back to false and will lose nothing.
+    //
+    // Refusal accuracy is 1.000 on both paths, which is what makes the trade
+    // safe to take at all.
     RAG_AGENTIC_ENABLED: z
       .string()
       .optional()
-      .default('false')
-      .transform((v) => v === 'true'),
+      .default('true')
+      .transform((v) => v !== 'false'),
     // Planning and prose are separate roles and need not be the same model.
     // Measured over 40 native tool-call attempts: lightning 10/10 and 5/5 on a
     // two-round tool loop; the default chat model 8/10, its failures clean
