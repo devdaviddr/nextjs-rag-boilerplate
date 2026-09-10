@@ -54,6 +54,17 @@ import { putObject } from '@/lib/storage/client'
  * runs every question through BOTH the fixed pipeline and the agentic loop in
  * one invocation, side by side.
  *
+ * Since spec 0032, BOTH passes are timed and both get a cost block (see
+ * `PassCost` / `costSummary`). Before that only the agentic pass recorded
+ * anything: `latencyMs`, `searches` and `tokensUsed` were written by
+ * `agenticRetrieve` and by nothing else. So the project's own comparison table
+ * cited "~1s" for the fixed path — a number lifted from prose in
+ * `docs/rag.md`, and a MEDIAN at that ("Median 9–11s per question against
+ * ~1s"), printed in a column headed "mean latency" beside a genuine mean of
+ * 11,080ms from the agentic pass. Latency is the entire argument against the
+ * loop and half of it had never been measured, which is why spec 0032 could
+ * not settle the trade off the recorded numbers.
+ *
  *   pnpm rag:eval                 # run the fixed pipeline, print a report
  *   pnpm rag:eval --label hybrid  # save results under that label for comparison
  *   pnpm rag:eval --no-ingest     # reuse what is already indexed
@@ -65,8 +76,10 @@ import { putObject } from '@/lib/storage/client'
  *                                 # into hit@k. Costs one chat call per
  *                                 # checked question.
  *   pnpm rag:eval --compare       # ALSO run the agentic path; save
- *                                 # eval/results/{baseline,agentic}.json; gate
- *                                 # on refusal accuracy in the SAME run (0029 NFR3)
+ *                                 # eval/results/{baseline,agentic}.json; print
+ *                                 # ONE comparison carrying both passes'
+ *                                 # quality AND cost; gate on refusal accuracy
+ *                                 # in the SAME run (0029 NFR3)
  */
 
 const EVAL_USER_ID = 'eval-harness-user'
@@ -202,9 +215,31 @@ interface QuestionResult {
   topDocument: string | null
   topPage: number | null
   passed: boolean
-  // Populated only for rows produced by the agentic pass (--compare).
-  searches?: number
+  /**
+   * Wall-clock milliseconds this question's retrieval took. Populated for
+   * EVERY row on BOTH passes since spec 0032.
+   *
+   * It used to be written by `agenticRetrieve` alone, and that omission is why
+   * the recorded comparison had a measured mean on one side and a remembered
+   * "~1s" on the other. Both passes are now timed identically — `Date.now()`
+   * either side of the single call that does the retrieval, nothing else
+   * between the two reads — so the two columns are the same statistic rather
+   * than two different ones printed next to each other.
+   */
   latencyMs?: number
+  /**
+   * Loop-only, populated by the agentic pass alone: the fixed pipeline has no
+   * iterations to count, no planner tokens to spend and no termination reason.
+   *
+   * Deliberately left UNDEFINED on baseline rows rather than set to 0, and
+   * carried through to the saved JSON as `null` and to the report as `n/a`. A
+   * 0 in a "mean searches" column beside the agentic path's 1.44 reads as a
+   * measurement — "the fixed path searched zero times" — when the honest
+   * statement is that the question does not apply to it. Silently turning "not
+   * applicable" into "zero" is the same class of error as quoting a latency
+   * that was never measured.
+   */
+  searches?: number
   tokensUsed?: number
   termination?: string
 }
@@ -468,13 +503,21 @@ function logResult(r: QuestionResult): void {
       ? '—'
       : `${r.topDocument} p${r.topPage} @ ${r.topSimilarity}`
   const tag = `[${r.type}]`.padEnd(13)
+  // Latency sits on the main line for both passes, and has been taken OFF the
+  // loop-detail line below. Both passes report it now, so it should appear in
+  // the same place for both — a reader scanning the baseline pass and then the
+  // agentic pass should not have to look for the same number in two different
+  // shapes of line. The detail line keeps only what the fixed pipeline has no
+  // counterpart for.
+  const took = r.latencyMs === undefined ? '' : `  ${r.latencyMs}ms`
   console.log(
-    `  ${mark}  ${tag}${r.id.padEnd(32)} ${where.padEnd(24)} top: ${top}`,
+    `  ${mark}  ${tag}${r.id.padEnd(32)} ${where.padEnd(24)} ` +
+      `top: ${took === '' ? top : top.padEnd(36)}${took}`,
   )
   if (r.searches !== undefined) {
     console.log(
-      `        searches: ${r.searches}  latency: ${r.latencyMs}ms  ` +
-        `tokens: ${r.tokensUsed}  termination: ${r.termination}`,
+      `        searches: ${r.searches}  tokens: ${r.tokensUsed}  ` +
+        `termination: ${r.termination}`,
     )
   }
   if (!r.passed && r.hard) console.log(`        hard case: ${r.hard}`)
@@ -486,17 +529,35 @@ function logResult(r: QuestionResult): void {
  *
  * `q.turns` is never read here — see the note on `Question.turns` above. A
  * `followup` question's pronoun-bearing text is embedded exactly as typed.
+ *
+ * Timed since spec 0032, the same way `agenticRetrieve` is timed: `Date.now()`
+ * either side, `resolveScope` inside the window because deciding whole-document
+ * vs. similarity IS part of the fixed pipeline's work, and nothing else in
+ * between. Until then this pass recorded nothing at all, which left the
+ * comparison table quoting prose for the half of the trade that matters most.
+ *
+ * Note what the resulting mean deliberately pools. A whole-document question
+ * never calls the embedding API and returns in single-digit milliseconds; a
+ * similarity question pays one embedding round-trip to the same rate-limited
+ * account the agentic pass hammers. Both are requests a real deployment
+ * serves, so both are in the mean — the same posture `costSummary` takes
+ * towards the agentic pass's different termination reasons. `medianLatencyMs`
+ * and `maxLatencyMs` are reported beside the mean precisely because that pool
+ * is bimodal and a lone mean would hide it.
  */
 async function baselineRetrieve(
   q: Question,
   ownerId: string,
   kbIds: readonly string[],
   docsInScope: { id: string; title: string }[],
-): Promise<RetrievedChunk[]> {
+): Promise<{ chunks: RetrievedChunk[]; latencyMs: number }> {
+  const startedAt = Date.now()
   const scope = resolveScope(q.question, docsInScope)
-  return scope.mode === 'document'
-    ? retrieveDocumentChunks(ownerId, scope.documentId, kbIds)
-    : retrieveForOwner(ownerId, q.question, kbIds)
+  const chunks =
+    scope.mode === 'document'
+      ? await retrieveDocumentChunks(ownerId, scope.documentId, kbIds)
+      : await retrieveForOwner(ownerId, q.question, kbIds)
+  return { chunks, latencyMs: Date.now() - startedAt }
 }
 
 /**
@@ -708,37 +769,119 @@ function multiHopMetrics(results: readonly QuestionResult[]): MultiHopMetrics {
   }
 }
 
-interface AgenticCost {
-  meanSearches: number
+/**
+ * The per-question cost profile of ONE retrieval pass.
+ *
+ * Every field the fixed pipeline structurally cannot have is `number | null`
+ * rather than `number`, and the baseline block sets those to `null`. See the
+ * note on `QuestionResult.searches` for why "not applicable" must not be
+ * flattened to 0 on its way into a comparison table.
+ */
+interface PassCost {
+  /** How many questions the figures below are pooled over. */
+  questions: number
+  /**
+   * Mean, median and slowest wall-clock ms per question.
+   *
+   * All three, because the first two answer different questions and the
+   * project had already confused them once: the recorded comparison put
+   * `docs/rag.md`'s MEDIAN for the fixed path in a column headed "mean
+   * latency" beside the agentic path's genuine mean. Printing both, each
+   * labelled, makes that particular substitution unavailable. `maxLatencyMs`
+   * is here because a mean over ~25 questions hides the one question that took
+   * four times as long, and for a decision about a default that outlier is the
+   * number a reader actually needs.
+   */
   meanLatencyMs: number
-  meanTokensUsed: number
-  terminationCounts: Record<string, number>
+  medianLatencyMs: number
+  maxLatencyMs: number
+  /** Loop-only. null for the fixed pipeline, which searches exactly once by construction. */
+  meanSearches: number | null
+  /** Loop-only. null for the fixed pipeline, which sends no planner tokens at all. */
+  meanTokensUsed: number | null
+  /** Loop-only. null for the fixed pipeline, which has no loop to terminate. */
+  terminationCounts: Record<string, number> | null
 }
 
 /**
- * Mean searches / latency / tokens per question, over EVERY question the
- * agentic pass ran (answerable, refusal, followup, multi-hop alike) — the
- * full per-question cost profile a real deployment would see, not just the
- * cases that happen to succeed. This is the number the whole A/B exists to
- * surface: latency and token cost are the entire argument against the
- * agentic path, so they are reported beside the quality metrics, not filed
- * away separately.
+ * Which cost fields a pass can meaningfully report.
+ *
+ * Passed in explicitly rather than sniffed off the rows (`r.searches !==
+ * undefined`), so a pass that legitimately measured zero searches can never be
+ * mistaken for a pass that has no searches to measure. The distinction only
+ * matters at the edges today, but it is exactly the distinction this whole
+ * change exists to keep straight.
  */
-function agenticCostSummary(results: readonly QuestionResult[]): AgenticCost {
+type PassKind = 'fixed' | 'agentic'
+
+/**
+ * Latency (and, for the agentic pass, searches / tokens / termination
+ * reasons) over EVERY question the pass ran — answerable, refusal, followup,
+ * multi-hop alike. The full per-question cost profile a real deployment would
+ * see, not just the cases that happen to succeed.
+ *
+ * This is the number the whole A/B exists to surface: cost is the entire
+ * argument against the agentic path, so it is reported beside the quality
+ * metrics rather than filed away separately. Until spec 0032 it was computed
+ * for the agentic pass only, which made "beside" half true. Both passes go
+ * through this one function now, so the two blocks in a comparison are
+ * guaranteed to be the same statistic computed the same way — the one property
+ * the old report could not honestly claim.
+ */
+function costSummary(
+  results: readonly QuestionResult[],
+  kind: PassKind,
+): PassCost {
   const n = results.length
   const sum = (f: (r: QuestionResult) => number) =>
     results.reduce((total, r) => total + f(r), 0)
+
+  // Latency is averaged over the rows that actually carry a timing, not over
+  // `n`. Both passes time every row today, so the two divisors are identical —
+  // but a future pass that skips a question would otherwise report a mean
+  // dragged towards zero by rows that were never measured, which is the bug
+  // this function was written to stop repeating.
+  const latencies = results
+    .map((r) => r.latencyMs)
+    .filter((ms): ms is number => ms !== undefined)
+    .sort((a, b) => a - b)
+  const mid = Math.floor(latencies.length / 2)
+  const medianLatencyMs =
+    latencies.length === 0
+      ? 0
+      : latencies.length % 2 === 1
+        ? latencies[mid]!
+        : Math.round((latencies[mid - 1]! + latencies[mid]!) / 2)
+
   const terminationCounts: Record<string, number> = {}
   for (const r of results) {
     const t = r.termination ?? 'unknown'
     terminationCounts[t] = (terminationCounts[t] ?? 0) + 1
   }
+
+  // The one place "not applicable" is turned into `null` rather than a number.
+  // A single helper for all three loop-only fields, so no future field can be
+  // added that quietly reports 0 for the fixed pipeline.
+  const loopMean = (
+    field: (r: QuestionResult) => number,
+    decimals: number,
+  ): number | null => {
+    if (kind === 'fixed') return null
+    if (n === 0) return 0
+    return Number((sum(field) / n).toFixed(decimals))
+  }
+
   return {
-    meanSearches:
-      n === 0 ? 0 : Number((sum((r) => r.searches ?? 0) / n).toFixed(2)),
-    meanLatencyMs: n === 0 ? 0 : Math.round(sum((r) => r.latencyMs ?? 0) / n),
-    meanTokensUsed: n === 0 ? 0 : Math.round(sum((r) => r.tokensUsed ?? 0) / n),
-    terminationCounts,
+    questions: n,
+    meanLatencyMs:
+      latencies.length === 0
+        ? 0
+        : Math.round(sum((r) => r.latencyMs ?? 0) / latencies.length),
+    medianLatencyMs,
+    maxLatencyMs: latencies.length === 0 ? 0 : latencies[latencies.length - 1]!,
+    meanSearches: loopMean((r) => r.searches ?? 0, 2),
+    meanTokensUsed: loopMean((r) => r.tokensUsed ?? 0, 0),
+    terminationCounts: kind === 'fixed' ? null : terminationCounts,
   }
 }
 
@@ -939,6 +1082,36 @@ function formatDelta(base: number, candidate: number): string {
   return `${sign}${delta.toFixed(3)}`
 }
 
+/**
+ * Render a cost figure that a pass may not have.
+ *
+ * `n/a` and not `0`, `-`, or a blank cell. It has to be a word a reader parses
+ * as "this pass cannot have this number", because the failure mode being fixed
+ * is precisely a reader taking an absent measurement for a measured zero.
+ */
+function costCell(value: number | null, unit = ''): string {
+  return value === null ? 'n/a' : `${value}${unit}`
+}
+
+/**
+ * Delta for a cost row, in the row's own units.
+ *
+ * `formatDelta` above is built for 0–1 rates and prints three decimals, which
+ * turns an 11-second latency gap into "+10931.000". Cost rows get their own
+ * formatter instead. When either side is not applicable the delta is `n/a`
+ * rather than a difference invented against an absent number.
+ */
+function formatCostDelta(
+  base: number | null,
+  candidate: number | null,
+  unit = '',
+): string {
+  if (base === null || candidate === null) return 'n/a'
+  const delta = Number((candidate - base).toFixed(2))
+  if (delta === 0) return '±0'
+  return `${delta > 0 ? '+' : ''}${delta}${unit}`
+}
+
 async function main(): Promise<void> {
   const compare = hasFlag('compare')
   const label = arg('label') ?? 'baseline'
@@ -1003,14 +1176,18 @@ async function main(): Promise<void> {
   // rather than retrieving a second time and scoring a different context.
   const retrievedById = new Map<string, RetrievedChunk[]>()
   for (const q of questions) {
-    const retrieved = await baselineRetrieve(
+    const outcome = await baselineRetrieve(
       q,
       EVAL_USER_ID,
       allKbIds,
       docsInScope,
     )
-    retrievedById.set(q.id, retrieved)
-    const result = buildResult(q, retrieved, titleById)
+    retrievedById.set(q.id, outcome.chunks)
+    // Only `latencyMs`. `searches`, `tokensUsed` and `termination` are left
+    // off entirely rather than passed as 0 — see QuestionResult's note.
+    const result = buildResult(q, outcome.chunks, titleById, {
+      latencyMs: outcome.latencyMs,
+    })
     baselineResults.push(result)
     logResult(result)
   }
@@ -1082,6 +1259,12 @@ async function main(): Promise<void> {
   const baselineFollowupCore = coreMetrics(baselineFollowup)
   const baselineLayoutCore = coreMetrics(baselineLayout)
   const baselineMultiHop = multiHopMetrics(baselineResults)
+  // Pooled over every question the pass ran, exactly like the agentic block —
+  // not over the single-hop headline slice. Cost does not care which slice a
+  // question belongs to, and pooling the two blocks differently would put two
+  // incomparable numbers side by side in the comparison table, which is the
+  // failure this change exists to remove rather than relocate.
+  const baselineCost = costSummary(baselineResults, 'fixed')
 
   // --- Answer-level checks (spec 0031). Opt-in: they cost a chat call per
   // checked question, and they measure generation rather than retrieval.
@@ -1132,6 +1315,11 @@ async function main(): Promise<void> {
     followup: baselineFollowupCore,
     layout: baselineLayoutCore,
     multiHop: baselineMultiHop,
+    // New in spec 0032, and purely additive: older files in eval/results/ have
+    // no `cost` key at all, and the only field this harness ever reads back
+    // out of a saved file is `metrics.refusalAccuracy` (the --baseline gate
+    // below), so every historical record still parses and still gates.
+    cost: baselineCost,
     crossKbLeaks: leaks,
     crossKbComplementDetails: complementFailures,
     answerChecks,
@@ -1161,6 +1349,22 @@ async function main(): Promise<void> {
   for (const row of baselineLayout.filter((r) => !r.passed)) {
     console.log(`    ✗ ${row.id} — ${row.hard ?? 'no note'}`)
   }
+
+  // Printed on EVERY run, not only under --compare. A plain `pnpm rag:eval`
+  // should be able to answer "how long does the fixed path take?" out of its
+  // own output; the last time nobody could, the answer got copied out of a
+  // paragraph in docs/rag.md and into a results table.
+  console.log(
+    `\nBaseline cost (n=${baselineCost.questions} questions, every type, ` +
+      `answerable and refusal alike):`,
+  )
+  console.log(`  mean latency/question    ${baselineCost.meanLatencyMs}ms`)
+  console.log(`  median latency/question  ${baselineCost.medianLatencyMs}ms`)
+  console.log(`  slowest question         ${baselineCost.maxLatencyMs}ms`)
+  console.log(
+    `  searches/tokens          n/a — the fixed pipeline searches exactly once ` +
+      `by construction and sends no planner tokens`,
+  )
 
   mkdirSync(RESULTS_DIR, { recursive: true })
   writeFileSync(
@@ -1225,7 +1429,7 @@ async function main(): Promise<void> {
     const agenticCore = coreMetrics(agenticSingleHop)
     const agenticFollowupCore = coreMetrics(agenticFollowup)
     const agenticMultiHop = multiHopMetrics(agenticResults)
-    const cost = agenticCostSummary(agenticResults)
+    const agenticCost = costSummary(agenticResults, 'agentic')
 
     const agenticSummary = {
       label: 'agentic',
@@ -1254,7 +1458,12 @@ async function main(): Promise<void> {
       },
       followup: agenticFollowupCore,
       multiHop: agenticMultiHop,
-      cost,
+      // Same `PassCost` shape as baselineSummary.cost, computed by the same
+      // function, so the two files can be diffed field by field. Gains
+      // `questions`, `medianLatencyMs` and `maxLatencyMs` over the block
+      // recorded on 2026-09-07; the four fields that block already had keep
+      // their names and meanings.
+      cost: agenticCost,
       results: agenticResults,
     }
 
@@ -1266,6 +1475,12 @@ async function main(): Promise<void> {
 
     // --- The comparison table. Delta column so "is agentic better" is read
     // off the page, not reconstructed by the reader from two separate runs.
+    //
+    // Quality sections first, then a cost section, both passes in every one of
+    // them: the whole trade inside one banner-delimited block. Splitting
+    // quality (two columns) from cost (one column, agentic only) is what made
+    // the previous report impossible to act on without going elsewhere for the
+    // missing column.
     console.log(`\n${'='.repeat(78)}`)
     console.log(
       'A/B comparison — single-hop (n=%d), the recorded-baseline slice',
@@ -1321,19 +1536,91 @@ async function main(): Promise<void> {
       `  ${col('fact recall', 20)}${col(baselineMultiHop.factRecall)}${col(agenticMultiHop.factRecall)}${col(formatDelta(baselineMultiHop.factRecall, agenticMultiHop.factRecall))}`,
     )
 
-    // The whole argument against the agentic path, made visible in the same
-    // report as the quality numbers rather than buried in a log line.
+    // --- Cost, BOTH passes, in the same banner-delimited report as the
+    // quality numbers above and in the same baseline/agentic/delta shape.
+    //
+    // Cost is the entire argument against the loop, so it belongs beside the
+    // argument for it — and both columns here are now measurements taken in
+    // this run. The old block printed the agentic figures alone, which meant
+    // anyone assembling the trade had to fetch the other half from somewhere
+    // else; what they fetched was a median out of docs/rag.md prose, and it
+    // ended up in a column labelled "mean latency".
+    // Both passes run the same question list, so the two counts are equal in
+    // practice — printed separately anyway if they ever diverge, because a
+    // header claiming one n over two differently-sized pools is how a
+    // comparison table starts lying.
+    const costN =
+      baselineCost.questions === agenticCost.questions
+        ? `n=${baselineCost.questions} questions per pass`
+        : `n=${baselineCost.questions} baseline / ${agenticCost.questions} agentic`
+    console.log(`\nCost (${costN}, every type, answerable and refusal alike):`)
     console.log(
-      `\nAgentic cost (n=${agenticResults.length} questions, every type, answerable and refusal alike):`,
+      `  ${col('metric', 20)}${col('baseline')}${col('agentic')}${col('delta')}`,
     )
-    console.log(`  mean searches/question   ${cost.meanSearches}`)
-    console.log(`  mean latency/question    ${cost.meanLatencyMs}ms`)
-    console.log(`  mean tokens/question     ${cost.meanTokensUsed}`)
+    const costRow = (
+      name: string,
+      base: number | null,
+      candidate: number | null,
+      unit = '',
+    ) =>
+      console.log(
+        `  ${col(name, 20)}${col(costCell(base, unit))}${col(costCell(candidate, unit))}` +
+          `${col(formatCostDelta(base, candidate, unit))}`,
+      )
+    costRow(
+      'mean latency',
+      baselineCost.meanLatencyMs,
+      agenticCost.meanLatencyMs,
+      'ms',
+    )
+    costRow(
+      'median latency',
+      baselineCost.medianLatencyMs,
+      agenticCost.medianLatencyMs,
+      'ms',
+    )
+    costRow(
+      'slowest question',
+      baselineCost.maxLatencyMs,
+      agenticCost.maxLatencyMs,
+      'ms',
+    )
+    costRow(
+      'mean searches',
+      baselineCost.meanSearches,
+      agenticCost.meanSearches,
+    )
+    costRow(
+      'mean tokens',
+      baselineCost.meanTokensUsed,
+      agenticCost.meanTokensUsed,
+    )
     console.log(
-      `  termination reasons      ${Object.entries(cost.terminationCounts)
+      `  ${col('termination', 20)}${col('n/a')}${Object.entries(
+        agenticCost.terminationCounts ?? {},
+      )
         .map(([k, v]) => `${k}=${v}`)
         .join('  ')}`,
     )
+    console.log(
+      '  n/a above is not zero: the fixed pipeline searches exactly once by construction,',
+    )
+    console.log(
+      '  sends no planner tokens and has no loop to terminate — those rows do not apply to it.',
+    )
+
+    // The trade in one line. A ratio rather than only a difference, because
+    // "+10931ms" and "74x" land very differently on a reader deciding whether
+    // to flip a default, and the ratio is the one spec 0032 has to weigh
+    // against the followup and multi-hop gains printed above.
+    if (baselineCost.meanLatencyMs > 0) {
+      const slower = agenticCost.meanLatencyMs / baselineCost.meanLatencyMs
+      console.log(
+        `\n  The trade: the agentic path costs ${slower.toFixed(1)}x the fixed path's mean ` +
+          `latency\n  (${agenticCost.meanLatencyMs}ms vs ${baselineCost.meanLatencyMs}ms) ` +
+          `for the quality deltas above. Both measured in this run.`,
+      )
+    }
     console.log('='.repeat(78))
 
     // --- NFR3, the hard gate this whole comparison exists to enforce:
