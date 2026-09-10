@@ -676,3 +676,249 @@ describe('retrieveForOwner with reranking', () => {
     expect(createChatCompletion).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// The pool the reranker gets to see (spec 0036 FR1)
+//
+// The stage shipped unable to do its job. The fused SELECT ended
+// `LIMIT ${topK}` (8), so `rerankChunks` was handed eight rows and its own
+// window collapsed to `min(RAG_RERANK_CANDIDATES, 8) = 8`. The reranker could
+// reorder the eight chunks fusion had already chosen and could NEVER promote
+// the better chunk sitting at rank 9 — which is the entire point of reranking.
+// `RAG_RERANK_CANDIDATES` was dead configuration.
+//
+// Unlike everything above, these tests make the `execute` mock honour the
+// LIMIT that was actually bound. Without that the pool width is invisible: a
+// mock returning three rows returns three rows whether the query asked for 8
+// or 20, and the defect would survive every assertion in this file.
+// ---------------------------------------------------------------------------
+
+describe('retrieveForOwner — the reranker sees a wider pool (spec 0036 FR1)', () => {
+  interface Chunks {
+    value?: unknown
+    queryChunks?: Chunks[]
+  }
+
+  /** Bound parameters of a Drizzle `sql` template, in order. */
+  function boundParams(query: Chunks): unknown[] {
+    const params: unknown[] = []
+    const walk = (chunks: unknown[]): void => {
+      for (const c of chunks) {
+        if (c === null || c === undefined) continue
+        if (typeof c !== 'object') {
+          params.push(c)
+          continue
+        }
+        if (Array.isArray(c)) {
+          walk(c)
+          continue
+        }
+        const node = c as Chunks
+        if (Array.isArray(node.queryChunks)) walk(node.queryChunks)
+        else if (
+          Array.isArray(node.value) &&
+          node.value.every((v) => typeof v === 'string')
+        ) {
+          // Static SQL text, not a bound value.
+        } else if ('value' in node) params.push(node.value)
+      }
+    }
+    walk(query.queryChunks ?? [])
+    return params
+  }
+
+  /**
+   * Twelve fused candidates in RRF order, three of them below the floor.
+   *
+   * `r9` is the chunk this whole spec is about: genuinely the best match, and
+   * unreachable under the old `LIMIT topK` because fusion ranked it ninth.
+   */
+  const SIMILARITIES: Record<string, number> = {
+    r1: 0.6,
+    r2: 0.2, // below the 0.35 floor
+    r3: 0.5,
+    r4: 0.1, // below
+    r5: 0.45,
+    r6: 0.7,
+    r7: 0.3, // below
+    r8: 0.55,
+    r9: 0.8, // the one worth rescuing
+    r10: 0.4,
+    r11: 0.65,
+    r12: 0.42,
+  }
+
+  const FUSION_ORDER = Object.keys(SIMILARITIES)
+
+  const dbRow = (id: string) => ({
+    chunk_id: id,
+    document_id: `doc-${id}`,
+    document_title: `Document ${id}`,
+    content: `Content of ${id}`,
+    page_number: 1,
+    kind: 'text',
+    similarity: SIMILARITIES[id],
+    lexical_rank: 0,
+    vec_rank: 1,
+    lex_rank_pos: null,
+  })
+
+  /** The shape a real reply has: scores in a tool call, `content` empty. */
+  function toolReply(argumentsJson: string) {
+    return {
+      choice: {
+        finish_reason: 'tool_calls',
+        message: {
+          content: '',
+          tool_calls: [
+            { function: { name: 'submit_scores', arguments: argumentsJson } },
+          ],
+        },
+      },
+      tokens: 1088,
+    }
+  }
+
+  /** A flat score set over the first `n` candidates. */
+  const scoresFor = (n: number, score: (id: string, i: number) => number) =>
+    toolReply(
+      JSON.stringify({
+        scores: FUSION_ORDER.slice(0, n).map((id, i) => ({
+          id: i + 1,
+          score: score(id as string, i),
+        })),
+      }),
+    )
+
+  beforeEach(() => {
+    mockEnv.RAG_TOP_K = 3
+    mockEnv.RAG_RERANK_CANDIDATES = 10
+    // Stand in for the database: return the fused rows the bound LIMIT asked
+    // for, so the pool width is observable at all.
+    execute.mockImplementation(async (query: Chunks) => {
+      const params = boundParams(query)
+      const limit = Number(params[params.length - 1])
+      return FUSION_ORDER.slice(0, limit).map(dbRow)
+    })
+  })
+
+  it('returns exactly the recorded chunks when reranking is off', async () => {
+    // The no-change guarantee, pinned against a written-down expectation
+    // rather than "non-empty". The pool is topK (3), so fusion hands over r1,
+    // r2, r3; the gate drops r2 at 0.20; r1 and r3 survive in fusion order.
+    // That is what this function returned before spec 0036 existed.
+    mockEnv.RAG_RERANK_ENABLED = false
+
+    const out = await retrieveForOwner('owner', 'q', ['kb'])
+
+    expect(out).toEqual([
+      {
+        chunkId: 'r1',
+        documentId: 'doc-r1',
+        documentTitle: 'Document r1',
+        content: 'Content of r1',
+        pageNumber: 1,
+        kind: 'text',
+        similarity: 0.6,
+        lexicalRank: 0,
+        source: 'vector',
+      },
+      {
+        chunkId: 'r3',
+        documentId: 'doc-r3',
+        documentTitle: 'Document r3',
+        content: 'Content of r3',
+        pageNumber: 1,
+        kind: 'text',
+        similarity: 0.5,
+        lexicalRank: 0,
+        source: 'vector',
+      },
+    ])
+    expect(createChatCompletion).not.toHaveBeenCalled()
+  })
+
+  it('promotes a chunk fusion ranked ninth into the answer', async () => {
+    // The defect, stated as a test. Under `LIMIT topK` the reranker was never
+    // shown r9, so no score it could return would put r9 in the answer. It is
+    // first here because the reranker said so.
+    mockEnv.RAG_RERANK_ENABLED = true
+    createChatCompletion.mockResolvedValue(
+      scoresFor(10, (id) => {
+        if (id === 'r9') return 10
+        if (id === 'r6') return 9
+        if (id === 'r2') return 8 // below the floor, scores well anyway
+        if (id === 'r1') return 7
+        return 1
+      }),
+    )
+
+    const out = await retrieveForOwner('owner', 'q', ['kb'])
+
+    expect(ids(out)).toEqual(['r9', 'r6', 'r1'])
+    expect(out[0]?.rerankScore).toBe(1)
+  })
+
+  it('scores the whole pool, not just the answer', async () => {
+    mockEnv.RAG_RERANK_ENABLED = true
+    createChatCompletion.mockResolvedValue(scoresFor(10, () => 5))
+
+    await retrieveForOwner('owner', 'q', ['kb'])
+
+    const [messages] = createChatCompletion.mock.calls[0] ?? []
+    const prompt = messages[1].content as string
+    // Ten numbered passages reached the scoring prompt, not three.
+    expect(prompt).toContain('[10]')
+    expect(prompt).toContain('Content of r9')
+    // ...and the pool is bounded: r11 and r12 were never retrieved.
+    expect(prompt).not.toContain('Content of r11')
+  })
+
+  it('still returns at most topK', async () => {
+    // The pool widened; the answer did not. The cut moved to the end of the
+    // pipeline rather than being removed.
+    mockEnv.RAG_RERANK_ENABLED = true
+    createChatCompletion.mockResolvedValue(scoresFor(10, (_id, i) => 10 - i))
+
+    const out = await retrieveForOwner('owner', 'q', ['kb'])
+    expect(out).toHaveLength(3)
+  })
+
+  it('never admits a below-floor chunk, however well the reranker scored it', async () => {
+    // r2, r4 and r7 all score 10 and none of them gets in. The gate is a
+    // per-element predicate on cosine similarity and reranking is a
+    // permutation, so a wider pool cannot smuggle a below-floor chunk through.
+    // Spec 0036 FR5 proposes exactly that and remains unimplemented.
+    mockEnv.RAG_RERANK_ENABLED = true
+    createChatCompletion.mockResolvedValue(
+      scoresFor(10, (id) => (['r2', 'r4', 'r7'].includes(id) ? 10 : 1)),
+    )
+
+    const out = await retrieveForOwner('owner', 'q', ['kb'])
+
+    for (const chunk of out) {
+      expect(chunk.similarity).toBeGreaterThanOrEqual(0.35)
+    }
+    expect(ids(out)).not.toContain('r2')
+  })
+
+  it('keeps fusion order over the wider pool when the rerank call fails', async () => {
+    // FR3, restated honestly for a widened pool. "Failure-open" means fusion
+    // order is untouched and a failure can never cause a refusal — both still
+    // hold. It does NOT mean the result equals the DISABLED result: the pool
+    // is wider because reranking is ON, so a failed rerank returns the fused
+    // order of ten candidates rather than three. That can only ever add.
+    mockEnv.RAG_RERANK_ENABLED = false
+    const baseline = await retrieveForOwner('owner', 'q', ['kb'])
+    expect(ids(baseline)).toEqual(['r1', 'r3'])
+
+    mockEnv.RAG_RERANK_ENABLED = true
+    createChatCompletion.mockRejectedValue(new Error('upstream exploded'))
+    const failed = await retrieveForOwner('owner', 'q', ['kb'])
+
+    // Fusion order, gate applied, cut to topK — nothing reordered.
+    expect(ids(failed)).toEqual(['r1', 'r3', 'r5'])
+    expect(ids(failed).slice(0, baseline.length)).toEqual(ids(baseline))
+    expect(failed.length).toBeGreaterThanOrEqual(baseline.length)
+  })
+})

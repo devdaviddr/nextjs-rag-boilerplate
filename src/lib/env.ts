@@ -339,11 +339,17 @@ const envSchema = z
       .optional()
       .default('false')
       .transform((v) => v === 'true'),
-    // How many of the fused candidates get re-scored, counted from the top.
-    // Above `RAG_TOP_K` (8) this is simply "all of them", which is the
-    // intended default: the point of a cap is to bound the size of the single
-    // scoring prompt if TOP_K is raised, not to leave good candidates unread.
-    // Candidates past the window keep their fusion order below the window.
+    // How many fused candidates get re-scored, counted from the top.
+    //
+    // This SIZES THE RETRIEVED POOL, it does not merely cap a window over an
+    // already-cut list. With reranking on, `retrieveForOwner` fuses, keeps
+    // this many candidates, reranks them, applies the similarity gate and only
+    // then cuts to `RAG_TOP_K`. Above `RAG_TOP_K` (8) that is the entire
+    // point: at 20 the reranker can promote a chunk that fusion ranked 9th
+    // into the answer, which is the only thing reranking is actually for.
+    //
+    // Values below `RAG_TOP_K` are raised to it — a pool smaller than the
+    // answer would discard chunks the gate would have kept.
     RAG_RERANK_CANDIDATES: z.coerce
       .number()
       .int()
