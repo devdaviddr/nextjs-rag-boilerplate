@@ -199,7 +199,7 @@ behind "Open in new tab", which still serves the unchanged, hardened
 headers are untouched (NFR1), and a page that fails to render falls back to
 framing it.
 
-### FR6 was not delivered, because the schema is still singular
+### FR6 was diagnosed as undelivered, then delivered
 
 `chunkPages` and `chunkElements` both compute the **list** — `Chunk.boxes` — and
 `tests/unit/rag-chunk.test.ts` asserts a two-column chunk yields two rectangles
@@ -214,12 +214,24 @@ lie**: regions spanning more than one column, or filling less than 65% of their
 union, return `null` rather than a union that would cover the gutter and the
 wrong column.
 
-The net effect on a reader is worth stating plainly, because it is the opposite
-of what FR6 asked for and it is invisible from the tests: **a chunk spanning two
-columns gets no highlight at all.** It falls back to page-level behaviour (FR4),
-which is the safe failure and the one this spec argued for — no box beats a
-wrong box — but it is a fallback, not the feature. FR6 is unmet, and closing it
-needs a `boxes jsonb` column, a migration, and one line in `ingest.ts`.
+The net effect on a reader was the opposite of what FR6 asked for, and it was
+invisible from the tests: **a chunk spanning two columns got no highlight at
+all.** It fell back to page-level behaviour (FR4) — the safe failure this spec
+argued for, no box beating a wrong box — but a fallback, not the feature.
+
+> **Closed 2026-09-11, migration `0015`.** `chunks.boxes jsonb` now stores the
+> list beside the legacy rectangle, written by both insert sites — `ingest.ts`
+> and the eval harness, so the corpus keeps matching what production produces.
+> `toCitationBoxes` reconciles them: the list wins when usable, `bbox` is the
+> fallback for older rows, and a list that WAS recorded but is entirely
+> unusable returns empty rather than falling back — that row said where it came
+> from, and substituting the coarser older claim would invent a highlight the
+> chunk never supported.
+>
+> The diagnosis above is kept rather than deleted. It is an accurate account of
+> a real gap that survived two agents and a merge, and of why it was invisible:
+> every test either side of the database boundary passed, because the loss
+> happened exactly at that boundary.
 
 ### What a reviewer must not get wrong
 
@@ -242,7 +254,7 @@ exist for that reason: no box is strictly better than a wrong box.
       `toPositionedItems` against `chunkElements` to two decimal places. **The
       criterion cited the wrong file**: `rag-chunk.test.ts` checks the
       convention only within the text path
-- [ ] A chunk spanning two columns records two boxes, not one union covering the
+- [x] A chunk spanning two columns records two boxes, not one union covering the
       gutter — `tests/unit/rag-chunk.test.ts`
 - [x] Opening a citation marks the cited region on the page —
       `tests/unit/chat-source-viewer.test.tsx`, _"highlight drawn"_, against a

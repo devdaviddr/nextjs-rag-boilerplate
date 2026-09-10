@@ -109,18 +109,18 @@ model instead, and a good illustration of the gap this spec addresses.
 > recommendations that were taken up have shipped — not that every row below is
 > done. Several are deliberately not started.
 
-| Item                                       | Status                                                                                                          |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| **0** Evaluation harness                   | **Shipped** — `pnpm rag:eval`, 20 questions, 3 documents with distractors                                       |
-| **1a** Contextual chunk headers            | **Shipped**                                                                                                     |
-| **1b** Hybrid retrieval (RRF)              | **Shipped**, with one sub-decision reversed — see below                                                         |
-| 1c Structure-aware / parent–child chunking | Not started                                                                                                     |
-| 1d Real tokenizer                          | Not started                                                                                                     |
-| 1e HNSW / filtered-ANN tuning              | Not started                                                                                                     |
-| 1f Reranking                               | Blocked — no reranker on this account; [0036](0036-reranking.md) takes up the two options that never needed one |
-| 1g HyDE                                    | Not started                                                                                                     |
-| Phase 2 Document cracking                  | **Shipped** as [0031](0031-tables-figures-and-complex-layouts.md) — mixed result, see below                     |
-| Phase 3 Agentic loop                       | **Shipped** as [0029](0029-agentic-retrieval-loop.md), after 3a-bis was settled                                 |
+| Item                                       | Status                                                                                                                                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** Evaluation harness                   | **Shipped** — `pnpm rag:eval`, 20 questions, 3 documents with distractors                                                                                                     |
+| **1a** Contextual chunk headers            | **Shipped**                                                                                                                                                                   |
+| **1b** Hybrid retrieval (RRF)              | **Shipped**, with one sub-decision reversed — see below                                                                                                                       |
+| 1c Structure-aware / parent–child chunking | Not started                                                                                                                                                                   |
+| 1d Real tokenizer                          | **Partly done** — calibrated counter in [0033](0033-retrieval-fundamentals.md); `length/4` under-counted table markup 48%. Still ~10%, so a real tokenizer remains the answer |
+| 1e HNSW / filtered-ANN tuning              | Not started                                                                                                                                                                   |
+| 1f Reranking                               | **Unblocked in principle** — [0036](0036-reranking.md) ships an LLM backend behind an interface; the blocked NIM endpoint was only ever one of three options. Unmeasured      |
+| 1g HyDE                                    | Not started                                                                                                                                                                   |
+| Phase 2 Document cracking                  | **Shipped** as [0031](0031-tables-figures-and-complex-layouts.md) — mixed result, see below                                                                                   |
+| Phase 3 Agentic loop                       | **Shipped** as [0029](0029-agentic-retrieval-loop.md), after 3a-bis was settled                                                                                               |
 
 ### What the two shipped phases actually settled
 
