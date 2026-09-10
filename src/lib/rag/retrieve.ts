@@ -6,6 +6,7 @@ import { db } from '@/db'
 import type { ChunkKind } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
+import { hypotheticalQuery } from './hyde'
 import { rerankChunks } from './rerank'
 
 /**
@@ -225,7 +226,27 @@ export async function retrieveForOwner(
     CANDIDATE_POOL_CEILING,
   )
 
-  const queryVector = toVectorLiteral(await embedQuery(question))
+  // HyDE (spec 0033 FR6): embed a hypothetical ANSWER rather than the
+  // question, because an answer looks more like the passage containing it.
+  // Returns null when disabled or when the generation failed in any way, and
+  // null means "embed the question" — so with RAG_HYDE_ENABLED off this is one
+  // falsy check and the embedding call below is exactly what it always was.
+  //
+  // The hypothetical replaces the question for the WHOLE vector channel: it
+  // orders the ANN scan and it is what `similarity` below is measured against.
+  // That is deliberate and it is why the flag is off by default — hyde.ts
+  // explains why pinning the gate to the question's own vector instead would
+  // make HyDE unevaluable, and what re-measuring it therefore costs.
+  //
+  // The LEXICAL channel deliberately keeps the real question. A hypothetical
+  // is invented vocabulary, and feeding invented terms to `to_tsquery` would
+  // have the lexical channel vote for passages matching words the user never
+  // typed — the one channel whose value is that it matches what was actually
+  // asked.
+  const hypothetical = await hypotheticalQuery(question)
+  const queryVector = toVectorLiteral(
+    await embedQuery(hypothetical ?? question),
+  )
 
   // Hybrid retrieval (spec 0027, 1b): a dense channel and a lexical one, fused
   // with Reciprocal Rank Fusion.
@@ -335,6 +356,11 @@ export async function retrieveForOwner(
   // survives, and the cut to `topK` happens LAST. After the gate would be the
   // one placement that cannot help — but so is before a `LIMIT topK`, which is
   // what this used to be and why `RAG_RERANK_CANDIDATES` did nothing.
+  //
+  // The reranker is handed the real question, never the hypothetical. It reads
+  // question and passage together, which is the whole reason it discriminates
+  // better than a vector distance; giving it invented text to compare against
+  // would throw that away.
   //
   // Reranking is a permutation and nothing more (see rerank.ts), so the filter
   // below admits the identical set whether reranking ran, was disabled or

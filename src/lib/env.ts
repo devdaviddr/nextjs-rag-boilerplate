@@ -357,6 +357,38 @@ const envSchema = z
       .optional()
       .default(20),
 
+    // --- HyDE (spec 0033 FR6, 0027 1g) -------------------------------------
+    // Embed a hypothetical ANSWER instead of the question, because an answer
+    // looks more like the passage containing it than a question does.
+    //
+    // Off by default, and this flag is a bigger lever than RAG_RERANK_ENABLED.
+    // Reranking only permutes, so the gate admits the same set either way.
+    // HyDE replaces the vector the gate's `similarity` is computed from, so it
+    // moves what RAG_MIN_SIMILARITY MEANS — see hyde.ts. Refusal accuracy must
+    // be re-measured before this is turned on anywhere real.
+    //
+    // It also COMPETES with scope.ts rather than complementing it (both fix
+    // "the question does not look like the passage"), so spec 0033 FR6 wants a
+    // head-to-head: scope.ts alone, HyDE alone, both. Do not turn this on and
+    // report a combined number.
+    RAG_HYDE_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // Separate from RAG_PLANNER_MODEL, and NOT defaulted to it, on measurement
+    // rather than on principle. Probed 2026-09-11 over four questions each:
+    // the 120B chat model ran a median 9.5s (4.7-15.8s) while the 30B
+    // "lightning" planner model ran 18.3s (12.1-45.5s) — slower and far less
+    // predictable, with its worst case on the summarise question HyDE exists
+    // to fix. Writing a passage is prose generation, which is what the chat
+    // model is for; the planner model is tuned for tool-call judgement.
+    RAG_HYDE_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('nvidia/nemotron-3-super-120b-a12b'),
+
     // --- Build identity (baked into the image at CI build time) ------------
     // ci.yml passes these as Docker build-args (APP_VERSION=git ref name,
     // APP_GIT_SHA=commit sha); the Dockerfile persists them as ENV. Surfaced
