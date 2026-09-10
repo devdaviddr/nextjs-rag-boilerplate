@@ -102,3 +102,32 @@ describe('boxPercentStyle', () => {
     expect(Number.parseFloat(style.height)).toBeCloseTo(10, 6)
   })
 })
+
+describe('toCitationBoxes — reconciling boxes with the legacy bbox', () => {
+  const good = { xmin: 0.1, ymin: 0.1, xmax: 0.4, ymax: 0.2 }
+  const other = { xmin: 0.6, ymin: 0.1, xmax: 0.9, ymax: 0.2 }
+  const broken = { xmin: 0.5, ymin: 0.1, xmax: 0.2, ymax: 0.2 }
+
+  it('prefers the list over the legacy rectangle', () => {
+    expect(
+      toCitationBoxes([good, other], { xmin: 0, ymin: 0, xmax: 1, ymax: 1 }),
+    ).toHaveLength(2)
+  })
+
+  it('falls back to the legacy rectangle when the list is absent or empty', () => {
+    expect(toCitationBoxes(null, good)).toHaveLength(1)
+    expect(toCitationBoxes([], good)).toHaveLength(1)
+  })
+
+  it('does NOT fall back when the list was recorded but is unusable', () => {
+    // The row said where it came from and the record was bad. Substituting the
+    // coarser older claim would invent a highlight the chunk never supported.
+    expect(toCitationBoxes([broken], good)).toEqual([])
+  })
+
+  it('never merges a two-column pair into one covering box', () => {
+    const out = toCitationBoxes([good, other])
+    expect(out).toHaveLength(2)
+    expect(out.some((b) => b.xmin < 0.5 && b.xmax > 0.5)).toBe(false)
+  })
+})

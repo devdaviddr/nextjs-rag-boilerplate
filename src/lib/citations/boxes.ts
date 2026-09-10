@@ -134,8 +134,25 @@ function boxKey(box: CitationBox): string {
  * overlays, duplicates stack into a darker rectangle, which a reader reasonably
  * reads as "more strongly cited" — a meaning nothing in the data supports.
  */
-export function toCitationBoxes(raw: unknown): CitationBox[] {
-  const list = Array.isArray(raw) ? raw : [raw]
+/**
+ * Reconcile the two stored shapes into one list (spec 0035 FR6).
+ *
+ * `boxes` is authoritative when it holds anything usable. `bbox` is the older
+ * single rectangle and is used only when `boxes` is absent — rows written
+ * before that column existed, which must keep rendering (FR4).
+ *
+ * A populated `boxes` whose entries ALL fail validation returns empty rather
+ * than falling back: that row did record where it came from and the record was
+ * unusable, so substituting the older, coarser claim would invent a highlight
+ * the chunk never supported. No highlight is strictly better than a wrong one.
+ */
+export function toCitationBoxes(
+  raw: unknown,
+  legacyBbox?: unknown,
+): CitationBox[] {
+  const fromList = Array.isArray(raw) && raw.length > 0
+  const source = fromList ? raw : (legacyBbox ?? raw)
+  const list = Array.isArray(source) ? source : [source]
   const seen = new Set<string>()
   const boxes: CitationBox[] = []
 

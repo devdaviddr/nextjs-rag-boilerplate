@@ -458,6 +458,7 @@ export async function ingestDocument(
           // changes shape.
           kind: piece.kind ?? 'text',
           bbox: piece.bbox ?? null,
+          boxes: piece.boxes?.length ? piece.boxes : null,
           embedding: vectors[i] as number[],
         })),
       )

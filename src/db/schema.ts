@@ -503,6 +503,15 @@ export const chunks = pgTable(
     // needs — deferred in spec 0026 for exactly the reason that nothing was
     // capturing it.
     bbox: jsonb('bbox').$type<ChunkBox>(),
+    // The FULL list of regions this chunk came from (spec 0035 FR6).
+    //
+    // `bbox` above holds a single rectangle and cannot express a chunk that
+    // spans two columns — a union there covers the gutter and the wrong
+    // column, which is the "confidently wrong highlight" 0035 says is worse
+    // than no highlight at all. Both columns exist for as long as rows written
+    // before this do: `src/lib/citations/boxes.ts` is the single reader that
+    // reconciles them, and a null here falls back to `bbox`.
+    boxes: jsonb('boxes').$type<ChunkBox[]>(),
     embedding: halfvec('embedding', { dimensions: 2048 }).notNull(),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },

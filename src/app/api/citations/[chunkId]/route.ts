@@ -64,6 +64,7 @@ export async function GET(
       pageCount: documents.pageCount,
       kind: chunks.kind,
       bbox: chunks.bbox,
+      boxes: chunks.boxes,
     })
     .from(chunks)
     .innerJoin(documents, eq(documents.id, chunks.documentId))
@@ -85,7 +86,8 @@ export async function GET(
     // handed over as `unknown` so the shape is decided by the one function
     // that knows all the shapes, not by a type assertion that would be wrong
     // silently.
-    boxes: toCitationBoxes(row.bbox as unknown),
+    // The list wins; the legacy single rectangle is the fallback.
+    boxes: toCitationBoxes(row.boxes as unknown, row.bbox as unknown),
   }
 
   return NextResponse.json(location, {
