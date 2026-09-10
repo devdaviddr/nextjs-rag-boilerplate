@@ -58,6 +58,7 @@ two jobs, plus the guarantees below that keep them honest.
 | [Under the hood](#under-the-hood)             | Why the column is `halfvec(2048)`, the data model, the SQL, the request sequence |
 | [Evaluation](#evaluation)                     | `pnpm rag:eval`, the measured numbers, the refusal gate                          |
 | [The agentic path](#the-agentic-path)         | The optional loop where the model directs retrieval, and its measured cost       |
+| [Document cracking](#document-cracking)       | The optional path that reads tables, figures and scanned pages                   |
 | [When things go wrong](#when-things-go-wrong) | Failures observed on a live endpoint, and how each is handled                    |
 | [Known gaps](#known-gaps)                     | What this does not do, named rather than hidden                                  |
 
@@ -144,14 +145,17 @@ in-process, producing **per-page** text. No sidecar container, works offline.
 Keeping the page number attached from the very first step is what later lets
 every citation say "page 4" and be right.
 
-An **image-only PDF is rejected, not ingested**. If average extractable text
+An **image-only PDF is rejected, not ingested** — unless
+[document cracking](#document-cracking) is on. If average extractable text
 across pages falls below `RAG_MIN_CHARS_PER_PAGE` (50), the document fails with
 a message naming OCR as the cause. A knowledge base that silently contains
-nothing is worse than an upload that refuses. (**OCR** — reading text out of a
-picture of text — is not implemented here; see [Known gaps](#known-gaps).)
+nothing is worse than an upload that refuses.
 
 The check averages across pages deliberately, so a legitimate document with a
-few image-only pages (a cover, a chart) still ingests. Documents over
+few image-only pages (a cover, a chart) still ingests. **That average is also
+the flaw cracking fixes**: a 40-page report with a scanned appendix passes it,
+ingests, reports success — and the appendix is not in the index, with nobody
+told. Documents over
 `RAG_MAX_DOCUMENT_PAGES` (200) are rejected up front, which bounds worst-case
 ingestion cost.
 
@@ -456,8 +460,8 @@ minutes:
    `demo@example.com` / `Password123`).
 2. Go to **`/documents`** and create a knowledge base. It is a name and an
    optional description, nothing more.
-3. Upload a PDF into it. A real text PDF — a scanned one is rejected, by
-   design. If you do not have one handy, this repo ships
+3. Upload a PDF into it. A real text PDF — a scanned one is rejected unless
+   document cracking is on (see below). If you do not have one handy, this repo ships
    `eval/corpus/staff-handbook.pdf`: four pages, one section per page, with
    facts you can check against `eval/make-corpus.mjs`. Watch `status` go
    `pending → extracting → embedding → ready`; a short document takes seconds, a
@@ -1226,6 +1230,87 @@ persisted record is always the verified text.
 
 ---
 
+## Document cracking
+
+**Off by default.** With `RAG_CRACK_ENABLED` unset, everything above describes
+the whole pipeline and nothing here costs anything.
+
+Turned on, ingestion stops treating every page the same way. Each page is
+triaged locally — for free — and only the ones that need help are sent to
+`nvidia/nemotron-parse`, which returns typed, boxed elements instead of a flat
+string:
+
+| page looks like                  | route         | cost         |
+| -------------------------------- | ------------- | ------------ |
+| ordinary prose with a text layer | `clean-text`  | **nothing**  |
+| multi-column, or densely tabular | `structured`  | 1 parse call |
+| carries images or vector drawing | `image-heavy` | 1 parse call |
+| no text layer at all (a scan)    | `no-text`     | 1 parse call |
+
+On the evaluation corpus that is 4 parse calls across 6 documents; three
+documents spend nothing. A document whose pages are all clean text costs exactly
+what it costs today, which is the property that makes this affordable on a
+rate-limited free tier.
+
+### What it changes
+
+- **Scanned pages are read** instead of dropping the document or, worse,
+  silently contributing nothing.
+- **Figures become findable.** A figure is indexed by its caption where it has
+  one — free, and in the document's own words — and by a one-sentence generated
+  label where it does not.
+- **Tables keep their structure**, including merged headers, which Markdown
+  cannot express and this deliberately does not flatten to.
+- **Chunks gain `kind` and `bbox`**, which is what a future span-level citation
+  highlight needs.
+
+### Figures are a search key, never evidence
+
+A `figure` chunk's text exists to make the picture findable. It is not the
+document's words and must never be quoted as them.
+
+Reading what a figure actually shows happens at **answer time**, through the
+`read_figure` tool on [the agentic path](#the-agentic-path)
+(`RAG_READ_FIGURE_ENABLED`, which also needs cracking). The model names a figure
+a search returned, asks a specific question about it, and gets a cropped image
+back.
+
+That split is measured, not stylistic. Asked to transcribe a bar chart blind at
+ingestion, the vision model returned five values, every one wrong by 15–30%, in
+40s. Asked a specific question about a cropped region at answer time it was
+correct in 4s — about relationships. It is still unreliable about **unlabelled
+quantities**: on a chart with no axis values it answered "approximately 90"
+against a true 363, and did so under three different instructions not to. So a
+deterministic guard removes any number the figure does not print:
+
+    before   "The tallest bar is Q3, and it reaches a value of approximately 90."
+    after    "The tallest bar is Q3, and it reaches a value of [unlabelled]."
+
+`read_figure` makes a figure's structure readable. It does not make an
+unlabelled chart quantitative.
+
+### Budgets, and degrading rather than failing
+
+`RAG_CRACK_MAX_PAGES` (25) caps parse calls per document and
+`RAG_DESCRIBE_MAX_FIGURES` (8) caps vision calls. Past either, the remaining
+pages take the text-layer path and the document still reaches `ready` — with
+`documents.extraction` recording, per page, which route it took and why. A page
+that fails to parse falls back to its text layer; a page that fails with no text
+layer is recorded as unindexed. Nothing here fails a document.
+
+### What you are sending
+
+Cracking renders pages as images and sends them to the configured endpoint.
+Document _text_ already goes there, but a page image is a larger disclosure per
+call and includes anything on the page — signatures, letterheads, photographs.
+Worth knowing before turning it on for a corpus you would not paste into a
+chat box.
+
+Parser and vision output is also model-generated text that lands in the index
+and later reaches the answering model, so text rendered _inside an image_ — which
+no text-layer check sees and nobody skims — now has a path into a prompt. The
+owner and knowledge-base filters bound the blast radius; nothing else does.
+
 ## When things go wrong
 
 Every failure below was observed on a live endpoint, not imagined. Each is
@@ -1286,7 +1371,15 @@ Named rather than hidden.
 - **The follow-up and multi-hop evaluation slices are n=3 and n=2.** One
   question moves those metrics by a third or a half. Direction real, magnitude
   provisional.
-- **No OCR.** Scanned PDFs are rejected, not half-ingested.
+- **No OCR by default.** With `RAG_CRACK_ENABLED` unset, scanned PDFs are
+  rejected rather than half-ingested. Turning it on adds OCR and figures — see
+  _Document cracking_.
+- **Tables and multi-column layout are not a demonstrated gap.** Flattened text
+  loses a table's column association and interleaves a two-column page, and it
+  is natural to assume that costs answers. Measured across two deliberately
+  destructive corpora, it did not: the chat model reconstructed both reliably.
+  Cracking still produces better chunks; it has not been shown to produce better
+  answers for those two cases.
 - **No reranking.** A reranker is a second, slower model — a cross-encoder —
   that re-scores retrieved candidates by reading question and passage together.
   None is reachable on a free NIM account, so retrieval quality rests on
