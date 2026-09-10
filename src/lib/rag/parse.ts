@@ -122,7 +122,21 @@ export async function parsePage(
   { scale, signal }: { scale?: number; signal?: AbortSignal } = {},
 ): Promise<ParsePageResult> {
   const png = await renderPage(pdf, pageNumber, scale ? { scale } : {})
+  return parseRenderedPage(png, pageNumber, { signal })
+}
 
+/**
+ * Parse a page that has ALREADY been rendered.
+ *
+ * Split out because a page carrying figures is needed twice — once to parse its
+ * layout, once to crop each figure for description — and rendering is the
+ * expensive local step. `crack.ts` renders once and calls this.
+ */
+export async function parseRenderedPage(
+  png: Buffer,
+  pageNumber: number,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<ParsePageResult> {
   const { choice, tokens } = await createChatCompletion(
     [
       {

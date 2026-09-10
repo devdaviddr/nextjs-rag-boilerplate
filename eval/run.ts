@@ -16,6 +16,7 @@ import { chunks, documents, files, knowledgeBases, users } from '@/db/schema'
 import { env } from '@/lib/env'
 import { runAgenticRetrieval } from '@/lib/rag/agentic-run'
 import { buildEmbeddingText } from '@/lib/rag/chunk'
+import { createChatCompletion } from '@/lib/rag/client'
 import { chunksFromPdf } from '@/lib/rag/crack'
 import { embedPassages } from '@/lib/rag/embed'
 import {
@@ -25,6 +26,7 @@ import {
   type RetrievedChunk,
 } from '@/lib/rag/retrieve'
 import type { RewriteTurn } from '@/lib/rag/rewrite'
+import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
 import { resolveScope } from '@/lib/rag/scope'
 import { putObject } from '@/lib/storage/client'
 
@@ -57,6 +59,11 @@ import { putObject } from '@/lib/storage/client'
  *   pnpm rag:eval --no-ingest     # reuse what is already indexed
  *   pnpm rag:eval --label X --baseline Y   # gate X's refusal accuracy against
  *                                           # saved eval/results/Y.json (default Y=baseline)
+ *   pnpm rag:eval --answers       # ALSO generate answers and assert against
+ *                                 # them (spec 0031). Measures GENERATION, so
+ *                                 # it is reported separately and never folded
+ *                                 # into hit@k. Costs one chat call per
+ *                                 # checked question.
  *   pnpm rag:eval --compare       # ALSO run the agentic path; save
  *                                 # eval/results/{baseline,agentic}.json; gate
  *                                 # on refusal accuracy in the SAME run (0029 NFR3)
@@ -157,6 +164,22 @@ interface Question {
    * multi-hop questions use this instead and leave `document`/`page` unset.
    */
   answerDocuments?: AnswerFact[]
+  /**
+   * Substrings the generated answer must contain (spec 0031).
+   *
+   * Retrieval metrics cannot see a flattened table or interleaved columns: the
+   * right page comes back either way, so hit@1 reports a pass while the chunk
+   * is unusable. Only an ANSWER can show the difference — "388" is either in it
+   * or it is not.
+   */
+  answerMustContain?: string[]
+  /**
+   * A regex the generated answer must NOT match.
+   *
+   * The guard for a value that exists only as a bar height: the answer must
+   * decline rather than state a number nobody wrote down.
+   */
+  answerMustNotMatch?: string
 }
 
 function questionType(q: Question): QuestionType {
@@ -198,6 +221,16 @@ interface LeakDetail {
 }
 
 /** A question whose OWN knowledge base, scoped alone, still failed to retrieve it. */
+/** One answer-level check and what it found. */
+interface AnswerCheck {
+  questionId: string
+  question: string
+  passed: boolean
+  answer: string
+  /** Which expectation failed, for a report that says what broke. */
+  detail: string
+}
+
 interface ComplementFailure {
   questionId: string
   question: string
@@ -518,6 +551,77 @@ async function agenticRetrieve(
   } finally {
     clearTimeout(timeout)
   }
+}
+
+/**
+ * Generate an answer and check it against the question's expectations.
+ *
+ * Deliberately NOT folded into hit@k. This measures generation, the harness's
+ * headline numbers measure retrieval, and mixing them would make one number
+ * move for two unrelated reasons. It also costs a chat call per checked
+ * question, which is why it is opt-in behind `--answers`.
+ *
+ * The prompt is the app's own `SYSTEM_PROMPT` + `buildUserMessage`, not a
+ * variant written for the harness — the same reason ingestion goes through
+ * `chunksFromPdf`.
+ */
+async function runAnswerChecks(
+  questions: readonly Question[],
+  retrievedById: Map<string, RetrievedChunk[]>,
+): Promise<AnswerCheck[]> {
+  const checks: AnswerCheck[] = []
+
+  for (const q of questions) {
+    const wants = q.answerMustContain ?? []
+    const forbids = q.answerMustNotMatch
+    if (wants.length === 0 && !forbids) continue
+
+    const chunks = retrievedById.get(q.id) ?? []
+    if (chunks.length === 0) {
+      checks.push({
+        questionId: q.id,
+        question: q.question,
+        passed: !q.answerable,
+        answer:
+          '(nothing retrieved — the system refuses without calling the model)',
+        detail: q.answerable
+          ? 'expected an answer but retrieval returned nothing'
+          : 'refused, as required',
+      })
+      continue
+    }
+
+    const { choice } = await createChatCompletion(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserMessage(q.question, chunks) },
+      ],
+      { maxTokens: 400, temperature: 0.2 },
+    )
+    const answer = (choice.message?.content ?? '').trim()
+
+    const missing = wants.filter((want) => !answer.includes(want))
+    const forbidden = forbids ? new RegExp(forbids, 'i').exec(answer) : null
+
+    checks.push({
+      questionId: q.id,
+      question: q.question,
+      passed: missing.length === 0 && !forbidden,
+      answer,
+      detail:
+        missing.length > 0
+          ? `missing ${missing.map((m) => JSON.stringify(m)).join(', ')}`
+          : forbidden
+            ? `stated ${JSON.stringify(forbidden[0])}, which the documents never print`
+            : 'ok',
+    })
+
+    // Spaced out, same as the agentic pass: a free tier rate-limits rather
+    // than bills, so a burst is the thing to avoid.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+  }
+
+  return checks
 }
 
 interface CoreMetrics {
@@ -894,6 +998,9 @@ async function main(): Promise<void> {
   // search twice does on exactly the cases designed to need that.
   console.log('Baseline (fixed pipeline) — per question:')
   const baselineResults: QuestionResult[] = []
+  // Kept so `--answers` can generate from exactly what retrieval returned,
+  // rather than retrieving a second time and scoring a different context.
+  const retrievedById = new Map<string, RetrievedChunk[]>()
   for (const q of questions) {
     const retrieved = await baselineRetrieve(
       q,
@@ -901,6 +1008,7 @@ async function main(): Promise<void> {
       allKbIds,
       docsInScope,
     )
+    retrievedById.set(q.id, retrieved)
     const result = buildResult(q, retrieved, titleById)
     baselineResults.push(result)
     logResult(result)
@@ -974,6 +1082,28 @@ async function main(): Promise<void> {
   const baselineLayoutCore = coreMetrics(baselineLayout)
   const baselineMultiHop = multiHopMetrics(baselineResults)
 
+  // --- Answer-level checks (spec 0031). Opt-in: they cost a chat call per
+  // checked question, and they measure generation rather than retrieval.
+  let answerChecks: AnswerCheck[] = []
+  if (hasFlag('answers')) {
+    console.log('\nAnswer checks — generating from the retrieved context:')
+    answerChecks = await runAnswerChecks(questions, retrievedById)
+    for (const check of answerChecks) {
+      console.log(
+        `  ${check.passed ? 'PASS' : 'FAIL'}  ${check.questionId} — ${check.detail}`,
+      )
+      if (!check.passed) {
+        console.log(
+          `        answer: ${check.answer.replace(/\s+/g, ' ').slice(0, 220)}`,
+        )
+      }
+    }
+    const failed = answerChecks.filter((c) => !c.passed).length
+    console.log(
+      `  ${answerChecks.length - failed}/${answerChecks.length} answer checks passed`,
+    )
+  }
+
   const baselineSummary = {
     label: compare ? 'baseline' : label,
     at: new Date().toISOString(),
@@ -1003,6 +1133,7 @@ async function main(): Promise<void> {
     multiHop: baselineMultiHop,
     crossKbLeaks: leaks,
     crossKbComplementDetails: complementFailures,
+    answerChecks,
     results: baselineResults,
   }
 

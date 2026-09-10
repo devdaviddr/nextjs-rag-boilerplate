@@ -464,18 +464,17 @@ measurement in **Problem** exists to justify.
       accuracy (1.000, unchanged) and retrieves the scanned page it previously
       could not — layout hit@1 0.750 → 1.000; see the measurement above for the
       one single-hop reordering that came with it
-- [ ] A question whose only answer is a value inside a chart **refuses**,
-      rather than returning a described number — needs an answer-level check;
-      see the harness note above. The mechanism is in place and unit-tested;
-      what is missing is a harness that scores answers rather than retrieval
+- [x] A question whose only answer is a value inside a chart does not get one
+      — `pnpm rag:eval --answers`, `layout-q2-downtime-hours`: the answer
+      declines the Q2 value while correctly quoting the per-site hours the
+      table does print
 
-> **Not verifiable by the retrieval harness (2026-09-10).** "Answers a table
-> question the current pipeline cannot" was an acceptance criterion in the first
-> draft of this spec and has been removed, because `eval/run.ts` scores which
-> chunk came back, not what was said about it. A flattened table and interleaved
-> columns both retrieve at rank 1 today. Proving those are fixed needs an
-> answer-level assertion the harness does not currently make — listed under
-> Out of scope.
+> **Resolved, and not the way the first draft assumed (2026-09-10).** "Answers
+> a table question the current pipeline cannot" was an acceptance criterion in
+> the first draft, was removed as unverifiable, and is now verifiable —
+> `pnpm rag:eval --answers` exists. It shows the criterion was simply **false**
+> for this corpus: the current pipeline does answer that table question. The
+> criterion stays out, on evidence rather than on a harness limitation.
 
 ### Measured gap, before any cracking (2026-09-10)
 
@@ -524,6 +523,42 @@ pool enough to tip a near-tie. Neither chunk's text changed. hit@3 is
 unchanged, so nothing became unreachable, and on a 17-question set one position
 is 5.9% — this is a reordering within noise, not a retrieval regression, but it
 is a number that moved and it is recorded as one.
+
+### Answer-level checks, and what they actually prove (2026-09-10)
+
+`pnpm rag:eval --answers` generates an answer from the retrieved context using
+the app's own `SYSTEM_PROMPT` and asserts against it. Run both ways:
+
+| check                                              | cracking off                 | cracking on |
+| -------------------------------------------------- | ---------------------------- | ----------- |
+| `layout-chiller-warranty` contains "60"            | **FAIL** — nothing retrieved | **PASS**    |
+| `layout-geelong-unplanned-downtime` contains "388" | PASS                         | PASS        |
+| `layout-lift-capacity-north` contains "1600"       | PASS                         | PASS        |
+| `layout-downtime-spike-quarter` contains "Q3"      | PASS                         | PASS        |
+| `layout-q2-downtime-hours` states no Q2 value      | PASS                         | PASS        |
+
+**Only one of the five discriminates, and that is the finding.** The model
+answers "388" correctly from the _flattened_ table and "1600" correctly from the
+_interleaved_ columns. A five-column table whose header row survives on its own
+line is still recoverable by a capable reader, and two interleaved columns about
+lifts still attribute their capacities correctly.
+
+So the honest scoreboard for this corpus is narrower than the Problem section
+implies:
+
+- **Scanned pages** — a real, demonstrated end-to-end gap, closed. Proven at
+  both the retrieval and the answer level.
+- **Figures** — new capability. No baseline to improve on, because they were
+  absent from the index entirely.
+- **Tables and multi-column layout** — chunk quality is unambiguously better
+  (merged headers preserved, columns un-interleaved), but on this corpus that
+  improvement does **not** change any answer. The claim that flattening makes a
+  table "worse than useless" is overstated at this table size.
+
+The five checks are kept regardless: four of them are regression guards rather
+than proofs, which is a legitimate thing for a test to be, and the distinction
+is recorded here so nobody later reads "5/5 passed" as evidence cracking was
+required for all five.
 
 > **The harness cannot see two of these gaps.** It scores retrieval, and the
 > last three rows above _pass_ retrieval while returning corrupted content:
@@ -608,10 +643,11 @@ larger disclosure per call and should be stated plainly in
 - A worker queue, if per-page cracking makes ingestion long enough that
   `pages_processed` polling stops being adequate.
 - Re-probing for a reranker, and for the multimodal embedder above.
-- **Describing caption-less figures** (FR6's second half). A figure with a
-  caption is findable for free and `read_figure` covers the rest; generating a
-  description for the caption-less case is the remaining piece, and it is the
-  one that spends ~40s per figure at ingestion.
+- **A corpus that can demonstrate the table and column gaps end to end.** The
+  present one cannot: the model recovers both answers without cracking. A table
+  with genuinely ambiguous merged headers, or a two-column spread where a fact
+  spans the gutter, would settle whether those improvements are worth their
+  cost — right now only the chunk quality argues for them, not a measurement.
 - **Quantitative reading of unlabelled charts.** Out of reach of this model, and
   `redactUnlabelledNumbers` is the honest response rather than a workaround. A
   chart whose values are printed reads correctly today.

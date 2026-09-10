@@ -91,6 +91,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
     } = await chunksFromPdf(buffer, {
       chunkTokens: env.RAG_CHUNK_TOKENS,
       overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
+      documentTitle: doc.title,
       onPageProcessed: (processed) => setPagesProcessed(documentId, processed),
     })
 

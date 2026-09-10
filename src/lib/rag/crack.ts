@@ -6,9 +6,10 @@ import { logger } from '@/lib/logger'
 import { type Chunk, chunkElements, chunkPages } from './chunk'
 import type { PageText } from './chunk'
 import { extractPdf } from './extract'
-import { normalizePage } from './normalize'
-import { ParseError, parsePage } from './parse'
-import { RenderError } from './render'
+import { describeFigure, isDescribableFigure } from './describe'
+import { type NormalizedElement, normalizePage } from './normalize'
+import { ParseError, parseRenderedPage } from './parse'
+import { RenderError, renderPage } from './render'
 import { collectPageSignals } from './signals'
 import { type PageRoute, classifyPage, requiresCracking } from './triage'
 
@@ -51,9 +52,67 @@ function textLayerChunks(
 export interface CrackOptions {
   chunkTokens: number
   overlapTokens: number
+  /** Used to give a caption-less figure context in its description. */
+  documentTitle?: string
   /** Called after each page, so ingestion can report progress (FR13). */
   onPageProcessed?: (pagesProcessed: number) => Promise<void> | void
   signal?: AbortSignal
+}
+
+/**
+ * Give every caption-less figure on a page a search key.
+ *
+ * A figure WITH a caption already has one, for free, in the document's own
+ * words — so it is skipped. Only the rest cost a vision call, and only while
+ * the per-document budget lasts. Measured at ~40s each, which is why this is
+ * the tightest budget in the system and why the caption shortcut matters more
+ * than it looks.
+ *
+ * Returns the elements with descriptions folded into `caption`, because that is
+ * already the field `chunkElements` and `buildEmbeddingText` read — a figure's
+ * search key comes from one place regardless of which way it was obtained.
+ */
+async function describeFigures(
+  elements: readonly NormalizedElement[],
+  {
+    png,
+    documentTitle,
+    remainingBudget,
+    signal,
+  }: {
+    png: Buffer
+    documentTitle: string
+    remainingBudget: number
+    signal?: AbortSignal
+  },
+): Promise<{ elements: NormalizedElement[]; calls: number }> {
+  let budget = remainingBudget
+  const out: NormalizedElement[] = []
+  let calls = 0
+
+  for (const element of elements) {
+    if (element.type !== 'Picture' || element.caption || budget <= 0) {
+      out.push(element)
+      continue
+    }
+
+    budget--
+    calls++
+    const described = await describeFigure(
+      {
+        png,
+        bbox: element.bbox,
+        documentTitle,
+        heading: element.heading,
+        printedText: element.text,
+      },
+      { signal },
+    )
+
+    out.push(described ? { ...element, caption: described.text } : element)
+  }
+
+  return { elements: out, calls }
 }
 
 /**
@@ -69,7 +128,13 @@ export async function crackDocument(
   pageTexts: readonly string[],
   options: CrackOptions,
 ): Promise<CrackResult> {
-  const { chunkTokens, overlapTokens, onPageProcessed, signal } = options
+  const {
+    chunkTokens,
+    overlapTokens,
+    onPageProcessed,
+    signal,
+    documentTitle = '',
+  } = options
 
   const signals = await collectPageSignals(pdf, pageTexts)
   const routes: PageRoute[] = signals.map((s) => classifyPage(s))
@@ -77,6 +142,7 @@ export async function crackDocument(
   const chunks: Chunk[] = []
   const pages: ExtractionPage[] = []
   let parseCalls = 0
+  let describeCalls = 0
   let budgetExhausted = false
 
   for (const [index, route] of routes.entries()) {
@@ -117,14 +183,32 @@ export async function crackDocument(
 
     try {
       parseCalls++
-      const { elements } = await parsePage(pdf, pageNumber, { signal })
-      const normalised = normalizePage(elements)
+      // Rendered ONCE and reused: parsing needs the page, and describing a
+      // figure needs a crop of the same pixels.
+      const png = await renderPage(pdf, pageNumber)
+      const { elements } = await parseRenderedPage(png, pageNumber, { signal })
+
+      const normalised = normalizePage(elements).filter(
+        // A logo or a rule is a `Picture` too. Dropping it here keeps a chunk
+        // that could only ever be a false positive out of the knowledge base.
+        (element) =>
+          element.type !== 'Picture' || isDescribableFigure(element.bbox),
+      )
+
+      const described = await describeFigures(normalised, {
+        png,
+        documentTitle,
+        remainingBudget: env.RAG_DESCRIBE_MAX_FIGURES - describeCalls,
+        signal,
+      })
+      describeCalls += described.calls
+
       // A page with no text layer was read from its pixels; saying so lets a
       // citation distinguish "the document says" from "we read this off a
       // scan", which are different claims about the same words.
       const textKind: ChunkKind = route === 'no-text' ? 'ocr' : 'text'
       chunks.push(
-        ...chunkElements(normalised, pageNumber, {
+        ...chunkElements(described.elements, pageNumber, {
           chunkTokens,
           overlapTokens,
           startIndex: chunks.length,
@@ -164,9 +248,7 @@ export async function crackDocument(
     summary: {
       pages,
       parseCalls,
-      // Figure description is not implemented yet; the field exists so the
-      // summary shape does not change when it is.
-      describeCalls: 0,
+      describeCalls,
       budgetExhausted,
     },
   }

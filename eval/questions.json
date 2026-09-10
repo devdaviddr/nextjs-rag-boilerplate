@@ -284,7 +284,8 @@
       "knowledgeBase": "Facilities & Operations",
       "page": 1,
       "answerable": true,
-      "hard": "Two-column page emitted row-major, so extractText interleaves the columns: the chunk reads 'Its new rated capacity is 1600 Its rated capacity is unchanged at / kilograms. 1000 kilograms.' Both capacities sit adjacent, so a retrieved chunk supports either answer."
+      "hard": "Two-column page emitted row-major, so extractText interleaves the columns: the chunk reads 'Its new rated capacity is 1600 Its rated capacity is unchanged at / kilograms. 1000 kilograms.' Both capacities sit adjacent, so a retrieved chunk supports either answer.",
+      "answerMustContain": ["1600"]
     },
     {
       "id": "layout-geelong-unplanned-downtime",
@@ -294,7 +295,8 @@
       "knowledgeBase": "Facilities & Operations",
       "page": 2,
       "answerable": true,
-      "hard": "Merged-cell table. Flattened, the row is 'Geelong 63.0 61.5 210 388' with 'Planned Unplanned' on a separate line, so 388 has lost its column header entirely."
+      "hard": "Merged-cell table. Flattened, the row is 'Geelong 63.0 61.5 210 388' with 'Planned Unplanned' on a separate line, so 388 has lost its column header entirely.",
+      "answerMustContain": ["388"]
     },
     {
       "id": "layout-downtime-spike-quarter",
@@ -304,7 +306,8 @@
       "knowledgeBase": "Facilities & Operations",
       "page": 3,
       "answerable": true,
-      "hard": "Landscape page. The answer is in the figure's caption, which IS text — this is the case spec 0031 FR6 expects to cost nothing, because a caption makes a figure findable without a vision call."
+      "hard": "Landscape page. The answer is in the figure's caption, which IS text — this is the case spec 0031 FR6 expects to cost nothing, because a caption makes a figure findable without a vision call.",
+      "answerMustContain": ["Q3"]
     },
     {
       "id": "layout-q2-downtime-hours",
@@ -312,7 +315,8 @@
       "question": "How many hours of unplanned downtime were recorded in Q2?",
       "knowledgeBase": "Facilities & Operations",
       "answerable": false,
-      "hard": "The value exists ONLY as a bar height (308) — no text on any page carries it. Marked unanswerable because the corpus contains no TEXT answer, which is what this harness scores. Expect it to fail the refusal check today: retrieval surfaces the figure's caption, which is about quarters and downtime. That failure is the finding, not a defect in the fixture — it says the guard against inventing a chart value has to live in the answer path (spec 0031 FR7), not in retrieval. Under read_figure it becomes answerable."
+      "hard": "The value exists ONLY as a bar height (308) — no text on any page carries it. Marked unanswerable because the corpus contains no TEXT answer, which is what the retrieval metrics score; expect the retrieval-level refusal check to fail, because the figure's caption is legitimately about quarters and downtime. The real guarantee is at the ANSWER level (spec 0031 FR7): answerMustNotMatch forbids a number in the same clause as Q2, so quoting the table's printed per-site hours is allowed and inventing a Q2 value is not.",
+      "answerMustNotMatch": "(Q2[^.]{0,60}?\\d{2,4}|\\d{2,4}[^.]{0,60}?Q2)"
     },
     {
       "id": "layout-chiller-warranty",
@@ -322,7 +326,8 @@
       "knowledgeBase": "Facilities & Operations",
       "page": 2,
       "answerable": true,
-      "hard": "The answer is on a SCANNED page. maintenance-log averages 120 chars/page against RAG_MIN_CHARS_PER_PAGE=50, so the document ingests and reports success while page 2 contributes nothing — the silent-appendix failure spec 0031 FR1 exists to fix."
+      "hard": "The answer is on a SCANNED page. maintenance-log averages 120 chars/page against RAG_MIN_CHARS_PER_PAGE=50, so the document ingests and reports success while page 2 contributes nothing — the silent-appendix failure spec 0031 FR1 exists to fix.",
+      "answerMustContain": ["60"]
     }
   ]
 }
