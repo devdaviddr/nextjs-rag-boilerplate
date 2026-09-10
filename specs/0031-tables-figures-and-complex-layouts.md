@@ -416,10 +416,11 @@ measurement in **Problem** exists to justify.
       scanned pages — `tests/unit/rag-ingest-cracking.test.ts`
 - [x] The corpus contains documents the current pipeline provably cannot index,
       and the gap is recorded before it is closed —
-      `eval/results/layout-gap.json`, `eval/questions.json` (`type: layout`)
+      `eval/questions.json` (`type: layout`), `eval/make-corpus.mjs`; numbers
+      in the table below, reproducible with `pnpm rag:eval`
 - [x] Extending the corpus leaves the single-hop baseline untouched, so the
-      recorded numbers stay comparable — `eval/results/layout-gap.json`
-      (hit@1 0.941, MRR 0.941, refusal 1.000, leakage 0)
+      recorded numbers stay comparable — hit@1 0.941, MRR 0.941, refusal
+      1.000, leakage 0, and the original three PDFs regenerate byte-identical
 - [ ] `pnpm rag:eval` on the extended corpus shows no regression in refusal
       accuracy, and **retrieves** the scanned page it currently cannot —
       `eval/run.ts`
@@ -439,8 +440,9 @@ measurement in **Problem** exists to justify.
 
 The corpus was extended with `site-operations-report` (row-major two columns, a
 merged-cell table, a landscape chart page) and `maintenance-log` (a text page
-followed by a scanned one), plus five `layout` questions. Recorded as
-`eval/results/layout-gap.json`:
+followed by a scanned one), plus five `layout` questions. Measured with
+`pnpm rag:eval` (its results directory is git-ignored, so the numbers are
+recorded here rather than linked):
 
 | question                            | retrieved            | what it proves                                                                                                                                             |
 | ----------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
