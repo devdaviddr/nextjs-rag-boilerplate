@@ -204,21 +204,21 @@ a silent gap into a gap the user has actively been reassured about.
 
 ## Acceptance criteria
 
-- [ ] A document detail view lists every page from `documents.extraction`,
+- [x] A document detail view lists every page from `documents.extraction`,
       including pages that produced no chunks
-- [ ] Each page renders with its indexed regions overlaid
-- [ ] Each page states its route and outcome in plain language, not the enum
-- [ ] Selecting a chunk shows the stored text, its kind and its page
-- [ ] A `figure` chunk is labelled as a search key and an `ocr` chunk as
+- [x] Each page renders with its indexed regions overlaid
+- [x] Each page states its route and outcome in plain language, not the enum
+- [x] Selecting a chunk shows the stored text, its kind and its page
+- [x] A `figure` chunk is labelled as a search key and an `ocr` chunk as
       recovered from an image — neither reads as a quotation
-- [ ] A page with no chunks is called out as not searchable, with its reason
-- [ ] The documents **list** shows a partially-indexed document differently from
+- [x] A page with no chunks is called out as not searchable, with its reason
+- [x] The documents **list** shows a partially-indexed document differently from
       a fully-indexed one, derived from the recorded outcomes
-- [ ] A document with no `extraction` record renders without inventing one
-- [ ] A document belonging to another user returns the same 404 as one that does
+- [x] A document with no `extraction` record renders without inventing one
+- [x] A document belonging to another user returns the same 404 as one that does
       not exist
-- [ ] A 200-page document does not fetch 200 page images to render the view
-- [ ] `docs/rag.md` documents the view and what "partially indexed" means
+- [x] A 200-page document does not fetch 200 page images to render the view
+- [x] `docs/rag.md` documents the view and what "partially indexed" means
 
 ## Security & privacy
 

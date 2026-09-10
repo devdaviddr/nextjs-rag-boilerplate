@@ -47,20 +47,21 @@ two jobs, plus the guarantees below that keep them honest.
 
 ## On this page
 
-| Section                                       | What it covers                                                                   |
-| --------------------------------------------- | -------------------------------------------------------------------------------- |
-| [Two guarantees](#two-guarantees)             | The two properties enforced in code, not asked of the model                      |
-| [The pipeline](#the-pipeline)                 | The whole system in one diagram                                                  |
-| [Ingestion](#ingestion)                       | PDF → text → chunks → embeddings → rows                                          |
-| [Search](#search)                             | Question → retrieved passages → grounded answer, or a refusal                    |
-| [Setup](#setup)                               | Get a key, ask your first question, run offline, tune it                         |
-| [Reference](#reference)                       | Module map, the streaming protocol, rate limits                                  |
-| [Under the hood](#under-the-hood)             | Why the column is `halfvec(2048)`, the data model, the SQL, the request sequence |
-| [Evaluation](#evaluation)                     | `pnpm rag:eval`, the measured numbers, the refusal gate                          |
-| [The agentic path](#the-agentic-path)         | The optional loop where the model directs retrieval, and its measured cost       |
-| [Document cracking](#document-cracking)       | The optional path that reads tables, figures and scanned pages                   |
-| [When things go wrong](#when-things-go-wrong) | Failures observed on a live endpoint, and how each is handled                    |
-| [Known gaps](#known-gaps)                     | What this does not do, named rather than hidden                                  |
+| Section                                                     | What it covers                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [Two guarantees](#two-guarantees)                           | The two properties enforced in code, not asked of the model                          |
+| [The pipeline](#the-pipeline)                               | The whole system in one diagram                                                      |
+| [Ingestion](#ingestion)                                     | PDF → text → chunks → embeddings → rows                                              |
+| [Search](#search)                                           | Question → retrieved passages → grounded answer, or a refusal                        |
+| [Setup](#setup)                                             | Get a key, ask your first question, run offline, tune it                             |
+| [Reference](#reference)                                     | Module map, the streaming protocol, rate limits                                      |
+| [Under the hood](#under-the-hood)                           | Why the column is `halfvec(2048)`, the data model, the SQL, the request sequence     |
+| [Evaluation](#evaluation)                                   | `pnpm rag:eval`, the measured numbers, the refusal gate                              |
+| [The agentic path](#the-agentic-path)                       | The optional loop where the model directs retrieval, and its measured cost           |
+| [Document cracking](#document-cracking)                     | The optional path that reads tables, figures and scanned pages                       |
+| [Inspecting what was indexed](#inspecting-what-was-indexed) | What the system stored for a document, page by page, and what "partly indexed" means |
+| [When things go wrong](#when-things-go-wrong)               | Failures observed on a live endpoint, and how each is handled                        |
+| [Known gaps](#known-gaps)                                   | What this does not do, named rather than hidden                                      |
 
 A reader who wants the thing running can go straight to [Setup](#setup) and
 come back. Everything from [Under the hood](#under-the-hood) onwards is design
@@ -1365,6 +1366,73 @@ Parser and vision output is also model-generated text that lands in the index
 and later reaches the answering model, so text rendered _inside an image_ — which
 no text-layer check sees and nobody skims — now has a path into a prompt. The
 owner and knowledge-base filters bound the blast radius; nothing else does.
+
+## Inspecting what was indexed
+
+A document's row says `Ready · 8 pages · 21 chunks` and, until spec 0037,
+stopped there. Everything else the system knew about that document — which
+pages it parsed, which it read the cheap way, which it gave up on and why, what
+text it actually stored, and where on the page each chunk came from — was
+recorded in `documents.extraction` and shown to nobody.
+
+Clicking a document's title opens `/documents/[kbId]/[documentId]`: every page
+of the document, what happened to it in plain language, the page image with the
+indexed regions drawn on it, and the stored text of each chunk.
+
+### What "partly indexed" means
+
+The documents list shows a **Partly indexed** badge beside `Ready` when any of
+three things is true:
+
+- **the page budget ran out** (`budgetExhausted`) — `RAG_CRACK_MAX_PAGES` was
+  reached, so the remaining pages were read from the text layer only. This is
+  deliberate: [cracking degrades rather than fails](#budgets-and-degrading-rather-than-failing).
+- **a page failed** — its `outcome` is `failed`, and nothing from it is in the
+  index.
+- **a recorded page produced no chunks** — the page was read successfully and
+  yielded nothing searchable. This is the one that used to be invisible, and it
+  is the shape of the silent failure document cracking was written to fix: a
+  scanned appendix that ingested, reported success, and was not in the index.
+
+The badge is derived from the recorded outcomes on every read, never stored. A
+second copy of this answer would drift from the one written at ingestion, which
+is the only moment that knows it.
+
+Ready and Partly indexed are shown **together**, not as alternatives. The
+document really is searchable, and part of it really is missing; collapsing
+those into a single badge is how `Ready` came to mean both.
+
+### Reading the detail view
+
+Each page states its route and outcome in words rather than the stored enum —
+"read from the page's own text", "read page by page — it has columns or a
+table", "scanned page, read with OCR", "not indexed" plus the recorded reason.
+The vocabulary in the database is internal, and its meaning is the entire thing
+being communicated.
+
+Chunk text is shown **as stored**, because that is what retrieval matches
+against. A `figure` chunk is labelled as a search key and an `ocr` chunk as
+recovered from an image — see
+[Figures are a search key, never evidence](#figures-are-a-search-key-never-evidence).
+Neither may read as a quotation of the document.
+
+A document ingested before `documents.extraction` existed, or with cracking
+off, says the routing detail was not recorded and lists the chunks it has. It
+does not invent a per-page story, and it is not marked partly indexed — with no
+record there is nothing to compare against.
+
+### Why it exists
+
+When the system says _"I couldn't find anything about that in your
+documents"_, the user has no way to tell that from _"that page never got
+indexed"_. Refusal accuracy is this project's strongest guarantee and the one a
+user is least able to check. This view is what makes a refusal verifiable
+rather than something to take on trust.
+
+Read-only throughout: no route added for it mutates a document, a chunk or an
+extraction record, and nothing on the ingestion or retrieval path changed. Only
+the page you are looking at is fetched as an image, so a 200-page document
+costs one render, not two hundred.
 
 ## When things go wrong
 

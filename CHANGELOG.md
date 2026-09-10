@@ -10,6 +10,31 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **See what was actually indexed from a document**
+  ([spec 0037](specs/0037-inspect-what-was-indexed.md)). Clicking a document
+  opens every page of it: what happened to that page in plain language, the
+  page image with the indexed regions drawn on it, and the stored text of each
+  chunk — the text retrieval actually matches against, not a tidied rendering
+  of it.
+
+  The database already recorded all of this and the UI showed none of it. A
+  document whose page 8 failed to parse, or that hit its page budget and had
+  the rest read the cheap way, displayed the same `Ready` badge as one indexed
+  perfectly. So the list gains a **Partly indexed** badge — shown _beside_
+  `Ready`, not instead of it, because the document really is searchable and
+  part of it really is missing — whenever the budget ran out, a page failed, or
+  a recorded page produced no chunks at all. That last one is the case that was
+  invisible, and it is the shape of the silent failure document cracking was
+  written to fix.
+
+  The badge is derived from the recorded outcomes on every read rather than
+  stored, so it cannot drift from what ingestion wrote. A `figure` chunk is
+  labelled as a search key and an `ocr` chunk as recovered from an image, so
+  neither reads as a quotation. A document ingested before the per-page record
+  existed says the routing detail is unknown instead of inventing one, and is
+  not marked partial — there is nothing to compare against. Read-only, one page
+  image at a time, and nothing on the ingestion or retrieval path changed.
+
 - **A citation highlights the passage, not just the page**
   ([spec 0035](specs/0035-span-level-citations.md)). Opening a source marks the
   cited region on the page instead of leaving the reader to find the sentence

@@ -1,15 +1,17 @@
 'use server'
 
-import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, count, countDistinct, desc, eq, sql } from 'drizzle-orm'
 import { after } from 'next/server'
 import { headers } from 'next/headers'
 
 import { db } from '@/db'
 import { chunks, documents, files, knowledgeBases } from '@/db/schema'
-import type { DocumentStatus } from '@/db/schema'
+import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
 import { env } from '@/lib/env'
+import { toCitationBoxes } from '@/lib/citations/boxes'
 import { logger } from '@/lib/logger'
+import { type InspectedDocument, buildInspection } from './inspect'
 import { UPLOAD_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
 import { deleteObject, putObject } from '@/lib/storage/client'
@@ -27,6 +29,16 @@ export interface DocumentSummary {
   chunkCount: number
   error: string | null
   createdAt: Date
+  /**
+   * Some of this document is not searchable (spec 0037 FR7).
+   *
+   * On the SUMMARY rather than only in the detail view, because the list is
+   * what everyone reads. A `Ready` badge that means both "fully indexed" and
+   * "indexed except pages 7 and 8" makes the detail view a page nobody thinks
+   * to open. Derived from the recorded outcomes, never stored — a second
+   * source of truth would drift from the one written at ingestion.
+   */
+  partiallyIndexed: boolean
 }
 
 async function requireUserId(): Promise<string> {
@@ -161,6 +173,8 @@ export async function uploadDocument(
       title: doc.title,
       status: doc.status,
       pageCount: doc.pageCount,
+      // Nothing has been recorded yet, so there is nothing to be partial about.
+      partiallyIndexed: false,
       chunkCount: 0,
       error: doc.error,
       createdAt: doc.createdAt,
@@ -193,7 +207,12 @@ export async function listMyDocuments(
       pageCount: documents.pageCount,
       error: documents.error,
       createdAt: documents.createdAt,
+      extraction: documents.extraction,
       chunkCount: count(chunks.id),
+      // FR7's third condition needs to know whether every recorded page
+      // produced something, which the existing join can answer for free — no
+      // extra query, and no shipping the whole extraction record to the client.
+      indexedPages: countDistinct(chunks.pageNumber),
     })
     .from(documents)
     .leftJoin(chunks, eq(chunks.documentId, documents.id))
@@ -206,11 +225,106 @@ export async function listMyDocuments(
     .groupBy(documents.id)
     .orderBy(desc(documents.createdAt))
 
-  return rows.map((r) => ({
+  return rows.map(({ extraction, indexedPages, ...r }) => ({
     ...r,
     status: r.status,
     chunkCount: Number(r.chunkCount),
+    // The list gets the verdict, not the per-page record — that is what the
+    // detail view is for, and shipping a document's whole ingestion history to
+    // every row would put it on the index page for no one to read.
+    partiallyIndexed: isPartiallyIndexed(extraction, Number(indexedPages)),
   }))
+}
+
+/**
+ * FR7's verdict, from what the list already has.
+ *
+ * All three of the spec's conditions: the budget ran out, a page failed, or a
+ * recorded page produced nothing. The third is the one `Ready` hides best —
+ * it is the shape of the silent failure spec 0031 was written about — so it is
+ * checked here and not left to a detail view nobody opens.
+ *
+ * `indexedPages` is a count of DISTINCT page numbers among the chunks, so
+ * fewer of them than recorded pages means at least one page is not searchable.
+ */
+function isPartiallyIndexed(
+  extraction: ExtractionSummary | null,
+  indexedPages: number,
+): boolean {
+  // FR8: with no record there is no per-page truth to compare against, and
+  // guessing from `pageCount` would flag every text-layer document that
+  // legitimately merged pages into fewer chunks.
+  if (!extraction) return false
+  return (
+    extraction.budgetExhausted ||
+    extraction.pages.some((p) => p.outcome === 'failed') ||
+    indexedPages < extraction.pages.length
+  )
+}
+
+/**
+ * Everything ingestion recorded about one document (spec 0037).
+ *
+ * Owner-scoped in the WHERE clause, and a document belonging to someone else
+ * returns the same `null` as one that does not exist. This resolves a
+ * caller-supplied id and returns the document's FULL indexed text, which makes
+ * it the same shape of hazard as `retrieveDocumentChunks` — read its comment.
+ */
+export async function inspectDocument(documentId: string): Promise<{
+  title: string
+  status: DocumentStatus
+  pageCount: number | null
+  knowledgeBaseId: string | null
+  inspection: InspectedDocument
+} | null> {
+  const userId = await requireUserId()
+
+  const doc = await db.query.documents.findFirst({
+    where: and(eq(documents.id, documentId), eq(documents.ownerId, userId)),
+    columns: {
+      title: true,
+      status: true,
+      pageCount: true,
+      knowledgeBaseId: true,
+      extraction: true,
+    },
+  })
+  if (!doc) return null
+
+  const rows = await db
+    .select({
+      id: chunks.id,
+      kind: chunks.kind,
+      content: chunks.content,
+      tokenCount: chunks.tokenCount,
+      pageNumber: chunks.pageNumber,
+      boxes: chunks.boxes,
+      bbox: chunks.bbox,
+    })
+    .from(chunks)
+    .where(and(eq(chunks.documentId, documentId), eq(chunks.ownerId, userId)))
+    .orderBy(asc(chunks.chunkIndex))
+
+  return {
+    title: doc.title,
+    status: doc.status,
+    pageCount: doc.pageCount,
+    knowledgeBaseId: doc.knowledgeBaseId,
+    inspection: buildInspection({
+      pageCount: doc.pageCount,
+      extraction: doc.extraction ?? null,
+      chunks: rows.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        content: r.content,
+        tokenCount: r.tokenCount,
+        pageNumber: r.pageNumber,
+        // One reader reconciles the list with the legacy rectangle, so the
+        // view never has to know which column a row was written with.
+        boxes: toCitationBoxes(r.boxes as unknown, r.bbox as unknown),
+      })),
+    }),
+  }
 }
 
 /**

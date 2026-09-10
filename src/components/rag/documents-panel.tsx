@@ -1,7 +1,15 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FileText, FolderInput, RotateCw, Trash2, Upload } from 'lucide-react'
+import {
+  FileText,
+  FolderInput,
+  RotateCw,
+  Trash2,
+  TriangleAlert,
+  Upload,
+} from 'lucide-react'
 
 import { FormMessage } from '@/components/auth/field-error'
 import { Badge } from '@/components/ui/badge'
@@ -216,7 +224,12 @@ export function DocumentsPanel({
               {documents.map((doc) => (
                 <TableRow key={doc.id}>
                   <TableCell className="font-medium">
-                    {doc.title}
+                    <Link
+                      href={`/documents/${knowledgeBaseId}/${doc.id}`}
+                      className="hover:underline"
+                    >
+                      {doc.title}
+                    </Link>
                     {doc.error && (
                       <p className="text-destructive mt-1 text-xs font-normal">
                         {doc.error}
@@ -224,9 +237,32 @@ export function DocumentsPanel({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(doc.status)}>
-                      {STATUS_LABEL[doc.status]}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant={statusVariant(doc.status)}>
+                        {STATUS_LABEL[doc.status]}
+                      </Badge>
+                      {/*
+                        Spec 0037 FR7. Beside the status, not instead of it:
+                        the document really is ready to search AND part of it
+                        is missing, and collapsing those into one badge is how
+                        `Ready` came to mean both in the first place. Links
+                        straight to the page that says which pages.
+                      */}
+                      {doc.partiallyIndexed && (
+                        <Link
+                          href={`/documents/${knowledgeBaseId}/${doc.id}`}
+                          aria-label={`${doc.title} is partially indexed — see which pages`}
+                        >
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-300"
+                          >
+                            <TriangleAlert className="size-3" />
+                            Partly indexed
+                          </Badge>
+                        </Link>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {doc.pageCount ?? '—'}
