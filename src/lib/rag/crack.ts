@@ -4,7 +4,7 @@ import type { ChunkKind, ExtractionPage, ExtractionSummary } from '@/db/schema'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { type Chunk, chunkElements, chunkPages } from './chunk'
-import type { PageText } from './chunk'
+import type { PageText, PositionedItem } from './chunk'
 import { extractPdf } from './extract'
 import { describeFigure, isDescribableFigure } from './describe'
 import { type NormalizedElement, normalizePage } from './normalize'
@@ -70,6 +70,16 @@ export interface ParsedPageCache {
 export interface CrackOptions {
   chunkTokens: number
   overlapTokens: number
+  /**
+   * Positioned text items per page, for the pages that take the text-layer
+   * path (spec 0035 FR1).
+   *
+   * Without these, a document with cracking ON gets boxes on its parsed pages
+   * and none on its clean-text ones — a highlight that works on some pages of
+   * a document and silently does nothing on others, which is worse than no
+   * highlight at all because the reader cannot tell "no box" from "no match".
+   */
+  pageItems?: readonly (readonly PositionedItem[])[]
   /** Used to give a caption-less figure context in its description. */
   documentTitle?: string
   /**
@@ -205,6 +215,7 @@ export async function crackDocument(
     parseCache,
     signal,
     documentTitle = '',
+    pageItems,
   } = options
 
   const signals = await collectPageSignals(pdf, pageTexts)
@@ -230,6 +241,8 @@ export async function crackDocument(
     const page: PageText = {
       pageNumber,
       text: (pageTexts[index] ?? '').trim(),
+      // Present only when the caller had them; absent is FR4's fallback.
+      ...(pageItems?.[index] ? { items: pageItems[index] } : {}),
     }
 
     const record = (outcome: ExtractionPage['outcome'], reason?: string) => {
@@ -392,14 +405,19 @@ export async function chunksFromPdf(
   options: CrackOptions,
 ): Promise<DocumentChunks> {
   const cracking = env.RAG_CRACK_ENABLED
-  const { pages, pageCount, allPageTexts, pdf } = await extractPdf(buffer, {
-    allowImageOnly: cracking,
-  })
+  const { pages, pageCount, allPageTexts, pdf, itemsByPage } = await extractPdf(
+    buffer,
+    { allowImageOnly: cracking },
+  )
 
   if (!cracking) {
     return { chunks: chunkPages(pages, options), pageCount }
   }
 
-  const { chunks, summary } = await crackDocument(pdf, allPageTexts, options)
+  const { chunks, summary } = await crackDocument(pdf, allPageTexts, {
+    ...options,
+    // Only when the caller did not supply its own.
+    pageItems: options.pageItems ?? itemsByPage,
+  })
   return { chunks, pageCount, extraction: summary }
 }

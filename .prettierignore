@@ -5,3 +5,6 @@ coverage
 playwright-report
 test-results
 pnpm-lock.yaml
+
+# Agent worktrees — full checkouts, never committed (see .gitignore).
+.claude/worktrees
