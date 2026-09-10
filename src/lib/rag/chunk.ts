@@ -6,6 +6,9 @@
  * what lets every citation resolve to an exact page (spec 0025 FR6).
  */
 
+import type { ChunkBox, ChunkKind } from '@/db/schema'
+import type { NormalizedElement } from './normalize'
+
 export interface PageText {
   /** 1-based, matching what a reader sees in a PDF viewer. */
   pageNumber: number
@@ -20,6 +23,16 @@ export interface Chunk {
   /** Position within the document, stable across the whole page sequence. */
   chunkIndex: number
   tokenCount: number
+  /**
+   * What this chunk is (spec 0031). `chunkPages` only ever produces 'text';
+   * the cracked path produces all four. Optional so the text-layer path is
+   * unchanged and existing callers keep compiling.
+   */
+  kind?: ChunkKind
+  /** Region of the page this came from, normalised 0–1. Cracked path only. */
+  bbox?: ChunkBox | null
+  /** A caption bound to a table or figure, carried into the embedded text. */
+  caption?: string | null
 }
 
 export interface ChunkOptions {
@@ -86,9 +99,17 @@ export function buildEmbeddingText(input: {
   documentTitle: string
   heading: string | null
   content: string
+  /**
+   * A bound caption (spec 0031). Included because a caption is often the only
+   * text that says what a table or figure is ABOUT — "Table 3.1 — Utilisation
+   * and downtime by site" is what a question matches, while the markup
+   * underneath is mostly numbers.
+   */
+  caption?: string | null
 }): string {
   const parts = [input.documentTitle.replace(/[-_]+/g, ' ')]
   if (input.heading) parts.push(input.heading)
+  if (input.caption) parts.push(input.caption)
   return `${parts.join(' — ')}\n${input.content}`
 }
 
@@ -207,6 +228,105 @@ export function chunkPages(pages: PageText[], options: ChunkOptions): Chunk[] {
         tokenCount: estimateTokens(content),
       })
     }
+  }
+
+  return chunks
+}
+
+/**
+ * Chunk one CRACKED page's normalised elements (spec 0031 Stage 5).
+ *
+ * The sibling of `chunkPages`, for pages that went through the parser instead
+ * of the text layer. Three rules differ, and each has a reason:
+ *
+ * 1. **An atomic element is one chunk, never split.** Half a table is not a
+ *    smaller table, it is a set of numbers whose header is in another chunk —
+ *    strictly worse than the flattened text this replaces. Oversized tables
+ *    are therefore allowed to exceed `chunkTokens`; the model's context is far
+ *    larger than any one table, and a split one is wrong rather than merely
+ *    large.
+ * 2. **Each element carries its OWN heading**, resolved upstream, rather than
+ *    the page's first line.
+ * 3. **A figure's content is a search key, not evidence.** It is written to
+ *    make the figure findable; `kind: 'figure'` is what tells retrieval and
+ *    citation not to treat it as the document's words.
+ *
+ * `startIndex` continues the document-wide `chunkIndex` sequence, because a
+ * document mixes cracked and text-layer pages and the ordering has to stay
+ * monotonic across both.
+ */
+export function chunkElements(
+  elements: readonly NormalizedElement[],
+  pageNumber: number,
+  options: ChunkOptions & { startIndex?: number; textKind?: ChunkKind },
+): Chunk[] {
+  const {
+    chunkTokens,
+    overlapTokens,
+    startIndex = 0,
+    textKind = 'text',
+  } = options
+  if (chunkTokens <= 0) throw new Error('chunkTokens must be positive')
+
+  const chunks: Chunk[] = []
+  let chunkIndex = startIndex
+
+  const push = (
+    content: string,
+    kind: ChunkKind,
+    element: NormalizedElement,
+  ) => {
+    if (content.trim().length === 0) return
+    chunks.push({
+      content,
+      heading: element.heading,
+      caption: element.caption,
+      pageNumber,
+      chunkIndex: chunkIndex++,
+      tokenCount: estimateTokens(content),
+      kind,
+      bbox: element.bbox,
+    })
+  }
+
+  for (const element of elements) {
+    if (element.type === 'Table') {
+      push(element.text, 'table', element)
+      continue
+    }
+    if (element.type === 'Picture') {
+      push(element.text, 'figure', element)
+      continue
+    }
+
+    // Ordinary prose. Split to the same budget the text-layer path uses, but
+    // per element rather than per page, so a split can never merge two
+    // elements that the layout kept apart.
+    const pieces = splitToBudget(element.text, chunkTokens)
+    let current: string[] = []
+    let currentTokens = 0
+
+    const flush = () => {
+      if (current.length === 0) return
+      push(current.join('\n\n'), textKind, element)
+      const tail = overlapTail(current, overlapTokens)
+      current = [...tail]
+      currentTokens = tail.reduce((sum, p) => sum + estimateTokens(p), 0)
+    }
+
+    for (const piece of pieces) {
+      const cost = estimateTokens(piece)
+      if (current.length > 0 && currentTokens + cost > chunkTokens) {
+        flush()
+        if (currentTokens + cost > chunkTokens) {
+          current = []
+          currentTokens = 0
+        }
+      }
+      current.push(piece)
+      currentTokens += cost
+    }
+    if (current.length > 0) push(current.join('\n\n'), textKind, element)
   }
 
   return chunks

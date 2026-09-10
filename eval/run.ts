@@ -15,9 +15,9 @@ import { db } from '@/db'
 import { chunks, documents, files, knowledgeBases, users } from '@/db/schema'
 import { env } from '@/lib/env'
 import { runAgenticRetrieval } from '@/lib/rag/agentic-run'
-import { buildEmbeddingText, chunkPages } from '@/lib/rag/chunk'
+import { buildEmbeddingText } from '@/lib/rag/chunk'
+import { chunksFromPdf } from '@/lib/rag/crack'
 import { embedPassages } from '@/lib/rag/embed'
-import { extractPdf } from '@/lib/rag/extract'
 import {
   listReadyDocuments,
   retrieveDocumentChunks,
@@ -258,9 +258,15 @@ async function ingestCorpus(): Promise<void> {
     const knowledgeBaseId = kbIdByName.get(kbName)!
 
     const buffer = readFileSync(join(CORPUS_DIR, name))
-    const { pages, pageCount } = await extractPdf(buffer)
-
-    const pieces = chunkPages(pages, {
+    // The SAME path production ingestion takes, cracking included (spec 0031).
+    // This used to be a local copy of extract-then-chunk, which quietly stopped
+    // matching `ingest.ts` the moment cracking existed — the harness reported
+    // no change because it was still measuring the old pipeline.
+    const {
+      chunks: pieces,
+      pageCount,
+      extraction,
+    } = await chunksFromPdf(buffer, {
       chunkTokens: env.RAG_CHUNK_TOKENS,
       overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
     })
@@ -285,6 +291,8 @@ async function ingestCorpus(): Promise<void> {
         title,
         status: 'ready',
         pageCount,
+        pagesProcessed: pageCount,
+        extraction,
       })
       .returning()
 
@@ -293,6 +301,7 @@ async function ingestCorpus(): Promise<void> {
         buildEmbeddingText({
           documentTitle: title,
           heading: piece.heading,
+          caption: piece.caption,
           content: piece.content,
         }),
       ),
@@ -307,12 +316,18 @@ async function ingestCorpus(): Promise<void> {
         pageNumber: piece.pageNumber,
         chunkIndex: piece.chunkIndex,
         tokenCount: piece.tokenCount,
+        kind: piece.kind ?? 'text',
+        bbox: piece.bbox ?? null,
         embedding: vectors[i] as number[],
       })),
     )
 
     console.log(
-      `  ingested ${title} -> "${kbName}": ${pageCount} pages, ${pieces.length} chunks`,
+      `  ingested ${title} -> "${kbName}": ${pageCount} pages, ${pieces.length} chunks` +
+        (extraction
+          ? ` (${extraction.parseCalls} parse calls, ` +
+            `${extraction.pages.filter((p) => p.outcome === 'parsed').length} pages cracked)`
+          : ''),
     )
   }
 }

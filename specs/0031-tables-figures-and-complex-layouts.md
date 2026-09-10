@@ -388,8 +388,9 @@ measurement in **Problem** exists to justify.
 - [x] A page classified `clean-text` requires no parse or vision call, and an
       all-clean document counts zero crackable pages (NFR1) —
       `tests/unit/rag-triage.test.ts`
-- [ ] A document of entirely clean-text pages issues zero cracking calls
-      end to end — `tests/unit/rag-ingest-cracking.test.ts`
+- [x] A document of entirely clean-text pages issues zero cracking calls
+      end to end — `tests/unit/rag-crack.test.ts`, and measured on the corpus:
+      3 of 5 documents spent nothing
 - [x] Reading order is reconstructed from boxes, not response order; the
       out-of-order `Page-footer` case from **Problem** orders correctly —
       `tests/unit/rag-normalize.test.ts`
@@ -402,18 +403,21 @@ measurement in **Problem** exists to justify.
       — `tests/unit/rag-normalize.test.ts`
 - [x] Each element carries the heading that precedes it in reading order,
       rather than the page's first line — `tests/unit/rag-normalize.test.ts`
-- [ ] A captioned figure produces a `figure` chunk with **no** vision call —
-      `tests/unit/rag-describe.test.ts`
+- [x] A captioned figure produces a `figure` chunk with **no** vision call —
+      the corpus's chart page indexes as `kind='figure'` with its caption bound
+      and zero vision calls; `tests/unit/rag-normalize.test.ts` covers binding
 - [ ] A figure description containing digits read off the chart is rejected or
       stripped before indexing (FR7) — `tests/unit/rag-describe.test.ts`
+      (caption-less figures are not yet described; see Out of scope)
 - [ ] `read_figure` refuses a chunk outside the caller's knowledge-base scope,
       with the same filter `search_documents` uses —
       `tests/unit/rag-read-figure.test.ts`
-- [ ] Exceeding `RAG_CRACK_MAX_PAGES` leaves the document `ready` with the
-      shortfall recorded in `documents.extraction` —
-      `tests/unit/rag-ingest-cracking.test.ts`
-- [ ] A document with a scanned appendix indexes both its text pages and its
-      scanned pages — `tests/unit/rag-ingest-cracking.test.ts`
+- [x] Exceeding `RAG_CRACK_MAX_PAGES` leaves the document `ready` with the
+      shortfall recorded in `documents.extraction` — `tests/unit/rag-crack.test.ts`
+- [x] A document with a scanned appendix indexes both its text pages and its
+      scanned pages — `maintenance-log` now yields 7 chunks (1 text-layer page,
+      6 `kind='ocr'`), and `layout-chiller-warranty` retrieves at rank 1 where
+      it previously retrieved nothing at all
 - [x] The corpus contains documents the current pipeline provably cannot index,
       and the gap is recorded before it is closed —
       `eval/questions.json` (`type: layout`), `eval/make-corpus.mjs`; numbers
@@ -421,9 +425,10 @@ measurement in **Problem** exists to justify.
 - [x] Extending the corpus leaves the single-hop baseline untouched, so the
       recorded numbers stay comparable — hit@1 0.941, MRR 0.941, refusal
       1.000, leakage 0, and the original three PDFs regenerate byte-identical
-- [ ] `pnpm rag:eval` on the extended corpus shows no regression in refusal
-      accuracy, and **retrieves** the scanned page it currently cannot —
-      `eval/run.ts`
+- [x] `pnpm rag:eval` on the extended corpus shows no regression in refusal
+      accuracy (1.000, unchanged) and retrieves the scanned page it previously
+      could not — layout hit@1 0.750 → 1.000; see the measurement above for the
+      one single-hop reordering that came with it
 - [ ] A question whose only answer is a value inside a chart **refuses** when
       `read_figure` is disabled, rather than returning a described number —
       needs an answer-level check; see the harness note above
@@ -455,6 +460,34 @@ recorded here rather than linked):
 Single-hop metrics were **unchanged** by the extension (hit@1 0.941, MRR 0.941,
 refusal 1.000, cross-KB leakage 0), which is what keeps the recorded baseline
 comparable.
+
+### Measured again, with cracking on (2026-09-10)
+
+Same corpus, same questions, `RAG_CRACK_ENABLED=true`:
+
+| metric                 | cracking off | cracking on |                                                                       |
+| ---------------------- | ------------ | ----------- | --------------------------------------------------------------------- |
+| **layout** hit@1 / MRR | 0.750        | **1.000**   | every answerable layout question retrieves, the scanned page included |
+| single-hop hit@1       | 0.941        | 0.882       | one question slipped rank 1 → 2                                       |
+| single-hop hit@3       | 0.941        | 0.941       | unchanged                                                             |
+| single-hop MRR         | 0.941        | 0.912       |                                                                       |
+| refusal accuracy       | 1.000        | 1.000       | unchanged; the project's hard gate still passes                       |
+| cross-KB leakage       | 0            | 0           | unchanged                                                             |
+
+Cost across the whole five-document corpus: **4 parse calls**. The three
+clean-text documents spent nothing, which is NFR1 holding in practice rather
+than in principle.
+
+**The single-hop slip is real and is reported rather than smoothed.**
+`notice-period` ("What is the notice period after probation?") fell from rank 1
+to rank 2 behind `employment-contract` page 1, which reads _"Either party may
+end the appointment during probation with one week notice."_ — a chunk that
+genuinely contains both "probation" and "notice". The two were always close;
+cracking added nine chunks to the corpus, which changed the hybrid candidate
+pool enough to tip a near-tie. Neither chunk's text changed. hit@3 is
+unchanged, so nothing became unreachable, and on a 17-question set one position
+is 5.9% — this is a reordering within noise, not a retrieval regression, but it
+is a number that moved and it is recorded as one.
 
 > **The harness cannot see two of these gaps.** It scores retrieval, and the
 > last three rows above _pass_ retrieval while returning corrupted content:
@@ -539,6 +572,10 @@ larger disclosure per call and should be stated plainly in
 - A worker queue, if per-page cracking makes ingestion long enough that
   `pages_processed` polling stops being adequate.
 - Re-probing for a reranker, and for the multimodal embedder above.
+- **Describing caption-less figures** (FR6's second half) and the `read_figure`
+  tool (FR9). Everything a figure needs to be findable BY ITS CAPTION and to be
+  read later — `kind`, `bbox`, the bound caption — is in place; the vision calls
+  on top of it are not.
 - **An answer-level assertion in `eval/run.ts`.** The harness scores retrieval
   only, so a chunk containing a flattened table or interleaved columns counts as
   a hit. Checking that an expected string appears in the drafted answer — with
