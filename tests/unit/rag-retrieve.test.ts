@@ -268,3 +268,110 @@ describe('retrieveDocumentChunks — the dangerous one (spec 0028)', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// The candidate pool (spec 0036 FR1)
+//
+// The defect: the fused SELECT used to end `LIMIT ${topK}` (8), so the
+// reranker was handed eight rows and RAG_RERANK_CANDIDATES (20) was dead
+// configuration. It could reorder the eight chunks that had already won and
+// could never promote the one sitting at fusion rank 9 — which is the only
+// thing a reranker is for.
+//
+// The pipeline is now: fuse -> keep RAG_RERANK_CANDIDATES -> rerank -> gate ->
+// cut to topK. These tests pin the LIMIT that is actually sent, because that
+// is where the bug lived and it was invisible in the returned chunks.
+// ---------------------------------------------------------------------------
+
+/** The `LIMIT` on the final fused SELECT, as bound. */
+function fusedLimit(query: SqlChunk): unknown {
+  const { text, params } = inspect(query)
+  // Every `?` in order; the final SELECT's LIMIT is the last bound parameter.
+  expect(text.trimEnd().endsWith('?')).toBe(true)
+  return params[params.length - 1]
+}
+
+describe('retrieveForOwner — candidate pool width (spec 0036 FR1)', () => {
+  it('retrieves only topK when reranking is off', async () => {
+    mockEnv.RAG_RERANK_ENABLED = false
+    mockEnv.RAG_RERANK_CANDIDATES = 20
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+    expect(fusedLimit(execute.mock.calls[0]?.[0] as SqlChunk)).toBe(8)
+  })
+
+  it('retrieves RAG_RERANK_CANDIDATES when reranking is on', async () => {
+    // THE fix. Without this the reranker never sees rank 9 and the knob that
+    // spec 0036 FR1 is written around does nothing at all.
+    mockEnv.RAG_RERANK_ENABLED = true
+    mockEnv.RAG_RERANK_CANDIDATES = 20
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+    expect(fusedLimit(execute.mock.calls[0]?.[0] as SqlChunk)).toBe(20)
+  })
+
+  it('never retrieves a pool narrower than the answer', async () => {
+    // A pool below topK would discard chunks the gate would have kept — the
+    // opposite of the defect, and worse than it.
+    mockEnv.RAG_RERANK_ENABLED = true
+    mockEnv.RAG_RERANK_CANDIDATES = 3
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+    expect(fusedLimit(execute.mock.calls[0]?.[0] as SqlChunk)).toBe(8)
+  })
+
+  it('leaves the per-channel ANN scan alone at default settings', async () => {
+    // The widened pool is a wider FINAL limit, not a wider index scan: the
+    // vec/lex CTEs still take RAG_HYBRID_CANDIDATES each. At the defaults
+    // (20 per channel, pool 20) the scan is identical with reranking on.
+    mockEnv.RAG_RERANK_ENABLED = false
+    await retrieveForOwner('user-a', 'q', KB_A)
+    const off = inspect(execute.mock.calls[0]?.[0] as SqlChunk).params
+
+    execute.mockClear()
+    mockEnv.RAG_RERANK_ENABLED = true
+    mockEnv.RAG_RERANK_CANDIDATES = 20
+    await retrieveForOwner('user-a', 'q', KB_A)
+    const on = inspect(execute.mock.calls[0]?.[0] as SqlChunk).params
+
+    // Same bound parameters everywhere except the last one, the fused LIMIT.
+    expect(on.slice(0, -1)).toEqual(off.slice(0, -1))
+    expect(off[off.length - 1]).toBe(8)
+    expect(on[on.length - 1]).toBe(20)
+  })
+
+  it('widens the per-channel scan only when the pool outgrows it', async () => {
+    // Fusion cannot hand on 50 candidates if neither channel produced 50, so
+    // a pool wider than the channels raises them to match. This is the only
+    // configuration that costs a wider index scan.
+    mockEnv.RAG_RERANK_ENABLED = true
+    mockEnv.RAG_RERANK_CANDIDATES = 50
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(params).toContain(50)
+    expect(params).not.toContain(20)
+  })
+
+  it('keeps the per-channel scan bounded by the ceiling even so', async () => {
+    mockEnv.RAG_RERANK_ENABLED = true
+    mockEnv.RAG_RERANK_CANDIDATES = 5000
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(params).toContain(200)
+    expect(params).not.toContain(5000 - 1)
+  })
+
+  it('does not raise the per-channel scan to topK when reranking is off', async () => {
+    // Regression guard for the obvious wrong fix — flooring the channel pool
+    // at topK unconditionally. A deployment that deliberately set
+    // RAG_HYBRID_CANDIDATES below RAG_TOP_K would silently get a wider scan.
+    mockEnv.RAG_RERANK_ENABLED = false
+    mockEnv.RAG_HYBRID_CANDIDATES = 4
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+    const { params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    expect(params).toContain(4)
+  })
+})

@@ -6,6 +6,7 @@ import { db } from '@/db'
 import type { ChunkKind } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
+import { hypotheticalQuery } from './hyde'
 import { rerankChunks } from './rerank'
 
 /**
@@ -136,6 +137,51 @@ function kbIdArray(knowledgeBaseIds: readonly string[]) {
 // keeps the worst case bounded regardless of how many KBs get passed in.
 const CANDIDATE_POOL_CEILING = 200
 
+/**
+ * How many fused candidates to carry past fusion, before the gate and the cut
+ * to `topK`.
+ *
+ * ## The defect this exists to fix
+ *
+ * Spec 0036 FR1 says the reranker "re-scores the top `RAG_RERANK_CANDIDATES`"
+ * (20). It could not. The fused SELECT ended `LIMIT ${topK}` — 8 — so
+ * `rerankChunks` was handed eight rows and its own window collapsed to
+ * `min(20, 8) = 8`. `RAG_RERANK_CANDIDATES` was dead configuration, and the
+ * reranker could only reorder the eight chunks that had already won; it could
+ * never promote a better chunk sitting at fusion rank 9. Rescuing rank 9 is
+ * the entire reason a reranker exists, so the stage was structurally incapable
+ * of its own purpose while every test passed and every metric looked fine.
+ *
+ * The pipeline is therefore: fuse -> keep this many -> rerank -> gate -> cut
+ * to `topK`. The cut moved to the end, where it belongs.
+ *
+ * ## Only reranking widens anything
+ *
+ * With `RAG_RERANK_ENABLED` false this returns `topK` and every downstream
+ * step is a no-op: the SQL LIMIT is what it always was, `rerankChunks` returns
+ * its input, and the final `slice(0, topK)` cannot trim a list of at most
+ * `topK`. Disabled behaviour is byte-identical to before this change, which is
+ * asserted against a written-down expectation in `tests/unit/rag-rerank.test.ts`
+ * ("returns exactly the recorded chunks when reranking is off") rather than
+ * argued here.
+ *
+ * That tie is deliberate rather than tidy. Widening the pool is NOT the
+ * order-only change reranking itself is: the gate is a per-element predicate,
+ * so it admits the same fraction of whatever it is shown, but showing it 20
+ * candidates instead of 8 can let a chunk that fusion ranked 12th — and that
+ * clears the similarity floor — reach an answer that today returns nothing.
+ * That can move refusal accuracy, in the answering direction, and it is the
+ * one metric this project holds at 1.000 across five specs. Keeping the wider
+ * pool behind the same flag as the reranker means turning reranking on is the
+ * only way to find out, which is what the flag is for.
+ */
+function candidatePoolSize(topK: number): number {
+  if (!env.RAG_RERANK_ENABLED) return topK
+  // Below topK a "wider" pool would be narrower than the answer and would
+  // discard chunks the gate would have kept, so the floor is topK, not 1.
+  return Math.max(topK, env.RAG_RERANK_CANDIDATES)
+}
+
 export async function retrieveForOwner(
   ownerId: string,
   question: string,
@@ -155,6 +201,11 @@ export async function retrieveForOwner(
   const minSimilarity = options.minSimilarity ?? env.RAG_MIN_SIMILARITY
   const rrfK = env.RAG_RRF_K
 
+  // How many fused rows survive to the rerank stage, before the gate and the
+  // cut to topK. `topK` unless reranking is on — see candidatePoolSize above
+  // for the defect that motivated it.
+  const poolSize = candidatePoolSize(topK)
+
   // Filtered-ANN caveat (docs/rag.md): pgvector applies the owner predicate
   // AFTER the HNSW scan, so a tenant holding a small share of all chunks can
   // already get fewer than topK results back at the existing owner-only
@@ -164,12 +215,38 @@ export async function retrieveForOwner(
   // way to see the user's total KB count, so the number of KBs actually
   // selected is the only signal available; scale the per-channel LIMIT by
   // it, capped so the worst case (many KBs selected at once) stays bounded.
+  const perChannel = env.RAG_HYBRID_CANDIDATES * knowledgeBaseIds.length
   const candidates = Math.min(
-    env.RAG_HYBRID_CANDIDATES * knowledgeBaseIds.length,
+    // A channel that offers fewer rows than the pool wants makes the widened
+    // pool a fiction: fusion cannot hand on 20 candidates if neither channel
+    // produced 20. Only reached when the pool was actually widened, so the
+    // scan is untouched at defaults (20 per channel, pool 20) and untouched
+    // entirely with reranking off.
+    poolSize > topK ? Math.max(perChannel, poolSize) : perChannel,
     CANDIDATE_POOL_CEILING,
   )
 
-  const queryVector = toVectorLiteral(await embedQuery(question))
+  // HyDE (spec 0033 FR6): embed a hypothetical ANSWER rather than the
+  // question, because an answer looks more like the passage containing it.
+  // Returns null when disabled or when the generation failed in any way, and
+  // null means "embed the question" — so with RAG_HYDE_ENABLED off this is one
+  // falsy check and the embedding call below is exactly what it always was.
+  //
+  // The hypothetical replaces the question for the WHOLE vector channel: it
+  // orders the ANN scan and it is what `similarity` below is measured against.
+  // That is deliberate and it is why the flag is off by default — hyde.ts
+  // explains why pinning the gate to the question's own vector instead would
+  // make HyDE unevaluable, and what re-measuring it therefore costs.
+  //
+  // The LEXICAL channel deliberately keeps the real question. A hypothetical
+  // is invented vocabulary, and feeding invented terms to `to_tsquery` would
+  // have the lexical channel vote for passages matching words the user never
+  // typed — the one channel whose value is that it matches what was actually
+  // asked.
+  const hypothetical = await hypotheticalQuery(question)
+  const queryVector = toVectorLiteral(
+    await embedQuery(hypothetical ?? question),
+  )
 
   // Hybrid retrieval (spec 0027, 1b): a dense channel and a lexical one, fused
   // with Reciprocal Rank Fusion.
@@ -251,7 +328,7 @@ export async function retrieveForOwner(
     WHERE c.owner_id = ${ownerId}
       AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
     ORDER BY f.rrf DESC
-    LIMIT ${topK}
+    LIMIT ${poolSize}
   `)
 
   const fused: RetrievedChunk[] = Array.from(rows).map((r) => {
@@ -274,18 +351,24 @@ export async function retrieveForOwner(
     }
   })
 
-  // Rerank BETWEEN fusion and the gate (spec 0036 FR1). Fusion chose the
-  // candidates, the reranker re-scores them, the gate below decides what
-  // survives. After the gate would be the one placement that cannot help — it
-  // would reorder a list the gate has already truncated.
+  // Rerank BETWEEN fusion and the gate (spec 0036 FR1). Fusion chose
+  // `poolSize` candidates, the reranker re-scores them, the gate decides what
+  // survives, and the cut to `topK` happens LAST. After the gate would be the
+  // one placement that cannot help — but so is before a `LIMIT topK`, which is
+  // what this used to be and why `RAG_RERANK_CANDIDATES` did nothing.
   //
-  // This is a permutation and nothing more (see rerank.ts), so the filter
-  // below admits the identical set whether reranking ran, was disabled, or
-  // failed. That is deliberate: refusal accuracy is not something an optional
-  // precision feature is allowed to move.
+  // The reranker is handed the real question, never the hypothetical. It reads
+  // question and passage together, which is the whole reason it discriminates
+  // better than a vector distance; giving it invented text to compare against
+  // would throw that away.
+  //
+  // Reranking is a permutation and nothing more (see rerank.ts), so the filter
+  // below admits the identical set whether reranking ran, was disabled or
+  // failed. What the pool WIDTH admits is a separate question, answered in
+  // candidatePoolSize above.
   const ranked = await rerankChunks(question, fused)
 
-  return ranked.filter(
+  const admitted = ranked.filter(
     // The gate stays on cosine similarity alone.
     //
     // The first design let a strong lexical hit bypass this floor, so an
@@ -302,6 +385,11 @@ export async function retrieveForOwner(
     // answer from. See spec 0027 for the principled fix.
     (r) => r.similarity >= minSimilarity,
   )
+
+  // The cut to topK, last. With reranking off `admitted.length <= topK`
+  // already, so this cannot change the disabled result — it is the step that
+  // lets the pool be wider than the answer without the answer growing.
+  return admitted.slice(0, topK)
 }
 
 /** The caller's indexed documents, for query scoping. */
