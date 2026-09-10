@@ -99,6 +99,13 @@
       "when": 1789024710747,
       "tag": "0013_parched_silver_surfer",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789073665534,
+      "tag": "0014_thick_glorian",
+      "breakpoints": true
     }
   ]
 }
