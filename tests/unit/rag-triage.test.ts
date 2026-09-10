@@ -14,6 +14,7 @@ function cleanPage(overrides: Partial<PageSignals> = {}): PageSignals {
     charCount: 2400,
     itemCount: 60,
     imageCount: 0,
+    vectorOpCount: 0,
     columnCount: 1,
     textAreaRatio: 0.45,
     ...overrides,
@@ -67,6 +68,20 @@ describe('classifyPage', () => {
 
   it('routes a text page carrying images to image-heavy', () => {
     expect(classifyPage(cleanPage({ imageCount: 2 }))).toBe('image-heavy')
+  })
+
+  it('routes a page with a VECTOR chart to image-heavy', () => {
+    // The gap this closes: on the eval corpus the chart page reports
+    // imageCount 0, because a drawn chart is paths rather than pixels. Before
+    // vectorOpCount existed it took the free path and its figure was never
+    // indexed at all.
+    expect(classifyPage(cleanPage({ imageCount: 0, vectorOpCount: 7 }))).toBe(
+      'image-heavy',
+    )
+  })
+
+  it('does not treat a few decorative rules as a figure', () => {
+    expect(classifyPage(cleanPage({ vectorOpCount: 3 }))).toBe('clean-text')
   })
 
   it('prefers structured over image-heavy when both apply', () => {

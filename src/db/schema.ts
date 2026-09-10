@@ -296,6 +296,14 @@ export const documents = pgTable(
       .references(() => files.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     pageCount: integer('page_count'),
+    // Per-page progress (spec 0031 FR13). `status` alone is too coarse once a
+    // page can cost an API call: an ingestion that takes minutes and reports
+    // only "embedding" is indistinguishable from one that has hung.
+    pagesProcessed: integer('pages_processed'),
+    // How this document was actually read, page by page. See
+    // `ExtractionSummary` — it is what makes a partially-cracked document
+    // honest rather than quietly incomplete.
+    extraction: jsonb('extraction').$type<ExtractionSummary>(),
     status: text('status').$type<DocumentStatus>().notNull().default('pending'),
     // Populated only when status = 'failed'. User-facing, so it must stay
     // readable — no stack traces.
@@ -312,6 +320,49 @@ export const documents = pgTable(
     index('documents_knowledge_base_id_idx').on(table.knowledgeBaseId),
   ],
 )
+
+/**
+ * What a chunk is, which decides how it may be used (spec 0031 FR8).
+ *
+ * - `text`  — the document's own prose.
+ * - `table` — the document's own tabular markup, kept whole.
+ * - `ocr`   — the document's own words, recovered from an image of them.
+ * - `figure`— **a search key, not evidence.** Written to make a figure
+ *   findable; its pixels are read at answer time by `read_figure`.
+ */
+export const CHUNK_KINDS = ['text', 'table', 'figure', 'ocr'] as const
+export type ChunkKind = (typeof CHUNK_KINDS)[number]
+
+/** A region of a page, normalised 0–1 with the origin at the top-left. */
+export interface ChunkBox {
+  xmin: number
+  ymin: number
+  xmax: number
+  ymax: number
+}
+
+/** How one page of a document was processed (spec 0031 FR11). */
+export interface ExtractionPage {
+  page: number
+  route: 'clean-text' | 'structured' | 'image-heavy' | 'no-text'
+  /** What actually happened, which is not always what the route asked for. */
+  outcome: 'text-layer' | 'parsed' | 'budget-skipped' | 'failed'
+  reason?: string
+}
+
+/**
+ * A per-document record of how it was ingested.
+ *
+ * Exists so "indexed" and "fully indexed" are distinguishable. A document that
+ * hit its cracking budget is still `ready` and still useful, but a user is
+ * entitled to know some of it was read the cheap way.
+ */
+export interface ExtractionSummary {
+  pages: ExtractionPage[]
+  parseCalls: number
+  describeCalls: number
+  budgetExhausted: boolean
+}
 
 export const chunks = pgTable(
   'chunks',
@@ -354,6 +405,19 @@ export const chunks = pgTable(
     pageNumber: integer('page_number').notNull(),
     chunkIndex: integer('chunk_index').notNull(),
     tokenCount: integer('token_count').notNull(),
+    // What this chunk IS (spec 0031 FR8), because the four kinds must be
+    // treated differently and a caller cannot infer the difference from text.
+    // `figure` above all: its content is a search key written to make the
+    // figure findable, NOT the document's own words, so a citation must
+    // present it as a description and an answer must never quote a number
+    // from it. Defaults to 'text' so every existing row stays correct.
+    kind: text('kind').$type<ChunkKind>().notNull().default('text'),
+    // Where on the page this chunk came from, normalised 0–1
+    // (`{xmin,ymin,xmax,ymax}`). Null for chunks produced by the text-layer
+    // path, which has no boxes. This is what span-level citation highlighting
+    // needs — deferred in spec 0026 for exactly the reason that nothing was
+    // capturing it.
+    bbox: jsonb('bbox').$type<ChunkBox>(),
     embedding: halfvec('embedding', { dimensions: 2048 }).notNull(),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },

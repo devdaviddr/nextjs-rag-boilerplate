@@ -143,9 +143,21 @@ export async function createEmbeddings(
     .map((d) => d.embedding)
 }
 
+/**
+ * One part of a multimodal message.
+ *
+ * Text-only calls keep passing a plain string for `content`; only the vision
+ * paths (spec 0031 — layout parsing and `read_figure`) need parts. Modelled
+ * rather than cast, because a wrong shape here fails as an opaque upstream 500
+ * rather than a type error.
+ */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ContentPart[]
 }
 
 /**

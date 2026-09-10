@@ -205,6 +205,59 @@ const envSchema = z
       .optional()
       .default(200),
 
+    // --- Document cracking (spec 0031) -------------------------------------
+    // Off by default, same posture as RAG_AGENTIC_ENABLED below: with this
+    // false, ingestion runs exactly as it did, page routing included.
+    RAG_CRACK_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+    RAG_PARSE_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('nvidia/nemotron-parse'),
+    RAG_VISION_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('meta/llama-3.2-11b-vision-instruct'),
+    // Parse calls a single document may spend. Triage decides WHICH pages are
+    // worth one; this bounds how many, so a pathological 200-page scan cannot
+    // consume a shared free-tier quota on its own. Past the cap the remaining
+    // pages fall back to the text layer and the document still reaches `ready`.
+    RAG_CRACK_MAX_PAGES: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .default(25),
+    // Render scale for the page image sent to the parser. 2.0 was what every
+    // measurement in spec 0031 was taken at.
+    RAG_CRACK_RENDER_SCALE: z.coerce
+      .number()
+      .positive()
+      .optional()
+      .default(2.0),
+    // Share of the page a `Picture` must cover to be treated as a figure.
+    // Below this it is a logo, a rule or a bullet glyph — describing those
+    // would spend the most expensive call in the system on decoration.
+    RAG_CRACK_MIN_FIGURE_AREA: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .default(0.02),
+    // Vision calls per document, for figures that have NO caption to use as a
+    // search key. Measured at ~40s each for blind description, so this is the
+    // tightest budget here by a wide margin.
+    RAG_DESCRIBE_MAX_FIGURES: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .default(8),
+
     // --- Agentic retrieval (spec 0029) -------------------------------------
     // Off by default. The agentic path must earn its place against the fixed
     // pipeline on the same eval questions before it becomes the default; with

@@ -25,8 +25,17 @@ export interface PageSignals {
   charCount: number
   /** Positioned text items from `extractTextItems`. */
   itemCount: number
-  /** Embedded raster images on the page. */
+  /** Raster images painted on the page. */
   imageCount: number
+  /**
+   * Vector drawing operations on the page.
+   *
+   * Without this, a chart is invisible. Measured on the eval corpus: the
+   * chart page reports **zero** embedded images, because a chart drawn by
+   * Excel, matplotlib or Illustrator is paths, not pixels. `imageCount` alone
+   * routed it to the free path and its figure was never indexed.
+   */
+  vectorOpCount: number
   /**
    * Distinct horizontal bands the text items cluster into. 1 for ordinary
    * prose; 2+ for a multi-column layout the flat extractor may interleave.
@@ -55,6 +64,13 @@ export interface TriageOptions {
   /** Images beyond this many mean the page is carrying visual content. */
   minImages?: number
   /**
+   * Vector operations above which the page is drawing something, not
+   * decorating. A heuristic, tuned on the eval corpus: a chart page reports 7
+   * and a ruled table 12, while a heading rule or a boxed callout is 1–5. It
+   * errs toward spending a call, because the failure being fixed is silence.
+   */
+  minVectorOps?: number
+  /**
    * Text items per 1% of covered area, above which the page looks tabular:
    * many short items packed into little space is what a table looks like from
    * the outside.
@@ -68,6 +84,7 @@ export const TRIAGE_DEFAULTS: Required<TriageOptions> = {
   minChars: 60,
   minColumns: 2,
   minImages: 1,
+  minVectorOps: 6,
   denseItemRatio: 8,
 }
 
@@ -83,7 +100,7 @@ export function classifyPage(
   signals: PageSignals,
   options: TriageOptions = {},
 ): PageRoute {
-  const { minChars, minColumns, minImages, denseItemRatio } = {
+  const { minChars, minColumns, minImages, minVectorOps, denseItemRatio } = {
     ...TRIAGE_DEFAULTS,
     ...options,
   }
@@ -98,7 +115,14 @@ export function classifyPage(
   const density = coveredPercent > 0 ? signals.itemCount / coveredPercent : 0
   if (density >= denseItemRatio) return 'structured'
 
-  if (signals.imageCount >= minImages) return 'image-heavy'
+  // Raster OR vector. A chart is usually vector, and counting only embedded
+  // images misses it entirely.
+  if (
+    signals.imageCount >= minImages ||
+    signals.vectorOpCount >= minVectorOps
+  ) {
+    return 'image-heavy'
+  }
 
   return 'clean-text'
 }
