@@ -1,0 +1,112 @@
+[
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.023779764705882354,
+      "xmax": 0.35672545757071544,
+      "ymax": 0.0331764705882353
+    },
+    "text": "ACME HOLDINGS \\(\\cdot\\) INTERNAL \\(\\cdot\\) FY26 OPERATIONS REVIEW",
+    "type": "Page-header"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.05100611764705882,
+      "xmax": 0.36207254575707154,
+      "ymax": 0.06991999999999998
+    },
+    "text": "## Section 7 — Plant Utilisation",
+    "type": "Title"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.08871341176470587,
+      "xmax": 0.48395873544093176,
+      "ymax": 0.12449317647058823
+    },
+    "text": "Utilisation at the Ballarat plant recovered sharply after the line-three retrofit, although the gain was partly offset by unplanned downtime in April. The retrofit itself is described in Appendix C.",
+    "type": "Text"
+  },
+  {
+    "bbox": {
+      "xmin": 0.5134362728785359,
+      "ymin": 0.07931670588235293,
+      "xmax": 0.9646482529118137,
+      "ymax": 0.11413270588235294
+    },
+    "text": "Geelong remained the constraint through the period. The commissioning of the second furnace has slipped twice and is now forecast for the third quarter, which pushes the consolidated target out by roughly one quarter.",
+    "type": "Text"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.4849411764705882,
+      "xmax": 0.23758136439267885,
+      "ymax": 0.4933741176470588
+    },
+    "text": "Confidential -- Page 63 of 214 -- Rev 3",
+    "type": "Page-footer"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03411780366056575,
+      "ymin": 0.1640075294117647,
+      "xmax": 0.32724792013311144,
+      "ymax": 0.2666484705882353
+    },
+    "text": "\\begin{tabular}{ccccc}\n\\multirow{2}{*}{**Plant**} & \\multicolumn{2}{c}{**Utilisation %**} & \\multicolumn{2}{c}{**Downtime (hrs)**}\\\\\n & **H1** & **H2** & **Planned** & **Unplanned**\\\\\nBallarat & 71.4 & 88.2 & 140 & 96\\\\\nGeelong & 63.0 & 61.5 & 210 & 388\\\\\nBendigo & 84.9 & 86.1 & 95 & 41\\\\\n\\end{tabular}",
+    "type": "Table"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03535174708818634,
+      "ymin": 0.3014644705882353,
+      "xmax": 0.4893058236272879,
+      "ymax": 0.45385976470588235
+    },
+    "text": "peak: Geelong furnace outage 400 0\nQ1 Q2 Q3 Q4 Q5",
+    "type": "Picture"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.36447058823529416,
+      "xmax": 0.022052579034941774,
+      "ymax": 0.3795294117647059
+    },
+    "text": "Figure 7.2: Unplanned downtime by quarter, all plants combined. The Q3 spike corresponds to the Geelong furnace outage described in section 7.4.",
+    "type": "Caption"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.3588084705882353,
+      "xmax": 0.5187833610648919,
+      "ymax": 0.38699858823529415
+    },
+    "text": "Figure 7.2: Unplanned downtime by quarter, all plants combined. The Q3 spike corresponds to the Geelong furnace outage described in section 7.4.",
+    "type": "Caption"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.2854418823529412,
+      "xmax": 0.3768798668885191,
+      "ymax": 0.3014644705882353
+    },
+    "text": "<u>**Figure 7.2 – Unplanned downtime trend**</u>",
+    "type": "Caption"
+  },
+  {
+    "bbox": {
+      "xmin": 0.03137570715474208,
+      "ymin": 0.13485364705882352,
+      "xmax": 0.4170515806988353,
+      "ymax": 0.15461082352941175
+    },
+    "text": "7.1 -- Utilisation and downtime by plant",
+    "type": "Caption"
+  }
+]

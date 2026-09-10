@@ -104,6 +104,31 @@ number that enters the index is indistinguishable from a right one forever
 after, and the citation machinery in `src/lib/rag/verify.ts` would confirm it as
 supported, because the chunk really does say 280.
 
+### Landscape pages and diagrams, verified separately
+
+A second probe on 2026-09-10 put a **landscape** page carrying a flowchart-style
+diagram and a five-column table with both `rowspan` and `colspan` through the
+same path:
+
+- **Orientation is not a special case.** Six clean elements in 2.8s; the merged
+  headers survived intact. Boxes are page-relative, so a landscape page differs
+  from a portrait one only in aspect ratio. (Pages carrying a `/Rotate`
+  attribute are _not_ covered by this and remain untested — see Out of scope.)
+- **A diagram parses to labels, not topology.** The `Picture` element returned
+  `Upload PDF`, `Triage (per page)`, `Text layer`, `Parse image`, `Normalise` —
+  the boxes' text as an unordered bag, with `scanned` misread as `scansel`, and
+  no arrows or relationships. That is enough to make the diagram _findable_ and
+  nothing more, which is exactly the division of labour FR6 and FR9 describe.
+- **Answer time reads the topology correctly, and quickly.** Asked _"after
+  Triage, if a page is scanned, which box does it go to, and where next?"_
+  against the cropped region, the vision model answered "Parse image, then
+  Normalise" — correct — in **4.0s**, against the 40s the same model took to
+  describe the earlier chart blind.
+
+That last figure is the strongest evidence for the answer-time split: a narrow
+question against a small crop is an order of magnitude faster than blind
+description _and_ it was right, where blind description was wrong.
+
 ## Goals
 
 - A PDF containing tables, figures, multi-column layout or scanned pages is
@@ -142,8 +167,10 @@ supported, because the chunk really does say 280.
   call.
 - **FR3** — Parsed elements are normalised before chunking: reading order
   reconstructed from bounding boxes, degenerate boxes dropped, duplicates
-  deduplicated, `Page-header`/`Page-footer` removed, captions bound to the
-  `Table` or `Picture` they belong to.
+  deduplicated, `Page-header`/`Page-footer` removed, table markup validated and
+  closed if cut off, and captions bound to the `Table` or `Picture` they belong
+  to — by **vertical adjacency**, not centre distance, which binds a figure's
+  own caption to a nearer table.
 - **FR4** — A `Table` element becomes exactly one chunk and is never split. Its
   structure is preserved; merged cells survive.
 - **FR5** — Each chunk carries the `Section-header` that actually owns it, not
@@ -358,21 +385,23 @@ measurement in **Problem** exists to justify.
 
 ## Acceptance criteria
 
-- [ ] A page classified `clean-text` issues no parse or vision call —
+- [x] A page classified `clean-text` requires no parse or vision call, and an
+      all-clean document counts zero crackable pages (NFR1) —
       `tests/unit/rag-triage.test.ts`
 - [ ] A document of entirely clean-text pages issues zero cracking calls
-      (NFR1) — `tests/unit/rag-ingest-cracking.test.ts`
-- [ ] Reading order is reconstructed from boxes, not response order; the
+      end to end — `tests/unit/rag-ingest-cracking.test.ts`
+- [x] Reading order is reconstructed from boxes, not response order; the
       out-of-order `Page-footer` case from **Problem** orders correctly —
       `tests/unit/rag-normalize.test.ts`
-- [ ] Degenerate boxes (`xmin ≥ xmax`) are dropped and duplicate captions
+- [x] Degenerate boxes (`xmin ≥ xmax`) are dropped and duplicate captions
       deduplicated — `tests/unit/rag-normalize.test.ts`
-- [ ] `Page-header` / `Page-footer` elements never reach a chunk —
+- [x] `Page-header` / `Page-footer` elements never reach a chunk —
       `tests/unit/rag-normalize.test.ts`
-- [ ] A table becomes exactly one chunk with merged-cell structure intact —
-      `tests/unit/rag-normalize.test.ts`
-- [ ] Each chunk carries its owning `Section-header`, not the page's first line
+- [x] A table is marked atomic with its merged-cell structure intact, and a
+      caption binds to the element it sits against rather than the nearest one
       — `tests/unit/rag-normalize.test.ts`
+- [x] Each element carries the heading that precedes it in reading order,
+      rather than the page's first line — `tests/unit/rag-normalize.test.ts`
 - [ ] A captioned figure produces a `figure` chunk with **no** vision call —
       `tests/unit/rag-describe.test.ts`
 - [ ] A figure description containing digits read off the chart is rejected or
@@ -466,6 +495,10 @@ larger disclosure per call and should be stated plainly in
 - A worker queue, if per-page cracking makes ingestion long enough that
   `pages_processed` polling stops being adequate.
 - Re-probing for a reranker, and for the multimodal embedder above.
+- **Pages carrying a `/Rotate` attribute.** Landscape _page geometry_ is
+  verified; a portrait page whose content is rotated 90° is a different case
+  and is untested. It needs a decision about whether `renderPageAsImage`
+  applies the rotation before the parser sees it.
 
 ## References
 
