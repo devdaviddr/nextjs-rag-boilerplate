@@ -326,6 +326,31 @@ const envSchema = z
       .optional()
       .default(8000),
 
+    // --- Reranking (spec 0036) ---------------------------------------------
+    // Off by default, same posture as RAG_AGENTIC_ENABLED and RAG_CRACK_ENABLED
+    // above: with this false, `retrieveForOwner` returns the fused order
+    // byte-identically and spends no extra call.
+    //
+    // Turning it on only PERMUTES the fused candidates — see rerank.ts for why
+    // that means the similarity gate admits exactly the same set either way,
+    // and therefore why this knob cannot move refusal accuracy.
+    RAG_RERANK_ENABLED: z
+      .string()
+      .optional()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // How many of the fused candidates get re-scored, counted from the top.
+    // Above `RAG_TOP_K` (8) this is simply "all of them", which is the
+    // intended default: the point of a cap is to bound the size of the single
+    // scoring prompt if TOP_K is raised, not to leave good candidates unread.
+    // Candidates past the window keep their fusion order below the window.
+    RAG_RERANK_CANDIDATES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(20),
+
     // --- Build identity (baked into the image at CI build time) ------------
     // ci.yml passes these as Docker build-args (APP_VERSION=git ref name,
     // APP_GIT_SHA=commit sha); the Dockerfile persists them as ENV. Surfaced

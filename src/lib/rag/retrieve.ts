@@ -6,6 +6,7 @@ import { db } from '@/db'
 import type { ChunkKind } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
+import { rerankChunks } from './rerank'
 
 /**
  * Owner- and knowledge-base-scoped nearest-neighbour retrieval
@@ -51,6 +52,14 @@ export interface RetrievedChunk {
    * text, and a citation needs to know not to present it as a quotation.
    */
   kind?: ChunkKind
+  /**
+   * The reranker's score for this chunk (spec 0036 FR6), present only when
+   * reranking ran and produced a usable answer. Higher is more relevant; the
+   * scale is the backend's, so it is comparable only within one query's
+   * results. Recorded so the evaluation harness and the trace can show what
+   * reranking changed — its absence on every chunk means it did not run.
+   */
+  rerankScore?: number
 }
 
 export interface RetrieveOptions {
@@ -245,43 +254,54 @@ export async function retrieveForOwner(
     LIMIT ${topK}
   `)
 
-  return Array.from(rows)
-    .map((r) => {
-      const inVector = r.vec_rank !== null
-      const inLexical = r.lex_rank_pos !== null
-      return {
-        chunkId: r.chunk_id,
-        documentId: r.document_id,
-        documentTitle: r.document_title,
-        content: r.content,
-        pageNumber: Number(r.page_number),
-        kind: r.kind,
-        similarity: Number(r.similarity),
-        lexicalRank: Number(r.lexical_rank),
-        source: (inVector && inLexical
-          ? 'both'
-          : inVector
-            ? 'vector'
-            : 'lexical') as RetrievedChunk['source'],
-      }
-    })
-    .filter(
-      // The gate stays on cosine similarity alone.
-      //
-      // The first design let a strong lexical hit bypass this floor, so an
-      // exact identifier could be admitted despite a weak vector score. It was
-      // measured and removed: on the evaluation corpus there is NO lexical-rank
-      // threshold that separates true from false positives — "How much parental
-      // leave am I entitled to?" (no answer in the corpus) scores 0.60 on
-      // `leave`, higher than every genuine identifier query at 0.30. Any
-      // threshold admitting the identifier also destroys refusal accuracy,
-      // which fell from 1.0 to 0.0 when this was enabled.
-      //
-      // So the lexical channel improves ORDERING, which is measurable and safe
-      // (hit@1 0.824 -> 0.941), and does not decide what is relevant enough to
-      // answer from. See spec 0027 for the principled fix.
-      (r) => r.similarity >= minSimilarity,
-    )
+  const fused: RetrievedChunk[] = Array.from(rows).map((r) => {
+    const inVector = r.vec_rank !== null
+    const inLexical = r.lex_rank_pos !== null
+    return {
+      chunkId: r.chunk_id,
+      documentId: r.document_id,
+      documentTitle: r.document_title,
+      content: r.content,
+      pageNumber: Number(r.page_number),
+      kind: r.kind,
+      similarity: Number(r.similarity),
+      lexicalRank: Number(r.lexical_rank),
+      source: (inVector && inLexical
+        ? 'both'
+        : inVector
+          ? 'vector'
+          : 'lexical') as RetrievedChunk['source'],
+    }
+  })
+
+  // Rerank BETWEEN fusion and the gate (spec 0036 FR1). Fusion chose the
+  // candidates, the reranker re-scores them, the gate below decides what
+  // survives. After the gate would be the one placement that cannot help — it
+  // would reorder a list the gate has already truncated.
+  //
+  // This is a permutation and nothing more (see rerank.ts), so the filter
+  // below admits the identical set whether reranking ran, was disabled, or
+  // failed. That is deliberate: refusal accuracy is not something an optional
+  // precision feature is allowed to move.
+  const ranked = await rerankChunks(question, fused)
+
+  return ranked.filter(
+    // The gate stays on cosine similarity alone.
+    //
+    // The first design let a strong lexical hit bypass this floor, so an
+    // exact identifier could be admitted despite a weak vector score. It was
+    // measured and removed: on the evaluation corpus there is NO lexical-rank
+    // threshold that separates true from false positives — "How much parental
+    // leave am I entitled to?" (no answer in the corpus) scores 0.60 on
+    // `leave`, higher than every genuine identifier query at 0.30. Any
+    // threshold admitting the identifier also destroys refusal accuracy,
+    // which fell from 1.0 to 0.0 when this was enabled.
+    //
+    // So the lexical channel improves ORDERING, which is measurable and safe
+    // (hit@1 0.824 -> 0.941), and does not decide what is relevant enough to
+    // answer from. See spec 0027 for the principled fix.
+    (r) => r.similarity >= minSimilarity,
+  )
 }
 
 /** The caller's indexed documents, for query scoping. */
