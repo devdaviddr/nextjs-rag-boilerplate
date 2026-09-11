@@ -23,6 +23,17 @@ with an optional agentic retrieval loop.**
 
 ---
 
+<div align="center">
+
+|                                               Ask                                               |                                                     Get a grounded answer                                                     |                                                See what was indexed                                                |
+| :---------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------: |
+| <img src="docs/images/ask.png" alt="The chat composer, scoped to a knowledge base" width="320"> | <img src="docs/images/answer.png" alt="An answer with a citation, and the cited passage highlighted on the page" width="320"> | <img src="docs/images/inspect.png" alt="A document inspector showing what was indexed from each page" width="320"> |
+|                      Answers come only from the documents you have indexed                      |                             Every claim carries a citation, highlighted on the page it came from                              |                                Page by page: what was read, how, and what it became                                |
+
+</div>
+
+---
+
 ## What this is
 
 A starter project for building a chat app that answers questions about your own
