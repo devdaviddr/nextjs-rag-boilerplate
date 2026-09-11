@@ -4,7 +4,10 @@ import { notFound, redirect } from 'next/navigation'
 
 import { DocumentsPanel } from '@/components/rag/documents-panel'
 import { getCurrentSession } from '@/lib/auth/session'
-import { listMyKnowledgeBases } from '@/lib/rag/kb-actions'
+import {
+  getKnowledgeBaseName,
+  listMyKnowledgeBases,
+} from '@/lib/rag/kb-actions'
 import { listMyDocuments, ragStatus } from '@/lib/rag/actions'
 
 export async function generateMetadata({
@@ -13,9 +16,7 @@ export async function generateMetadata({
   params: Promise<{ kbId: string }>
 }): Promise<Metadata> {
   const { kbId } = await params
-  const knowledgeBases = await listMyKnowledgeBases()
-  const knowledgeBase = knowledgeBases.find((kb) => kb.id === kbId)
-  return { title: knowledgeBase?.name ?? 'Knowledge base' }
+  return { title: (await getKnowledgeBaseName(kbId)) ?? 'Knowledge base' }
 }
 
 export default async function KnowledgeBasePage({

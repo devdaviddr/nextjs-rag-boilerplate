@@ -107,6 +107,31 @@ export function DocumentsPanel({
     }
   }, [knowledgeBaseId])
 
+  /**
+   * Re-read the list when this panel mounts.
+   *
+   * Next's client Router Cache keeps the RSC payload for a route, and a BACK
+   * navigation restores that entry verbatim — `staleTimes` does not apply to
+   * it. So "upload a PDF, navigate away, come back" re-rendered the payload
+   * captured before the upload and the document was missing until a hard
+   * refresh. Verified against the running app by changing a title in the
+   * database: the back-navigation still showed the old one.
+   *
+   * A server action rather than `router.refresh()`: it is the same query the
+   * page ran, it lands straight in the state this component renders from, and
+   * it costs no re-render of the server tree.
+   */
+  useEffect(() => {
+    // The rule guards against a synchronous setState cascade. This is a server
+    // round trip whose state update lands in a later task — the shape the rule
+    // exists to steer people towards.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh()
+    // Mount only: `refresh` is stable per knowledge base, and re-running on
+    // change would duplicate the fetch the navigation itself just made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Ingestion runs out-of-band, so the only way the UI learns it finished is
   // to ask. Polling stops as soon as nothing is in flight.
   const hasInFlight = documents.some((d) => IN_FLIGHT.has(d.status))

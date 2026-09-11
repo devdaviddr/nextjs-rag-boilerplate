@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 
 import { ChatView } from '@/components/chat/chat-view'
 import { getCurrentSession } from '@/lib/auth/session'
-import { getConversation } from '@/lib/chat/actions'
+import { getConversation, getConversationTitle } from '@/lib/chat/actions'
 import { listMyKnowledgeBases } from '@/lib/rag/kb-actions'
 import { ragStatus } from '@/lib/rag/actions'
 
@@ -13,8 +13,8 @@ export async function generateMetadata({
   params: Promise<{ id: string }>
 }): Promise<Metadata> {
   const { id } = await params
-  const conversation = await getConversation(id)
-  return { title: conversation?.title ?? 'Chat' }
+  // Not `getConversation`: that reads the whole transcript for one string.
+  return { title: (await getConversationTitle(id)) ?? 'Chat' }
 }
 
 export default async function ConversationPage({

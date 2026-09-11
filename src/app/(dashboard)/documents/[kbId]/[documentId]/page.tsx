@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 
 import { DocumentInspector } from '@/components/rag/document-inspector'
 import { getCurrentSession } from '@/lib/auth/session'
-import { inspectDocument } from '@/lib/rag/actions'
+import { getDocumentTitle, inspectDocument } from '@/lib/rag/actions'
 import { listMyKnowledgeBases } from '@/lib/rag/kb-actions'
 
 export async function generateMetadata({
@@ -13,8 +13,9 @@ export async function generateMetadata({
   params: Promise<{ documentId: string }>
 }): Promise<Metadata> {
   const { documentId } = await params
-  const doc = await inspectDocument(documentId)
-  return { title: doc?.title ?? 'Document' }
+  // Deliberately NOT `inspectDocument`: that reads every chunk of the
+  // document, and this needs one string.
+  return { title: (await getDocumentTitle(documentId)) ?? 'Document' }
 }
 
 /**

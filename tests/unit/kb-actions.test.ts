@@ -146,8 +146,11 @@ describe('renameKnowledgeBase', () => {
   it('refuses when nobody is signed in', async () => {
     mockGetSession.mockResolvedValue(null)
 
+    // A lapsed session redirects to sign in rather than throwing a message
+    // Next would redact in production — `redirect()` signals that by throwing
+    // NEXT_REDIRECT, which the framework, not the user, handles.
     await expect(renameKnowledgeBase(KB_ID, 'Handbook')).rejects.toThrow(
-      /signed in/i,
+      /NEXT_REDIRECT/,
     )
     expect(dbMock.update).not.toHaveBeenCalled()
   })

@@ -13,6 +13,7 @@ import { getCurrentSession } from '@/lib/auth/session'
 import { logger } from '@/lib/logger'
 import type { ActionResult } from '@/lib/storage/actions'
 import { RECENTS_LIMIT, type RecentConversation } from './recents'
+import { redirect } from 'next/navigation'
 
 /**
  * Conversation reads and mutations.
@@ -30,9 +31,17 @@ export interface ConversationMessage {
   metrics: StoredMetrics | null
 }
 
+/**
+ * The caller's id, or a redirect to sign in.
+ *
+ * `redirect()` rather than `throw`: a lapsed session is an EXPECTED failure,
+ * and Next redacts a thrown Error's message in production builds — so the
+ * user was shown "an error occurred" with nothing to act on, while the one
+ * thing they needed to do was sign in again.
+ */
 async function requireUserId(): Promise<string> {
   const session = await getCurrentSession()
-  if (!session?.user.id) throw new Error('You must be signed in.')
+  if (!session?.user.id) redirect('/login')
   return session.user.id
 }
 
@@ -57,6 +66,30 @@ export async function listConversations(): Promise<RecentConversation[]> {
  * Null covers both "does not exist" and "belongs to someone else" so the
  * caller renders the same 404 either way — no existence signal.
  */
+/**
+ * Just the thread's title, for `generateMetadata`.
+ *
+ * `getConversation` reads every message in the thread; a `<title>` needs one
+ * string, and `generateMetadata` and the page body are separate calls with no
+ * request-level dedupe between them.
+ */
+export async function getConversationTitle(
+  conversationId: string,
+): Promise<string | null> {
+  const userId = await requireUserId()
+  const [row] = await db
+    .select({ title: conversations.title })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        eq(conversations.ownerId, userId),
+      ),
+    )
+    .limit(1)
+  return row?.title ?? null
+}
+
 export async function getConversation(conversationId: string): Promise<{
   id: string
   title: string

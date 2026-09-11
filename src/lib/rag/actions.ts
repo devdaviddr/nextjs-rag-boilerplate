@@ -21,6 +21,7 @@ import { buildBucketKey, validateUpload } from '@/lib/storage/validation'
 import { isRagConfigured } from './client'
 import { DOCUMENT_MIME_TYPES } from './constants'
 import { ingestDocument } from './ingest'
+import { redirect } from 'next/navigation'
 
 export interface DocumentSummary {
   id: string
@@ -42,10 +43,18 @@ export interface DocumentSummary {
   partiallyIndexed: boolean
 }
 
+/**
+ * The caller's id, or a redirect to sign in.
+ *
+ * `redirect()` rather than `throw`: a lapsed session is an EXPECTED failure,
+ * and Next redacts a thrown Error's message in production builds — so the
+ * user was shown "an error occurred" with nothing to act on, while the one
+ * thing they needed to do was sign in again.
+ */
 async function requireUserId(): Promise<string> {
   const session = await getCurrentSession()
   if (!session?.user.id) {
-    throw new Error('You must be signed in.')
+    redirect('/login')
   }
   return session.user.id
 }
@@ -261,6 +270,29 @@ function isPartiallyIndexed(
     extraction.pages.some((p) => p.outcome === 'failed') ||
     indexedPages < extraction.pages.length
   )
+}
+
+/**
+ * Just the document's title, for `generateMetadata`.
+ *
+ * `inspectDocument` selects every chunk of the document, content included, so
+ * calling it to fill in a `<title>` fetched the whole transcript and threw all
+ * but one string away — and because `generateMetadata` and the page body are
+ * separate calls with no request-level dedupe, it did that twice per view.
+ * Measured on a 7-page clinical guideline: 144 chunks, 12 kB of text, twice.
+ *
+ * Owner-scoped like every other read here: someone else's document and one
+ * that does not exist both return null.
+ */
+export async function getDocumentTitle(
+  documentId: string,
+): Promise<string | null> {
+  const userId = await requireUserId()
+  const doc = await db.query.documents.findFirst({
+    where: and(eq(documents.id, documentId), eq(documents.ownerId, userId)),
+    columns: { title: true },
+  })
+  return doc?.title ?? null
 }
 
 /**

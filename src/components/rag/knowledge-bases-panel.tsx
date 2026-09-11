@@ -59,6 +59,20 @@ export function KnowledgeBasesPanel({
 }) {
   const router = useRouter()
   const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases)
+
+  /**
+   * Adopt a newer server payload for this list.
+   *
+   * Seeding `useState` from a prop captures it once, so a `router.refresh()`
+   * after a rename or a delete re-rendered the server tree and changed
+   * nothing here. The same staleness arrives from Next's Router Cache, which
+   * replays a route's payload verbatim on a BACK navigation.
+   */
+  const [lastInitial, setLastInitial] = useState(initialKnowledgeBases)
+  if (initialKnowledgeBases !== lastInitial) {
+    setLastInitial(initialKnowledgeBases)
+    setKnowledgeBases(initialKnowledgeBases)
+  }
   const [error, setError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<string | null>(null)

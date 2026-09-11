@@ -8,6 +8,7 @@ import { getCurrentSession } from '@/lib/auth/session'
 import { logger } from '@/lib/logger'
 import { deleteObject } from '@/lib/storage/client'
 import type { ActionResult } from '@/lib/storage/actions'
+import { redirect } from 'next/navigation'
 
 export interface KnowledgeBaseSummary {
   id: string
@@ -21,10 +22,18 @@ export interface KnowledgeBaseSummary {
 const MAX_NAME_LENGTH = 80
 const MAX_DESCRIPTION_LENGTH = 280
 
+/**
+ * The caller's id, or a redirect to sign in.
+ *
+ * `redirect()` rather than `throw`: a lapsed session is an EXPECTED failure,
+ * and Next redacts a thrown Error's message in production builds — so the
+ * user was shown "an error occurred" with nothing to act on, while the one
+ * thing they needed to do was sign in again.
+ */
 async function requireUserId(): Promise<string> {
   const session = await getCurrentSession()
   if (!session?.user.id) {
-    throw new Error('You must be signed in.')
+    redirect('/login')
   }
   return session.user.id
 }
@@ -52,6 +61,30 @@ async function ownedKnowledgeBaseId(
     columns: { id: true, ownerId: true },
   })
   return row && row.ownerId === userId ? row.id : null
+}
+
+/**
+ * Just this knowledge base's name, for `generateMetadata`.
+ *
+ * `listMyKnowledgeBases` runs two grouped joins to count documents; a
+ * `<title>` needs one string, and there is no request-level dedupe between
+ * `generateMetadata` and the page body, so it ran both passes twice per view.
+ *
+ * Owner-scoped: someone else's knowledge base and one that does not exist
+ * both return null, the same non-signal the page's 404 relies on.
+ */
+export async function getKnowledgeBaseName(
+  knowledgeBaseId: string,
+): Promise<string | null> {
+  const userId = await requireUserId()
+  const row = await db.query.knowledgeBases.findFirst({
+    where: and(
+      eq(knowledgeBases.id, knowledgeBaseId),
+      eq(knowledgeBases.ownerId, userId),
+    ),
+    columns: { name: true },
+  })
+  return row?.name ?? null
 }
 
 /** List the signed-in user's knowledge bases, oldest first, with counts. */

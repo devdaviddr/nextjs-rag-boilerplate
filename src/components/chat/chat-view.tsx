@@ -241,6 +241,17 @@ export function ChatView({
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Drop the deferred Recents refresh if this view goes away first. Navigate
+  // within the 400ms window and the timer would otherwise fire
+  // `router.refresh()` against whatever route the user has just landed on —
+  // a server render nobody asked for, on a page that did not schedule it.
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    },
+    [],
+  )
+
   // Stable, so the source panel's Escape handler is not torn down and
   // reattached on every render of the transcript.
   const closeSource = useCallback(() => setSource(null), [])
