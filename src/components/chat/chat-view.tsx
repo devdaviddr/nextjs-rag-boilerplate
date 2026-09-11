@@ -607,6 +607,27 @@ export function ChatView({
                             <Thinking label={phase} />
                           )
                         )}
+                        {/*
+                          Work that happens AFTER the answer is readable —
+                          citation verification, which is another model call
+                          and was measured at ~25s over eight citations.
+                          Until this existed, the screen showed a finished
+                          answer with its sources, a composer that would not
+                          accept a keystroke, and nothing at all to say why.
+                          The indicator above cannot cover it: it only renders
+                          while the message is still empty.
+                        */}
+                        {isStreaming &&
+                          phase &&
+                          message.content &&
+                          i === messages.length - 1 && (
+                            <p
+                              className="text-muted-foreground mt-3 text-xs"
+                              role="status"
+                            >
+                              {phase}
+                            </p>
+                          )}
                         {message.citations.length > 0 && (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <span className="text-muted-foreground text-xs">
