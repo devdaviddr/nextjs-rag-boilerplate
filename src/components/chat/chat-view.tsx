@@ -195,6 +195,48 @@ export function ChatView({
     setSource(null)
   }
 
+  /**
+   * Adopt a newer server payload for the SAME conversation.
+   *
+   * The block above only re-syncs when the thread changes, so a
+   * `router.refresh()` that brings messages the client does not have — the
+   * answer just persisted, or one sent from another tab — was rendered by the
+   * server and then ignored here.
+   *
+   * Guarded on `isStreaming`: mid-stream the client is ahead of the database
+   * by design (the optimistic question, the partial answer), and adopting the
+   * server's shorter list would wipe what the user is watching arrive.
+   */
+  const [lastInitialMessages, setLastInitialMessages] =
+    useState(initialMessages)
+  if (initialMessages !== lastInitialMessages) {
+    setLastInitialMessages(initialMessages)
+    if (!isStreaming && initialMessages.length > messages.length) {
+      setMessages(initialMessages)
+    }
+  }
+
+  /**
+   * Re-fetch the thread when this view mounts on an existing conversation.
+   *
+   * Next's client Router Cache keeps the RSC payload for a route, and a BACK
+   * navigation restores that entry verbatim — `staleTimes` does not apply to
+   * it. So the sequence "ask a question, get an answer, navigate away, come
+   * back" replayed the payload captured BEFORE the answer existed: the
+   * messages were in the database the whole time and the transcript rendered
+   * without them until a hard refresh.
+   *
+   * `router.refresh()` here is safe in a way it is not elsewhere in this file
+   * (see `requestSeq`): a mount cannot be mid-stream, so there is no in-flight
+   * request for it to tear down.
+   */
+  useEffect(() => {
+    if (initialConversationId) router.refresh()
+    // Mount only. Re-running on every id change would refresh immediately
+    // after a navigation that has just fetched this data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
