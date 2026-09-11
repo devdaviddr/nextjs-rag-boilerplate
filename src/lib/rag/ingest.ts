@@ -450,6 +450,11 @@ export async function ingestDocument(
           knowledgeBaseId: doc.knowledgeBaseId,
           content: piece.content,
           heading: piece.heading,
+          // Spec 0038 FR1. The same string `buildEmbeddingText` just used, so
+          // the stored search key and the embedded one cannot disagree.
+          caption: piece.caption ?? null,
+          headingBbox: piece.headingBox ?? null,
+          captionBbox: piece.captionBox ?? null,
           pageNumber: piece.pageNumber,
           chunkIndex: piece.chunkIndex,
           tokenCount: piece.tokenCount,

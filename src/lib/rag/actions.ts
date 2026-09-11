@@ -11,6 +11,7 @@ import { getCurrentSession } from '@/lib/auth/session'
 import { env } from '@/lib/env'
 import { toCitationBoxes } from '@/lib/citations/boxes'
 import { logger } from '@/lib/logger'
+import { buildEmbeddingText } from './chunk'
 import { type InspectedDocument, buildInspection } from './inspect'
 import { UPLOAD_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
@@ -297,10 +298,14 @@ export async function inspectDocument(documentId: string): Promise<{
       kind: chunks.kind,
       content: chunks.content,
       heading: chunks.heading,
+      caption: chunks.caption,
       tokenCount: chunks.tokenCount,
+      chunkIndex: chunks.chunkIndex,
       pageNumber: chunks.pageNumber,
       boxes: chunks.boxes,
       bbox: chunks.bbox,
+      headingBbox: chunks.headingBbox,
+      captionBbox: chunks.captionBbox,
     })
     .from(chunks)
     .where(and(eq(chunks.documentId, documentId), eq(chunks.ownerId, userId)))
@@ -319,11 +324,25 @@ export async function inspectDocument(documentId: string): Promise<{
         kind: r.kind,
         content: r.content,
         heading: r.heading,
+        caption: r.caption,
         tokenCount: r.tokenCount,
+        chunkIndex: r.chunkIndex,
         pageNumber: r.pageNumber,
         // One reader reconciles the list with the legacy rectangle, so the
-        // view never has to know which column a row was written with.
+        // view never has to know which column a row was written with. The
+        // annotation boxes go through it too — a heading box is subject to
+        // every one of the same parser defects as a chunk box.
         boxes: toCitationBoxes(r.boxes as unknown, r.bbox as unknown),
+        headingBox: toCitationBoxes(r.headingBbox as unknown)[0] ?? null,
+        captionBox: toCitationBoxes(r.captionBbox as unknown)[0] ?? null,
+        // Spec 0038 FR6. Recomposed here, with the title as it is NOW — see
+        // `InspectedChunk.embeddedText` for why the view must say so.
+        embeddedText: buildEmbeddingText({
+          documentTitle: doc.title,
+          heading: r.heading,
+          caption: r.caption,
+          content: r.content,
+        }),
       })),
     }),
   }

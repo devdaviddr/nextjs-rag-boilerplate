@@ -10,6 +10,32 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **The search key is stored, not just embedded**
+  ([spec 0038](specs/0038-store-the-search-key.md)). A figure's caption — or,
+  for a caption-less figure, the sentence a vision model spends ~40 seconds
+  writing — was prepended to the embedded text and then discarded. It reached
+  exactly one vector and nothing else: no lexical match, no citation could show
+  it, nobody could check whether the label was any good.
+
+  Measured on the local corpus before this landed: the query _"unplanned
+  downtime by quarter across all sites"_, whose words appear only in a caption,
+  scored **0.650** dense similarity against the right figure and matched **no
+  row at all** lexically. The two halves of hybrid retrieval were searching
+  different documents.
+
+  `chunks.caption` now stores it, and `chunks.content_tsv` is generated from
+  heading, caption and content together, so a keyword question can find a
+  section title or a caption. Existing rows gain the heading half immediately —
+  the generated column re-derives on migration — and the caption after a
+  re-ingest, which is the only way to recover text that was never written down.
+
+  The inspector draws heading and caption regions on the page in their own
+  weights, with a legend, so text that was indexed as _context_ no longer looks
+  like text that was skipped. Each chunk shows what it is found by, and a **Raw
+  chunk** view shows the stored record verbatim alongside the text composed for
+  embedding — marked as recomputed, because a document renamed after ingestion
+  makes that composition and the stored vector disagree.
+
 - **See what was actually indexed from a document**
   ([spec 0037](specs/0037-inspect-what-was-indexed.md)). Clicking a document
   opens every page of it: what happened to that page in plain language, the

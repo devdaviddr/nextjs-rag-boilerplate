@@ -35,15 +35,50 @@ export interface InspectedChunk {
    * Showing it is the difference between that impression and the truth.
    */
   heading: string | null
+  /**
+   * What this chunk is FOUND by (spec 0038 FR1): a bound caption, or the label
+   * a vision model wrote for a caption-less figure. Null for a chunk that never
+   * had one, and for every chunk ingested before the column existed.
+   */
+  caption: string | null
   tokenCount: number
+  /** Position in the document-wide sequence, shown in the raw view. */
+  chunkIndex: number
   /** Regions on the page, already reconciled from `boxes`/`bbox`. */
   boxes: CitationBox[]
+  /** Where the heading and caption sit, when the cracked path recorded them. */
+  headingBox: CitationBox | null
+  captionBox: CitationBox | null
+  /**
+   * The text that was composed for embedding (spec 0038 FR6).
+   *
+   * RECOMPUTED for display, never read back from the vector — the document's
+   * title can change after ingestion, at which point this and the stored vector
+   * disagree. The view must say so; a recomposition presented as a record is
+   * exactly the kind of confident wrongness this whole feature exists against.
+   */
+  embeddedText: string
+}
+
+/**
+ * A region on the page that is indexed but is not a chunk (spec 0038 FR4).
+ *
+ * Page-level and deduplicated rather than per-chunk: one heading owns several
+ * chunks, and drawing its rectangle once per chunk stacks identical outlines
+ * into something a reader fairly reads as emphasis.
+ */
+export interface PageAnnotation {
+  kind: 'heading' | 'caption'
+  text: string
+  box: CitationBox
 }
 
 /** A page, whether or not anything was indexed from it. */
 export interface InspectedPage {
   page: number
   chunks: InspectedChunk[]
+  /** Heading and caption regions, deduplicated — see `PageAnnotation`. */
+  annotations: PageAnnotation[]
   /** Absent for documents ingested before `extraction` existed (FR8). */
   route?: ExtractionPage['route']
   outcome?: ExtractionPage['outcome']
@@ -171,6 +206,38 @@ export function describeKind(kind: ChunkKind): {
  * at the only moment that knows the answer.
  */
 /**
+ * The heading and caption regions on one page, each drawn once (FR4).
+ *
+ * Deduplicated by rectangle rather than by text: two different sections can
+ * share a title ("Notes"), and two boxes in different places are two things to
+ * mark. The same rectangle twice is one.
+ */
+function collectAnnotations(
+  chunks: readonly InspectedChunk[],
+): PageAnnotation[] {
+  const seen = new Set<string>()
+  const out: PageAnnotation[] = []
+
+  const add = (
+    kind: PageAnnotation['kind'],
+    text: string | null,
+    box: CitationBox | null,
+  ) => {
+    if (!text || !box) return
+    const key = `${kind}:${box.xmin}:${box.ymin}:${box.xmax}:${box.ymax}`
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ kind, text, box })
+  }
+
+  for (const chunk of chunks) {
+    add('heading', chunk.heading, chunk.headingBox)
+    add('caption', chunk.caption, chunk.captionBox)
+  }
+  return out
+}
+
+/**
  * "page 8", not "(8)" — a bare number in brackets beside a count reads as
  * another count, and the whole value of the reason is knowing which page.
  */
@@ -248,12 +315,13 @@ export function buildInspection(input: {
 
   const pages: InspectedPage[] = pageNumbers.map((n) => {
     const record = recorded.get(n)
-    const pageChunks = (byPage.get(n) ?? []).sort((a, b) =>
-      a.id.localeCompare(b.id),
+    const pageChunks = (byPage.get(n) ?? []).sort(
+      (a, b) => a.chunkIndex - b.chunkIndex,
     )
     return {
       page: n,
       chunks: pageChunks,
+      annotations: collectAnnotations(pageChunks),
       ...(record?.route ? { route: record.route } : {}),
       ...(record?.outcome ? { outcome: record.outcome } : {}),
       ...(record?.reason ? { reason: record.reason } : {}),

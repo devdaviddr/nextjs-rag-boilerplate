@@ -1418,10 +1418,11 @@ embedding, so a question naming a section matches through it. The detail view
 says which heading a chunk sits under for exactly this reason — without it, a
 title with no box on the page reads as a title that was never indexed.
 
-Note the asymmetry this creates: headings reach the **dense** half of hybrid
-retrieval and not the lexical half, because `chunks.content_tsv` is generated
-from `chunks.content` alone. A keyword-only match on a section title will not
-fire.
+Spec 0038 closed the asymmetry this used to create: `chunks.content_tsv` is
+generated from heading, caption and content together, so a keyword-only match
+on a section title fires like any other. Existing rows picked this up when the
+generated column was rebuilt — no re-ingest needed for headings, though a
+caption needs one.
 
 Chunk text is shown **as stored**, because that is what retrieval matches
 against. An `ocr` chunk is labelled as recovered from an image, so it does not
@@ -1430,17 +1431,38 @@ read as a clean quotation.
 A `figure` chunk needs more care than a label. Its stored `content` is the text
 the parser read _inside_ the figure — axis labels, the words in a flow
 diagram's boxes. What makes the figure findable is its caption, or the
-one-sentence label a vision model writes for a caption-less figure, and
-**neither is persisted**: `describeFigures` folds it into `element.caption`,
-`buildEmbeddingText` prepends it before embedding, and `chunks` has no column
-for it. So part of a figure's search key exists only inside a vector — absent
-from `content_tsv`, from citations, and from this view.
+one-sentence label a vision model writes for a caption-less figure. Since
+[spec 0038](../specs/0038-store-the-search-key.md) that is stored in
+`chunks.caption`, shown beside the content as **Found by**, and included in the
+lexical index — before it, it reached one vector and nothing else.
 
 What is stored is not a reading of the figure either. A flow diagram's arrows
 are nowhere in the index; `read_figure` reads them at answer time with a
 question in hand, for the reason
 [Figures are a search key, never evidence](#figures-are-a-search-key-never-evidence)
 sets out.
+
+### Three kinds of region
+
+| drawn as            | means                                             |
+| ------------------- | ------------------------------------------------- |
+| solid amber ring    | indexed as a passage retrieval can return         |
+| thin blue outline   | a heading, searched with the chunks beneath it    |
+| dashed teal outline | a caption — what makes a figure or table findable |
+
+Headings and captions are never chunks of their own: `normalizePage` consumes
+them and attaches them to the elements they own. Until their boxes were stored,
+a document's title sat unmarked on the page and read as text that had been
+skipped.
+
+### Raw chunk
+
+Each chunk has a **Raw chunk** disclosure showing the stored record verbatim —
+kind, token count, heading, caption, every region — plus the text
+`buildEmbeddingText` composes for the embedding. That composed string is
+**recomputed for display, not read back from the vector**: renaming a document
+after ingestion makes the two disagree, and the view says so rather than
+presenting a recomposition as a record.
 
 A document ingested before `documents.extraction` existed, or with cracking
 off, says the routing detail was not recorded and lists the chunks it has. It

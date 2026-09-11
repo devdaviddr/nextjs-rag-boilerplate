@@ -102,6 +102,7 @@ other — one isn't a substitute for the other.
 | [0035](0035-span-level-citations.md)                  | Highlight the cited span, not just the page                                          | Proposed | —       |
 | [0036](0036-reranking.md)                             | Reranking, without waiting for the account                                           | Proposed | —       |
 | [0037](0037-inspect-what-was-indexed.md)              | Let a user inspect what was actually indexed                                         | Proposed | —       |
+| [0038](0038-store-the-search-key.md)                  | Store the search key, and show what the page contributed                             | Proposed | —       |
 
 <!-- specs:index:end -->
 

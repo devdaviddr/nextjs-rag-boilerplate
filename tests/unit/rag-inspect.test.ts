@@ -38,8 +38,13 @@ function chunk(
     kind: 'text',
     content: 'text',
     heading: null,
+    caption: null,
     tokenCount: 10,
+    chunkIndex: page,
     boxes: [] as CitationBox[],
+    headingBox: null,
+    captionBox: null,
+    embeddedText: 'doc\ntext',
     pageNumber: page,
     ...overrides,
   }
@@ -232,6 +237,91 @@ describe('buildInspection', () => {
       chunks: [chunk(1, { heading: '1. Purpose' })],
     })
     expect(result.pages[0]!.chunks[0]!.heading).toBe('1. Purpose')
+  })
+
+  it('draws one heading region however many chunks sit under it (0038 FR4)', () => {
+    const box = { xmin: 0.1, ymin: 0.1, xmax: 0.5, ymax: 0.15 }
+    const result = buildInspection({
+      pageCount: 1,
+      extraction: summary([
+        { page: 1, route: 'clean-text', outcome: 'text-layer' },
+      ]),
+      chunks: [
+        chunk(1, { id: 'a', heading: '1. Purpose', headingBox: box }),
+        chunk(1, { id: 'b', heading: '1. Purpose', headingBox: box }),
+      ],
+    })
+    // Two chunks, one rectangle — stacked outlines read as emphasis.
+    expect(result.pages[0]!.annotations).toEqual([
+      { kind: 'heading', text: '1. Purpose', box },
+    ])
+  })
+
+  it('keeps two same-named headings that sit in different places', () => {
+    const result = buildInspection({
+      pageCount: 1,
+      extraction: summary([
+        { page: 1, route: 'clean-text', outcome: 'text-layer' },
+      ]),
+      chunks: [
+        chunk(1, {
+          id: 'a',
+          heading: 'Notes',
+          headingBox: { xmin: 0.1, ymin: 0.1, xmax: 0.4, ymax: 0.14 },
+        }),
+        chunk(1, {
+          id: 'b',
+          heading: 'Notes',
+          headingBox: { xmin: 0.1, ymin: 0.6, xmax: 0.4, ymax: 0.64 },
+        }),
+      ],
+    })
+    expect(result.pages[0]!.annotations).toHaveLength(2)
+  })
+
+  it('marks a caption region and never invents one (FR4, FR7)', () => {
+    const result = buildInspection({
+      pageCount: 2,
+      extraction: summary([
+        { page: 1, route: 'image-heavy', outcome: 'parsed' },
+        { page: 2, route: 'image-heavy', outcome: 'parsed' },
+      ]),
+      chunks: [
+        chunk(1, {
+          id: 'a',
+          kind: 'figure',
+          caption: 'Figure 6.1 — downtime by quarter',
+          captionBox: { xmin: 0.1, ymin: 0.8, xmax: 0.9, ymax: 0.84 },
+        }),
+        // Ingested before the column existed: a caption it never recorded must
+        // not become a rectangle drawn from nothing.
+        chunk(2, { id: 'b', kind: 'figure' }),
+      ],
+    })
+    expect(result.pages[0]!.annotations).toEqual([
+      {
+        kind: 'caption',
+        text: 'Figure 6.1 — downtime by quarter',
+        box: { xmin: 0.1, ymin: 0.8, xmax: 0.9, ymax: 0.84 },
+      },
+    ])
+    expect(result.pages[1]!.annotations).toEqual([])
+  })
+
+  it('orders chunks by their position in the document, not by id', () => {
+    const result = buildInspection({
+      pageCount: 1,
+      extraction: summary([
+        { page: 1, route: 'clean-text', outcome: 'text-layer' },
+      ]),
+      chunks: [
+        // Alphabetical by id gives the opposite order, so this only passes if
+        // the document's own sequence is what is used.
+        { ...chunk(1, { id: 'aaa' }), chunkIndex: 1 },
+        { ...chunk(1, { id: 'zzz' }), chunkIndex: 0 },
+      ],
+    })
+    expect(result.pages[0]!.chunks.map((c) => c.id)).toEqual(['zzz', 'aaa'])
   })
 
   it('groups every chunk under its own page', () => {

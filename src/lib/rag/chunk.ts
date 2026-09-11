@@ -77,6 +77,14 @@ export interface Chunk {
   boxes?: ChunkBox[]
   /** A caption bound to a table or figure, carried into the embedded text. */
   caption?: string | null
+  /**
+   * Where the heading and caption sit on the page (spec 0038 FR2).
+   *
+   * Only the cracked path has them: `chunkPages` derives its heading from the
+   * page's first line, which has no box because the text layer has no layout.
+   */
+  headingBox?: ChunkBox | null
+  captionBox?: ChunkBox | null
 }
 
 export interface ChunkOptions {
@@ -656,6 +664,8 @@ export function chunkElements(
       content,
       heading: element.heading,
       caption: element.caption,
+      headingBox: element.headingBox,
+      captionBox: element.captionBox,
       pageNumber,
       chunkIndex: chunkIndex++,
       tokenCount: estimateTokens(content),

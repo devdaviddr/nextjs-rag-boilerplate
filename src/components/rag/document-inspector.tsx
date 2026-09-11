@@ -172,6 +172,35 @@ export function DocumentInspector({
             </div>
           )}
 
+          {render === 'ready' && page.chunks.length > 0 && (
+            <ul className="text-muted-foreground mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <li className="flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="inline-block size-3 rounded-[2px] ring-2 ring-amber-500/60"
+                />
+                Indexed as a passage
+              </li>
+              {page.annotations.some((a) => a.kind === 'heading') && (
+                <li className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block size-3 rounded-[2px] border border-sky-600"
+                  />
+                  Heading — searched with the chunks under it
+                </li>
+              )}
+              {page.annotations.some((a) => a.kind === 'caption') && (
+                <li className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block size-3 rounded-[2px] border-2 border-dashed border-teal-600"
+                  />
+                  Caption — what makes the figure findable
+                </li>
+              )}
+            </ul>
+          )}
           <div className="bg-muted/40 rounded-md p-3">
             <div className="relative mx-auto w-full max-w-[720px]">
               {/* eslint-disable-next-line @next/next/no-img-element --
@@ -201,6 +230,25 @@ export function DocumentInspector({
                   is listed below regardless.
                 </p>
               )}
+              {/* Spec 0038 FR4. Drawn UNDER the chunk regions so a chunk is
+                  never obscured by the context around it, and in different
+                  weights because they are different claims: a chunk is a
+                  passage retrieval can return, a heading or caption is text
+                  indexed to make that passage findable. */}
+              {render === 'ready' &&
+                page.annotations.map((a) => (
+                  <div
+                    key={`${a.kind}:${a.box.xmin}:${a.box.ymin}`}
+                    aria-hidden="true"
+                    style={boxPercentStyle(a.box)}
+                    className={cn(
+                      'pointer-events-none absolute rounded-[2px]',
+                      a.kind === 'heading'
+                        ? 'border border-sky-600'
+                        : 'border-2 border-dashed border-teal-600',
+                    )}
+                  />
+                ))}
               {render === 'ready' &&
                 page.chunks.map((chunk) =>
                   chunk.boxes.map((box, i) => (
@@ -285,12 +333,69 @@ export function DocumentInspector({
                         <p className="text-sm whitespace-pre-wrap">
                           {chunk.content}
                         </p>
+                        {/* FR5. The caption is the thing this chunk is FOUND
+                            by — for a caption-less figure it is a sentence a
+                            model wrote, and it reaches the index either way.
+                            Showing it beside the content is what lets a reader
+                            judge whether the key is any good. */}
+                        {chunk.caption && (
+                          <p className="rounded-md border border-teal-600/40 bg-teal-50 px-2 py-1.5 text-xs text-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
+                            <span className="font-medium">Found by:</span>{' '}
+                            {chunk.caption}
+                          </p>
+                        )}
                         <p className="text-muted-foreground text-xs">
                           Page {page.page} · {chunk.tokenCount} tokens ·{' '}
                           {chunk.boxes.length > 0
                             ? `${chunk.boxes.length} region${chunk.boxes.length === 1 ? '' : 's'} on the page`
                             : 'no recorded position on the page'}
                         </p>
+                        {/* FR6. The stored record, verbatim. A view that says
+                            "this is what was indexed" should be checkable
+                            against the row rather than taken on trust. */}
+                        <details className="text-xs">
+                          <summary className="text-muted-foreground cursor-pointer select-none">
+                            Raw chunk
+                          </summary>
+                          <div className="mt-2 space-y-2">
+                            <div>
+                              <p className="text-muted-foreground mb-1">
+                                Stored record
+                              </p>
+                              <pre className="bg-muted overflow-x-auto rounded-md p-2 text-[11px] leading-relaxed">
+                                {JSON.stringify(
+                                  {
+                                    id: chunk.id,
+                                    chunkIndex: chunk.chunkIndex,
+                                    pageNumber: page.page,
+                                    kind: chunk.kind,
+                                    tokenCount: chunk.tokenCount,
+                                    heading: chunk.heading,
+                                    caption: chunk.caption,
+                                    boxes: chunk.boxes,
+                                    headingBox: chunk.headingBox,
+                                    captionBox: chunk.captionBox,
+                                    content: chunk.content,
+                                  },
+                                  null,
+                                  2,
+                                )}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-1">
+                                Text composed for embedding —{' '}
+                                <strong>recomputed now</strong>, not read back
+                                from the vector. If the document has been
+                                renamed since it was indexed, the title here
+                                differs from the one that was embedded.
+                              </p>
+                              <pre className="bg-muted overflow-x-auto rounded-md p-2 text-[11px] leading-relaxed whitespace-pre-wrap">
+                                {chunk.embeddedText}
+                              </pre>
+                            </div>
+                          </div>
+                        </details>
                       </div>
                     )}
                   </li>
