@@ -25,6 +25,15 @@ import type { NormalizedElement } from './normalize'
 export interface PositionedItem {
   str: string
   box: ChunkBox | null
+  /**
+   * Point size and end-of-line, as the PDF reports them (spec 0039).
+   *
+   * Optional because a caller may have none — `layout.ts` treats a missing
+   * size as body text rather than guessing, so a PDF that reports nothing
+   * degrades to exactly the behaviour this path had before.
+   */
+  fontSize?: number
+  endsLine?: boolean
 }
 
 export interface PageText {

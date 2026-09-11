@@ -103,6 +103,7 @@ other — one isn't a substitute for the other.
 | [0036](0036-reranking.md)                             | Reranking, without waiting for the account                                           | Proposed | —       |
 | [0037](0037-inspect-what-was-indexed.md)              | Let a user inspect what was actually indexed                                         | Proposed | —       |
 | [0038](0038-store-the-search-key.md)                  | Store the search key, and show what the page contributed                             | Proposed | —       |
+| [0039](0039-structure-from-the-text-layer.md)         | Find a document's structure in its text layer                                        | Proposed | —       |
 
 <!-- specs:index:end -->
 
