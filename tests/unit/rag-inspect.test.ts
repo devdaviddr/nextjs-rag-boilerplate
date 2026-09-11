@@ -90,11 +90,14 @@ describe('describePage', () => {
 })
 
 describe('describeKind', () => {
-  it('labels a figure as a search key, not the document’s words (FR5)', () => {
+  it('says what a figure chunk actually holds, and what it does not (FR5)', () => {
+    // The content is the text printed inside the figure, so calling it "not
+    // the document's own words" was wrong in the other direction. What must
+    // never be implied is that the figure itself was read into the index.
     const { label, note } = describeKind('figure')
     expect(label).toBe('Figure')
-    expect(note).toBeDefined()
-    expect(note).toMatch(/not the document/i)
+    expect(note).toMatch(/printed inside/i)
+    expect(note).toMatch(/not stored here/i)
   })
 
   it('labels OCR text as recovered from an image (FR5)', () => {

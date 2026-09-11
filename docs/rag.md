@@ -1424,10 +1424,23 @@ from `chunks.content` alone. A keyword-only match on a section title will not
 fire.
 
 Chunk text is shown **as stored**, because that is what retrieval matches
-against. A `figure` chunk is labelled as a search key and an `ocr` chunk as
-recovered from an image — see
-[Figures are a search key, never evidence](#figures-are-a-search-key-never-evidence).
-Neither may read as a quotation of the document.
+against. An `ocr` chunk is labelled as recovered from an image, so it does not
+read as a clean quotation.
+
+A `figure` chunk needs more care than a label. Its stored `content` is the text
+the parser read _inside_ the figure — axis labels, the words in a flow
+diagram's boxes. What makes the figure findable is its caption, or the
+one-sentence label a vision model writes for a caption-less figure, and
+**neither is persisted**: `describeFigures` folds it into `element.caption`,
+`buildEmbeddingText` prepends it before embedding, and `chunks` has no column
+for it. So part of a figure's search key exists only inside a vector — absent
+from `content_tsv`, from citations, and from this view.
+
+What is stored is not a reading of the figure either. A flow diagram's arrows
+are nowhere in the index; `read_figure` reads them at answer time with a
+question in hand, for the reason
+[Figures are a search key, never evidence](#figures-are-a-search-key-never-evidence)
+sets out.
 
 A document ingested before `documents.extraction` existed, or with cracking
 off, says the routing detail was not recorded and lists the chunks it has. It

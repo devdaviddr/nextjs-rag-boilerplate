@@ -124,11 +124,19 @@ export function describePage(page: {
 /**
  * What a chunk's stored text actually IS.
  *
- * `figure` is the one that matters. Since spec 0031 its content is a **search
- * key** — a caption, or a generated label — written so the figure can be found
- * and explicitly NOT the document's words. Rendering it unlabelled beside real
- * extracted text would present a generated sentence as a quotation, which is the
- * single most misleading thing this view could do.
+ * `figure` is the one that matters, and the truth is subtler than spec 0031's
+ * summary of it. The stored `content` is the text the parser read INSIDE the
+ * figure — axis labels, the words in a flow diagram's boxes. What makes the
+ * figure findable is its caption, or a one-sentence label a vision model wrote
+ * at ingestion, and neither is persisted: `buildEmbeddingText` folds it into
+ * the embedded text and `chunks` has no column for it. So a reader of this view
+ * is seeing part of the picture, and saying only "this is a search key" would
+ * be wrong in both directions — it presents printed words as generated, and
+ * hides that a generated sentence exists at all.
+ *
+ * What the stored fragments are NOT is a reading of the figure. The arrows in a
+ * flow diagram are nowhere in the index; `read_figure` reads them at answer
+ * time, with a question in hand, for the reason `describe.ts` documents.
  */
 export function describeKind(kind: ChunkKind): {
   label: string
@@ -138,7 +146,7 @@ export function describeKind(kind: ChunkKind): {
     case 'figure':
       return {
         label: 'Figure',
-        note: 'Written so the figure can be found — not the document’s own words.',
+        note: 'The text printed inside the figure. What the figure shows — the shape of a chart, the arrows in a diagram — is not stored here; it is read when a question needs it.',
       }
     case 'ocr':
       return {
