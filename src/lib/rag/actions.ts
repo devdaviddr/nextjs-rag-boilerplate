@@ -296,6 +296,7 @@ export async function inspectDocument(documentId: string): Promise<{
       id: chunks.id,
       kind: chunks.kind,
       content: chunks.content,
+      heading: chunks.heading,
       tokenCount: chunks.tokenCount,
       pageNumber: chunks.pageNumber,
       boxes: chunks.boxes,
@@ -317,6 +318,7 @@ export async function inspectDocument(documentId: string): Promise<{
         id: r.id,
         kind: r.kind,
         content: r.content,
+        heading: r.heading,
         tokenCount: r.tokenCount,
         pageNumber: r.pageNumber,
         // One reader reconciles the list with the legacy rectangle, so the

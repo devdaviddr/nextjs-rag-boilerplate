@@ -1410,6 +1410,19 @@ table", "scanned page, read with OCR", "not indexed" plus the recorded reason.
 The vocabulary in the database is internal, and its meaning is the entire thing
 being communicated.
 
+A heading — a document title or a section header — is **not** a chunk and has
+no region on the page, because `normalizePage` consumes heading elements and
+attaches them to the chunks beneath them. It is still indexed:
+`buildEmbeddingText` prepends the document title and the heading before
+embedding, so a question naming a section matches through it. The detail view
+says which heading a chunk sits under for exactly this reason — without it, a
+title with no box on the page reads as a title that was never indexed.
+
+Note the asymmetry this creates: headings reach the **dense** half of hybrid
+retrieval and not the lexical half, because `chunks.content_tsv` is generated
+from `chunks.content` alone. A keyword-only match on a section title will not
+fire.
+
 Chunk text is shown **as stored**, because that is what retrieval matches
 against. A `figure` chunk is labelled as a search key and an `ocr` chunk as
 recovered from an image — see

@@ -24,6 +24,17 @@ export interface InspectedChunk {
   id: string
   kind: ChunkKind
   content: string
+  /**
+   * The section heading this chunk sits under, resolved at ingestion.
+   *
+   * Carried because it is INDEXED: `buildEmbeddingText` prepends the document
+   * title and this heading before embedding, so a question naming a section
+   * matches through it. `normalizePage` consumes heading elements rather than
+   * emitting them, so a heading is never a chunk of its own and never has a
+   * box — which makes it look, on this page, like it was never indexed at all.
+   * Showing it is the difference between that impression and the truth.
+   */
+  heading: string | null
   tokenCount: number
   /** Regions on the page, already reconciled from `boxes`/`bbox`. */
   boxes: CitationBox[]

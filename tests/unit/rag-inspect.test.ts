@@ -37,6 +37,7 @@ function chunk(
     id: `c${page}`,
     kind: 'text',
     content: 'text',
+    heading: null,
     tokenCount: 10,
     boxes: [] as CitationBox[],
     pageNumber: page,
@@ -214,6 +215,20 @@ describe('buildInspection', () => {
     }
     // Nothing is known about routing, so nothing is claimed about completeness.
     expect(result.partial).toBe(false)
+  })
+
+  it('carries the heading, which is indexed but never a chunk of its own', () => {
+    // `normalizePage` consumes heading elements, so a heading has no box and
+    // nothing on the page marks it — while `buildEmbeddingText` prepends it
+    // before embedding. Dropping it here would say it was not indexed.
+    const result = buildInspection({
+      pageCount: 1,
+      extraction: summary([
+        { page: 1, route: 'clean-text', outcome: 'text-layer' },
+      ]),
+      chunks: [chunk(1, { heading: '1. Purpose' })],
+    })
+    expect(result.pages[0]!.chunks[0]!.heading).toBe('1. Purpose')
   })
 
   it('groups every chunk under its own page', () => {

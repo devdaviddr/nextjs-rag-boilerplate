@@ -262,6 +262,22 @@ export function DocumentInspector({
                             {kind.note}
                           </p>
                         )}
+                        {/* A heading is never a chunk of its own — ingestion
+                            attaches it to the chunks beneath it — so it has no
+                            box and nothing on the page marks it. Without this
+                            line the view says a document's title and section
+                            headings were not indexed, when in fact they are
+                            prepended to what gets embedded. */}
+                        {chunk.heading && (
+                          <p className="text-muted-foreground text-xs">
+                            Indexed under{' '}
+                            <span className="text-foreground font-medium">
+                              {chunk.heading}
+                            </span>{' '}
+                            — the heading is searched with this chunk rather
+                            than on its own, so it is not marked on the page.
+                          </p>
+                        )}
                         {/* FR4: the STORED text, which is what retrieval
                             matches against — not a tidied rendering of it.
                             Untrusted document content: displayed, never
