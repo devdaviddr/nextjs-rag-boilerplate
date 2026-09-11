@@ -480,10 +480,29 @@ export const chunks = pgTable(
     // EMBEDDED text, never to the displayed text, so a citation shows the
     // document's own words.
     heading: text('heading'),
-    // Lexical half of hybrid retrieval (spec 0027, 1b). Generated, so it can
-    // never drift from `content`.
+    // The caption bound to a table or figure, or — for a caption-less figure —
+    // the one-sentence label a vision model wrote at ingestion (spec 0038 FR1).
+    //
+    // Stored because it is what the chunk is FOUND by. It is prefixed to the
+    // embedded text exactly as `heading` is, and before spec 0038 that was the
+    // only place it existed: a ~40-second vision call produced a sentence that
+    // reached one vector and was then discarded, unreadable by a citation, an
+    // inspector, or the lexical index. NULL for a chunk that never had one, and
+    // for every row written before this column existed.
+    caption: text('caption'),
+    // Lexical half of hybrid retrieval (spec 0027, 1b; widened by spec 0038
+    // FR3). Generated, so it can never drift from the columns it derives from.
+    //
+    // Heading and caption are in here because they are in the EMBEDDED text.
+    // While this read `content` alone, the two halves of hybrid retrieval
+    // searched different documents: a query naming a section or quoting a
+    // caption could be found by the dense half and was invisible to the
+    // lexical one. Measured 2026-09-11 on `rag-cracking-test`, a caption-only
+    // query scored 0.650 dense against the right figure and matched no row
+    // lexically at all.
     contentTsv: tsvector('content_tsv').generatedAlwaysAs(
-      (): SQL => sql`to_tsvector('english', ${chunks.content})`,
+      (): SQL =>
+        sql`to_tsvector('english', coalesce(${chunks.heading}, '') || ' ' || coalesce(${chunks.caption}, '') || ' ' || ${chunks.content})`,
     ),
     // 1-based, matching what a reader sees in a PDF viewer. Chunks never span
     // a page boundary, so a citation is always exact.
@@ -512,6 +531,16 @@ export const chunks = pgTable(
     // before this do: `src/lib/citations/boxes.ts` is the single reader that
     // reconciles them, and a null here falls back to `bbox`.
     boxes: jsonb('boxes').$type<ChunkBox[]>(),
+    // Where the heading and the caption sit on the page (spec 0038 FR2).
+    //
+    // Separate from `boxes` rather than appended to it, because they are not
+    // the same claim. `boxes` says "this text is in the index as a passage";
+    // these say "this text was indexed as context for that passage". Merging
+    // them would draw a heading as though a question could retrieve it on its
+    // own. Null for the text-layer path, which has no boxes at all, and for
+    // every row written before this column existed.
+    headingBbox: jsonb('heading_bbox').$type<ChunkBox>(),
+    captionBbox: jsonb('caption_bbox').$type<ChunkBox>(),
     embedding: halfvec('embedding', { dimensions: 2048 }).notNull(),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },

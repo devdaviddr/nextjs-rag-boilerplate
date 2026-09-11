@@ -10,6 +10,86 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **A document's structure is found in its text layer**
+  ([spec 0039](specs/0039-structure-from-the-text-layer.md)). A page read by
+  the layout parser came back as typed elements and got everything built on
+  them — furniture dropped, headings attached with their boxes, one chunk per
+  element. A page read from the text layer got none of it: one page-sized
+  chunk, the running header promoted to a heading, the footer indexed as prose.
+  Same document, and nothing told the reader the difference was in how the page
+  was _read_ rather than in what it contains.
+
+  The signals were already in the pipeline and being discarded: every text item
+  carries a **point size** and an **end-of-line** flag, and only its string and
+  box were kept. Measured on a real report — body 10.5pt, section headers 12.5,
+  title 17, running header and footer both 7.5 — separating those needs
+  arithmetic, not a model. So a text-layer page now produces the parser's own
+  element shape and flows through the same two functions, with no API call and
+  with document cracking disabled as well as enabled.
+
+  Two thresholds were wrong until real geometry corrected them. Furniture is
+  positioned by line **rank**, not by a margin band: the measured footer sits
+  71% down a page whose content stops early. And the paragraph test is bounded
+  below as well as above, because a column break is a large negative gap that a
+  one-sided test reads as no gap — which merged the foot of one column into the
+  head of the next.
+
+  `pnpm rag:eval` after this and spec 0038: hit@1 0.882, MRR 0.912, refusal
+  accuracy 1.000, cross-KB leakage 0, layout suite 1.000 — identical to the run
+  before both. Chunk boundaries moved for every text-layer document and the
+  numbers did not.
+
+- **The search key is stored, not just embedded**
+  ([spec 0038](specs/0038-store-the-search-key.md)). A figure's caption — or,
+  for a caption-less figure, the sentence a vision model spends ~40 seconds
+  writing — was prepended to the embedded text and then discarded. It reached
+  exactly one vector and nothing else: no lexical match, no citation could show
+  it, nobody could check whether the label was any good.
+
+  Measured on the local corpus before this landed: the query _"unplanned
+  downtime by quarter across all sites"_, whose words appear only in a caption,
+  scored **0.650** dense similarity against the right figure and matched **no
+  row at all** lexically. The two halves of hybrid retrieval were searching
+  different documents.
+
+  `chunks.caption` now stores it, and `chunks.content_tsv` is generated from
+  heading, caption and content together, so a keyword question can find a
+  section title or a caption. Existing rows gain the heading half immediately —
+  the generated column re-derives on migration — and the caption after a
+  re-ingest, which is the only way to recover text that was never written down.
+
+  The inspector draws heading and caption regions on the page in their own
+  weights, with a legend, so text that was indexed as _context_ no longer looks
+  like text that was skipped. Each chunk shows what it is found by, and a **Raw
+  chunk** view shows the stored record verbatim alongside the text composed for
+  embedding — marked as recomputed, because a document renamed after ingestion
+  makes that composition and the stored vector disagree.
+
+- **See what was actually indexed from a document**
+  ([spec 0037](specs/0037-inspect-what-was-indexed.md)). Clicking a document
+  opens every page of it: what happened to that page in plain language, the
+  page image with the indexed regions drawn on it, and the stored text of each
+  chunk — the text retrieval actually matches against, not a tidied rendering
+  of it.
+
+  The database already recorded all of this and the UI showed none of it. A
+  document whose page 8 failed to parse, or that hit its page budget and had
+  the rest read the cheap way, displayed the same `Ready` badge as one indexed
+  perfectly. So the list gains a **Partly indexed** badge — shown _beside_
+  `Ready`, not instead of it, because the document really is searchable and
+  part of it really is missing — whenever the budget ran out, a page failed, or
+  a recorded page produced no chunks at all. That last one is the case that was
+  invisible, and it is the shape of the silent failure document cracking was
+  written to fix.
+
+  The badge is derived from the recorded outcomes on every read rather than
+  stored, so it cannot drift from what ingestion wrote. A `figure` chunk is
+  labelled as a search key and an `ocr` chunk as recovered from an image, so
+  neither reads as a quotation. A document ingested before the per-page record
+  existed says the routing detail is unknown instead of inventing one, and is
+  not marked partial — there is nothing to compare against. Read-only, one page
+  image at a time, and nothing on the ingestion or retrieval path changed.
+
 - **A citation highlights the passage, not just the page**
   ([spec 0035](specs/0035-span-level-citations.md)). Opening a source marks the
   cited region on the page instead of leaving the reader to find the sentence

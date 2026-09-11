@@ -296,4 +296,40 @@ describe('normalizePage', () => {
   it('returns nothing for no input', () => {
     expect(normalizePage([])).toEqual([])
   })
+
+  // Spec 0038 FR2. A heading and a bound caption are both consumed rather than
+  // emitted, so their boxes are the only way anything downstream can show that
+  // text which WAS indexed sits on the page at all.
+  it('carries the heading box onto the elements it owns', () => {
+    const headingBox = box(0.1, 0.1, 0.6, 0.14)
+    const out = normalizePage([
+      element('Section-header', '1. Purpose', headingBox),
+      element('Text', 'first', box(0.1, 0.2, 0.9, 0.26)),
+      element('Text', 'second', box(0.1, 0.3, 0.9, 0.36)),
+    ])
+    expect(out).toHaveLength(2)
+    for (const e of out) {
+      expect(e.heading).toBe('1. Purpose')
+      expect(e.headingBox).toEqual(headingBox)
+    }
+  })
+
+  it('carries the caption box onto the figure it binds to', () => {
+    const captionBox = box(0.1, 0.72, 0.9, 0.76)
+    const out = normalizePage([
+      element('Picture', 'chart', box(0.1, 0.2, 0.9, 0.7)),
+      element('Caption', 'Figure 6.1 — downtime', captionBox),
+    ])
+    const picture = out.find((e) => e.type === 'Picture')
+    expect(picture?.caption).toBe('Figure 6.1 — downtime')
+    expect(picture?.captionBox).toEqual(captionBox)
+  })
+
+  it('leaves both boxes null when there is no heading or caption', () => {
+    const [only] = normalizePage([
+      element('Text', 'alone', box(0.1, 0.2, 0.9, 0.26)),
+    ])
+    expect(only?.headingBox).toBeNull()
+    expect(only?.captionBox).toBeNull()
+  })
 })

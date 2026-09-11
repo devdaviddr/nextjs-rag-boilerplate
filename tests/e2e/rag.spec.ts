@@ -228,3 +228,81 @@ test('re-ingesting a document does not duplicate its chunks', async ({
     await sql.end()
   }
 })
+
+// Spec 0037: what was actually indexed, and the badge that says some of it
+// wasn't. The partial states are forced through the database because the UI
+// cannot produce one on demand — a genuinely failed page needs a document that
+// fails to parse, which is exactly what makes this worth asserting.
+test('a document can be inspected page by page, and a partial one says so', async ({
+  page,
+}) => {
+  test.slow()
+  const dbUrl = process.env.DATABASE_URL
+  test.skip(!dbUrl, 'DATABASE_URL is required for this test')
+
+  const email = await register(page, 'inspect')
+  const kbId = await createKnowledgeBase(page, 'My documents')
+  await page.goto(`/documents/${kbId}`)
+  await page
+    .getByLabel('Upload a PDF')
+    .setInputFiles(`${FIXTURES}/handbook.pdf`)
+
+  const row = page.getByRole('row', { name: /handbook/i })
+  await expect(row.getByText('Ready')).toBeVisible({ timeout: INGEST_TIMEOUT })
+
+  // FR1: reachable from the list.
+  await row.getByRole('link', { name: 'handbook' }).click()
+  await expect(page).toHaveURL(new RegExp(`/documents/${kbId}/[0-9a-f-]+$`))
+  const documentId = page.url().split('/').pop()!
+
+  // FR4: the stored text, on the page it came from.
+  await expect(page.getByRole('heading', { name: 'handbook' })).toBeVisible()
+  await page.getByRole('button', { name: /^Text/ }).first().click()
+  await expect(page.getByText(/\d+ tokens/).first()).toBeVisible()
+
+  const sql = postgres(dbUrl!, { max: 1 })
+  try {
+    // FR3, FR6: a failed page reads as "Not indexed" with its recorded reason,
+    // and the enum never reaches the screen.
+    await sql`UPDATE documents SET extraction = ${sql.json({
+      pages: [
+        { page: 1, route: 'clean-text', outcome: 'text-layer' },
+        { page: 2, route: 'clean-text', outcome: 'text-layer' },
+        {
+          page: 3,
+          route: 'no-text',
+          outcome: 'failed',
+          reason: 'Parser found no elements. This page is not indexed.',
+        },
+      ],
+      parseCalls: 1,
+      describeCalls: 0,
+      budgetExhausted: false,
+    })} WHERE id = ${documentId}
+        AND owner_id = (SELECT id FROM users WHERE email = ${email})`
+
+    await page.reload()
+    await expect(
+      page.getByText('Some of this document is not searchable'),
+    ).toBeVisible()
+    await expect(page.getByText('Not indexed').first()).toBeVisible()
+    await expect(page.getByText('text-layer')).toHaveCount(0)
+    await expect(page.getByText('clean-text')).toHaveCount(0)
+
+    // FR7: and the LIST says so too, beside `Ready` rather than instead of it.
+    await page.goto(`/documents/${kbId}`)
+    await expect(row.getByText('Ready')).toBeVisible()
+    await expect(row.getByText('Partly indexed')).toBeVisible()
+  } finally {
+    await sql.end()
+  }
+
+  // NFR1: someone else's document is a 404, indistinguishable from one that
+  // does not exist. Cookies first — `/register` redirects a signed-in user
+  // away, so the second account cannot be created while the first is active.
+  await page.context().clearCookies()
+  await register(page, 'inspect-other')
+  const otherKbId = await createKnowledgeBase(page, 'Not mine')
+  const response = await page.goto(`/documents/${otherKbId}/${documentId}`)
+  expect(response?.status()).toBe(404)
+})

@@ -4,6 +4,12 @@ import type { ChunkKind, ExtractionPage, ExtractionSummary } from '@/db/schema'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { type Chunk, chunkElements, chunkPages } from './chunk'
+import {
+  type DocumentLayout,
+  type LayoutLine,
+  documentLayout,
+  toElements,
+} from './layout'
 import type { PageText, PositionedItem } from './chunk'
 import { extractPdf } from './extract'
 import { describeFigure, isDescribableFigure } from './describe'
@@ -38,13 +44,53 @@ export interface CrackResult {
   summary: ExtractionSummary
 }
 
-/** Text-layer chunks for a single page, continuing the document's sequence. */
+/**
+ * Text-layer chunks for a single page, continuing the document's sequence.
+ *
+ * With a detected layout (spec 0039) the page is turned into the same
+ * `ParsedElement[]` the parser would have produced and run through
+ * `normalizePage`/`chunkElements` — so the running header is dropped, headings
+ * attach to the text they own and carry their box, and each paragraph is its
+ * own chunk with its own region.
+ *
+ * Without one — no positioned items, or a PDF that reports no point sizes —
+ * this falls back to `chunkPages`, exactly as it behaved before. The fallback
+ * is not an error path: it is the honest answer when there is no signal.
+ */
 function textLayerChunks(
   page: PageText,
   startIndex: number,
-  options: { chunkTokens: number; overlapTokens: number },
+  options: {
+    chunkTokens: number
+    overlapTokens: number
+    layout?: DocumentLayout
+    lines?: readonly LayoutLine[]
+    textKind?: ChunkKind
+  },
 ): Chunk[] {
-  return chunkPages([page], options).map((chunk, i) => ({
+  const { chunkTokens, overlapTokens, layout, lines, textKind } = options
+
+  if (layout?.bodySize && lines && lines.length > 0) {
+    const elements = toElements(lines, {
+      bodySize: layout.bodySize,
+      furniture: layout.furniture,
+      ...(layout.options ? { options: layout.options } : {}),
+    })
+    const normalised = normalizePage(elements)
+    if (normalised.length > 0) {
+      return chunkElements(normalised, page.pageNumber, {
+        chunkTokens,
+        overlapTokens,
+        startIndex,
+        ...(textKind ? { textKind } : {}),
+      })
+    }
+    // Everything on the page classified as furniture, which for a real page is
+    // far more likely to be a detection failure than a page of nothing. Fall
+    // through rather than index an empty page.
+  }
+
+  return chunkPages([page], { chunkTokens, overlapTokens }).map((chunk, i) => ({
     ...chunk,
     chunkIndex: startIndex + i,
   }))
@@ -221,6 +267,13 @@ export async function crackDocument(
   const signals = await collectPageSignals(pdf, pageTexts)
   const routes: PageRoute[] = signals.map((s) => classifyPage(s))
 
+  // Once per document (spec 0039): body point size and the running
+  // header/footer are facts about the whole document, and deriving them per
+  // page would make page 1's answer differ from page 5's.
+  const { layout, linesByPage } = pageItems
+    ? documentLayout(pageItems)
+    : { layout: undefined, linesByPage: [] }
+
   const chunks: Chunk[] = []
   const pages: ExtractionPage[] = []
   let parseCalls = 0
@@ -257,7 +310,13 @@ export async function crackDocument(
     // spent. Both produce text-layer chunks; only the reason differs, and the
     // reason is what makes a partially-cracked document honest.
     if (!requiresCracking(route)) {
-      chunks.push(...textLayerChunks(page, chunks.length, options))
+      chunks.push(
+        ...textLayerChunks(page, chunks.length, {
+          ...options,
+          ...(layout ? { layout } : {}),
+          ...(linesByPage[index] ? { lines: linesByPage[index] } : {}),
+        }),
+      )
       record('text-layer')
       await onPageProcessed?.(pageNumber, summarySoFar())
       continue
@@ -270,7 +329,13 @@ export async function crackDocument(
     // resume must be invisible in the output, not just cheaper.
     if (parseCalls >= env.RAG_CRACK_MAX_PAGES) {
       budgetExhausted = true
-      chunks.push(...textLayerChunks(page, chunks.length, options))
+      chunks.push(
+        ...textLayerChunks(page, chunks.length, {
+          ...options,
+          ...(layout ? { layout } : {}),
+          ...(linesByPage[index] ? { lines: linesByPage[index] } : {}),
+        }),
+      )
       record(
         'budget-skipped',
         `Document reached its ${env.RAG_CRACK_MAX_PAGES}-page cracking budget.`,
@@ -350,7 +415,11 @@ export async function crackDocument(
       // Fall back to whatever the text layer holds. For a `no-text` page that
       // is nothing, and the page is recorded as unindexed rather than silently
       // contributing zero chunks — which is the failure this spec exists for.
-      const fallback = textLayerChunks(page, chunks.length, options)
+      const fallback = textLayerChunks(page, chunks.length, {
+        ...options,
+        ...(layout ? { layout } : {}),
+        ...(linesByPage[index] ? { lines: linesByPage[index] } : {}),
+      })
       chunks.push(...fallback)
       record(
         'failed',
@@ -411,7 +480,23 @@ export async function chunksFromPdf(
   )
 
   if (!cracking) {
-    return { chunks: chunkPages(pages, options), pageCount }
+    // Structure detection is not part of cracking (spec 0039): it costs no
+    // API call, so a deployment with cracking off still gets headings, drops
+    // its running header and chunks per paragraph.
+    const { layout, linesByPage } = documentLayout(
+      options.pageItems ?? itemsByPage,
+    )
+    const chunks: Chunk[] = []
+    for (const [index, page] of pages.entries()) {
+      chunks.push(
+        ...textLayerChunks(page, chunks.length, {
+          ...options,
+          layout,
+          ...(linesByPage[index] ? { lines: linesByPage[index] } : {}),
+        }),
+      )
+    }
+    return { chunks, pageCount }
   }
 
   const { chunks, summary } = await crackDocument(pdf, allPageTexts, {

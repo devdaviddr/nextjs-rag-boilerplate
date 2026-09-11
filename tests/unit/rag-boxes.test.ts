@@ -113,6 +113,8 @@ describe('both paths agree on where a region is', () => {
       bbox: { xmin: 0.1, ymin: 0.048, xmax: 0.5, ymax: 0.062 },
       heading: 'Section 7 - Plant Utilisation',
       caption: null,
+      headingBox: null,
+      captionBox: null,
       atomic: false,
     }
     const [fromCrack] = chunkElements([element], 1, {
@@ -136,6 +138,8 @@ describe('both paths agree on where a region is', () => {
       bbox: { xmin: 0.1, ymin: 0.2, xmax: 0.9, ymax: 0.4 },
       heading: null,
       caption: null,
+      headingBox: null,
+      captionBox: null,
       atomic: true,
     }
     const [chunk] = chunkElements([element], 3, {

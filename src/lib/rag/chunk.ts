@@ -25,6 +25,15 @@ import type { NormalizedElement } from './normalize'
 export interface PositionedItem {
   str: string
   box: ChunkBox | null
+  /**
+   * Point size and end-of-line, as the PDF reports them (spec 0039).
+   *
+   * Optional because a caller may have none — `layout.ts` treats a missing
+   * size as body text rather than guessing, so a PDF that reports nothing
+   * degrades to exactly the behaviour this path had before.
+   */
+  fontSize?: number
+  endsLine?: boolean
 }
 
 export interface PageText {
@@ -77,6 +86,14 @@ export interface Chunk {
   boxes?: ChunkBox[]
   /** A caption bound to a table or figure, carried into the embedded text. */
   caption?: string | null
+  /**
+   * Where the heading and caption sit on the page (spec 0038 FR2).
+   *
+   * Only the cracked path has them: `chunkPages` derives its heading from the
+   * page's first line, which has no box because the text layer has no layout.
+   */
+  headingBox?: ChunkBox | null
+  captionBox?: ChunkBox | null
 }
 
 export interface ChunkOptions {
@@ -656,6 +673,8 @@ export function chunkElements(
       content,
       heading: element.heading,
       caption: element.caption,
+      headingBox: element.headingBox,
+      captionBox: element.captionBox,
       pageNumber,
       chunkIndex: chunkIndex++,
       tokenCount: estimateTokens(content),

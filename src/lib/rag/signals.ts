@@ -21,6 +21,16 @@ interface TextItem {
   y: number
   width: number
   height: number
+  /**
+   * Point size, as `unpdf` reports it (spec 0039).
+   *
+   * The one signal that separates a heading from a paragraph without a layout
+   * model — and it was being discarded one function below, which is why the
+   * text-layer path could see no structure at all.
+   */
+  fontSize?: number
+  /** True on the last item of a visual line, so lines need not be inferred. */
+  hasEOL?: boolean
 }
 
 /**
@@ -97,7 +107,14 @@ export function toPositionedItems(
       Math.abs(item.width) > 0 &&
       Math.abs(item.height) > 0
 
-    if (!usable) return { str: item.str, box: null }
+    const typography = {
+      ...(Number.isFinite(item.fontSize) && (item.fontSize ?? 0) > 0
+        ? { fontSize: item.fontSize }
+        : {}),
+      ...(item.hasEOL === true ? { endsLine: true } : {}),
+    }
+
+    if (!usable) return { str: item.str, box: null, ...typography }
 
     // `y` is the baseline and `height` the glyph height, so the item's box
     // runs upward from the baseline in PDF space.
@@ -114,9 +131,9 @@ export function toPositionedItems(
       ymax: clamp(Math.max(ay, by) / pageHeight),
     }
     if (box.xmax <= box.xmin || box.ymax <= box.ymin) {
-      return { str: item.str, box: null }
+      return { str: item.str, box: null, ...typography }
     }
-    return { str: item.str, box }
+    return { str: item.str, box, ...typography }
   })
 }
 

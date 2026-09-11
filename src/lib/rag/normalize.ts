@@ -37,6 +37,16 @@ export interface NormalizedElement extends ParsedElement {
   heading: string | null
   /** A `Caption` bound to this `Table`/`Picture`, if one was found (FR3). */
   caption: string | null
+  /**
+   * Where the heading and caption sit on the page (spec 0038 FR2).
+   *
+   * Both are consumed rather than emitted — a heading is never an element of
+   * its own and a bound caption is suppressed — so without their boxes nothing
+   * downstream can mark them, and text that genuinely was indexed looks on the
+   * page like text that was skipped.
+   */
+  headingBox: BBox | null
+  captionBox: BBox | null
   /** Chunk whole, never split to a token budget. */
   atomic: boolean
 }
@@ -234,8 +244,8 @@ export function dedupe(
 function bindCaptions(
   elements: ParsedElement[],
   maxDistance: number,
-): Map<number, string> {
-  const bindings = new Map<number, string>()
+): Map<number, { text: string; bbox: BBox }> {
+  const bindings = new Map<number, { text: string; bbox: BBox }>()
   const atomics = elements
     .map((element, index) => ({ element, index }))
     .filter(({ element }) => ATOMIC_TYPES.has(element.type))
@@ -264,7 +274,12 @@ function bindCaptions(
     if (!best || best.score > maxDistance) return
     // First caption wins: after dedupe, a second one binding to the same figure
     // is a different caption, and overwriting would silently discard it.
-    if (!bindings.has(best.index)) bindings.set(best.index, element.text.trim())
+    if (!bindings.has(best.index)) {
+      bindings.set(best.index, {
+        text: element.text.trim(),
+        bbox: element.bbox,
+      })
+    }
   })
 
   return bindings
@@ -305,11 +320,12 @@ export function normalizePage(
 
   // Which captions got bound, so they are not also emitted as loose text.
   const boundCaptionText = new Set(
-    [...captions.values()].map((text) => textKey(text)),
+    [...captions.values()].map(({ text }) => textKey(text)),
   )
 
   const out: NormalizedElement[] = []
   let heading: string | null = null
+  let headingBox: BBox | null = null
 
   ordered.forEach((element, index) => {
     if (FURNITURE_TYPES.has(element.type)) return
@@ -317,6 +333,9 @@ export function normalizePage(
     if (HEADING_TYPES.has(element.type)) {
       // Strip leading markdown hashes the parser emits on headings.
       heading = element.text.replace(/^#+\s*/, '').trim() || null
+      // Cleared with the heading: a box with no text to explain it is a
+      // rectangle drawn around nothing.
+      headingBox = heading ? element.bbox : null
       return
     }
 
@@ -330,12 +349,15 @@ export function normalizePage(
     const atomic = ATOMIC_TYPES.has(element.type)
     const text =
       element.type === 'Table' ? repairTableMarkup(element.text) : element.text
+    const caption = captions.get(index) ?? null
 
     out.push({
       ...element,
       text,
       heading,
-      caption: captions.get(index) ?? null,
+      headingBox,
+      caption: caption?.text ?? null,
+      captionBox: caption?.bbox ?? null,
       atomic,
     })
   })

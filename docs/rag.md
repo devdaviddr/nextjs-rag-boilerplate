@@ -47,20 +47,21 @@ two jobs, plus the guarantees below that keep them honest.
 
 ## On this page
 
-| Section                                       | What it covers                                                                   |
-| --------------------------------------------- | -------------------------------------------------------------------------------- |
-| [Two guarantees](#two-guarantees)             | The two properties enforced in code, not asked of the model                      |
-| [The pipeline](#the-pipeline)                 | The whole system in one diagram                                                  |
-| [Ingestion](#ingestion)                       | PDF → text → chunks → embeddings → rows                                          |
-| [Search](#search)                             | Question → retrieved passages → grounded answer, or a refusal                    |
-| [Setup](#setup)                               | Get a key, ask your first question, run offline, tune it                         |
-| [Reference](#reference)                       | Module map, the streaming protocol, rate limits                                  |
-| [Under the hood](#under-the-hood)             | Why the column is `halfvec(2048)`, the data model, the SQL, the request sequence |
-| [Evaluation](#evaluation)                     | `pnpm rag:eval`, the measured numbers, the refusal gate                          |
-| [The agentic path](#the-agentic-path)         | The optional loop where the model directs retrieval, and its measured cost       |
-| [Document cracking](#document-cracking)       | The optional path that reads tables, figures and scanned pages                   |
-| [When things go wrong](#when-things-go-wrong) | Failures observed on a live endpoint, and how each is handled                    |
-| [Known gaps](#known-gaps)                     | What this does not do, named rather than hidden                                  |
+| Section                                                     | What it covers                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [Two guarantees](#two-guarantees)                           | The two properties enforced in code, not asked of the model                          |
+| [The pipeline](#the-pipeline)                               | The whole system in one diagram                                                      |
+| [Ingestion](#ingestion)                                     | PDF → text → chunks → embeddings → rows                                              |
+| [Search](#search)                                           | Question → retrieved passages → grounded answer, or a refusal                        |
+| [Setup](#setup)                                             | Get a key, ask your first question, run offline, tune it                             |
+| [Reference](#reference)                                     | Module map, the streaming protocol, rate limits                                      |
+| [Under the hood](#under-the-hood)                           | Why the column is `halfvec(2048)`, the data model, the SQL, the request sequence     |
+| [Evaluation](#evaluation)                                   | `pnpm rag:eval`, the measured numbers, the refusal gate                              |
+| [The agentic path](#the-agentic-path)                       | The optional loop where the model directs retrieval, and its measured cost           |
+| [Document cracking](#document-cracking)                     | The optional path that reads tables, figures and scanned pages                       |
+| [Inspecting what was indexed](#inspecting-what-was-indexed) | What the system stored for a document, page by page, and what "partly indexed" means |
+| [When things go wrong](#when-things-go-wrong)               | Failures observed on a live endpoint, and how each is handled                        |
+| [Known gaps](#known-gaps)                                   | What this does not do, named rather than hidden                                      |
 
 A reader who wants the thing running can go straight to [Setup](#setup) and
 come back. Everything from [Under the hood](#under-the-hood) onwards is design
@@ -258,10 +259,25 @@ names a document or section has something to match. The original `content` is
 stored separately and is what a citation shows, so the synthetic preamble never
 reaches the user.
 
-Heading detection is deliberately conservative — a short first line that is not
-a sentence. Missing a heading loses a little context; promoting a _sentence_ to
-a heading prepends it to every chunk on that page and pollutes their embeddings,
-so the detector prefers to miss.
+Heading detection reads the PDF's **point sizes**
+([spec 0039](../specs/0039-structure-from-the-text-layer.md)). A short line set
+above the document's body size is a heading; well above it, the title. Measured
+on a real report: body 10.5pt, section headers 12.5, the title 17.
+
+The same pass finds **page furniture** — a line repeated at the same end of
+every page, set smaller than body text, is a running header or footer and is
+dropped rather than indexed as prose. Before it, a document's running header
+became the "heading" of every text-layer chunk in it, and the footer was
+indexed as content.
+
+Every rule fails towards plain text. Missing a heading loses a little context;
+promoting a _sentence_ to a heading prepends it to every chunk on the page, and
+mistaking a paragraph for furniture **deletes it from the index** — so the
+furniture test requires repetition across pages _and_ a size strictly smaller
+than body text.
+
+A PDF that reports no point sizes falls back to page-level chunking, exactly as
+this path worked before.
 
 ### 4. Embed
 
@@ -1365,6 +1381,121 @@ Parser and vision output is also model-generated text that lands in the index
 and later reaches the answering model, so text rendered _inside an image_ — which
 no text-layer check sees and nobody skims — now has a path into a prompt. The
 owner and knowledge-base filters bound the blast radius; nothing else does.
+
+## Inspecting what was indexed
+
+A document's row says `Ready · 8 pages · 21 chunks` and, until spec 0037,
+stopped there. Everything else the system knew about that document — which
+pages it parsed, which it read the cheap way, which it gave up on and why, what
+text it actually stored, and where on the page each chunk came from — was
+recorded in `documents.extraction` and shown to nobody.
+
+Clicking a document's title opens `/documents/[kbId]/[documentId]`: every page
+of the document, what happened to it in plain language, the page image with the
+indexed regions drawn on it, and the stored text of each chunk.
+
+### What "partly indexed" means
+
+The documents list shows a **Partly indexed** badge beside `Ready` when any of
+three things is true:
+
+- **the page budget ran out** (`budgetExhausted`) — `RAG_CRACK_MAX_PAGES` was
+  reached, so the remaining pages were read from the text layer only. This is
+  deliberate: [cracking degrades rather than fails](#budgets-and-degrading-rather-than-failing).
+- **a page failed** — its `outcome` is `failed`, and nothing from it is in the
+  index.
+- **a recorded page produced no chunks** — the page was read successfully and
+  yielded nothing searchable. This is the one that used to be invisible, and it
+  is the shape of the silent failure document cracking was written to fix: a
+  scanned appendix that ingested, reported success, and was not in the index.
+
+The badge is derived from the recorded outcomes on every read, never stored. A
+second copy of this answer would drift from the one written at ingestion, which
+is the only moment that knows it.
+
+Ready and Partly indexed are shown **together**, not as alternatives. The
+document really is searchable, and part of it really is missing; collapsing
+those into a single badge is how `Ready` came to mean both.
+
+### Reading the detail view
+
+Each page states its route and outcome in words rather than the stored enum —
+"read from the page's own text", "read page by page — it has columns or a
+table", "scanned page, read with OCR", "not indexed" plus the recorded reason.
+The vocabulary in the database is internal, and its meaning is the entire thing
+being communicated.
+
+A heading — a document title or a section header — is **not** a chunk and has
+no region on the page, because `normalizePage` consumes heading elements and
+attaches them to the chunks beneath them. It is still indexed:
+`buildEmbeddingText` prepends the document title and the heading before
+embedding, so a question naming a section matches through it. The detail view
+says which heading a chunk sits under for exactly this reason — without it, a
+title with no box on the page reads as a title that was never indexed.
+
+Spec 0038 closed the asymmetry this used to create: `chunks.content_tsv` is
+generated from heading, caption and content together, so a keyword-only match
+on a section title fires like any other. Existing rows picked this up when the
+generated column was rebuilt — no re-ingest needed for headings, though a
+caption needs one.
+
+Chunk text is shown **as stored**, because that is what retrieval matches
+against. An `ocr` chunk is labelled as recovered from an image, so it does not
+read as a clean quotation.
+
+A `figure` chunk needs more care than a label. Its stored `content` is the text
+the parser read _inside_ the figure — axis labels, the words in a flow
+diagram's boxes. What makes the figure findable is its caption, or the
+one-sentence label a vision model writes for a caption-less figure. Since
+[spec 0038](../specs/0038-store-the-search-key.md) that is stored in
+`chunks.caption`, shown beside the content as **Found by**, and included in the
+lexical index — before it, it reached one vector and nothing else.
+
+What is stored is not a reading of the figure either. A flow diagram's arrows
+are nowhere in the index; `read_figure` reads them at answer time with a
+question in hand, for the reason
+[Figures are a search key, never evidence](#figures-are-a-search-key-never-evidence)
+sets out.
+
+### Three kinds of region
+
+| drawn as            | means                                             |
+| ------------------- | ------------------------------------------------- |
+| solid amber ring    | indexed as a passage retrieval can return         |
+| thin blue outline   | a heading, searched with the chunks beneath it    |
+| dashed teal outline | a caption — what makes a figure or table findable |
+
+Headings and captions are never chunks of their own: `normalizePage` consumes
+them and attaches them to the elements they own. Until their boxes were stored,
+a document's title sat unmarked on the page and read as text that had been
+skipped.
+
+### Raw chunk
+
+Each chunk has a **Raw chunk** disclosure showing the stored record verbatim —
+kind, token count, heading, caption, every region — plus the text
+`buildEmbeddingText` composes for the embedding. That composed string is
+**recomputed for display, not read back from the vector**: renaming a document
+after ingestion makes the two disagree, and the view says so rather than
+presenting a recomposition as a record.
+
+A document ingested before `documents.extraction` existed, or with cracking
+off, says the routing detail was not recorded and lists the chunks it has. It
+does not invent a per-page story, and it is not marked partly indexed — with no
+record there is nothing to compare against.
+
+### Why it exists
+
+When the system says _"I couldn't find anything about that in your
+documents"_, the user has no way to tell that from _"that page never got
+indexed"_. Refusal accuracy is this project's strongest guarantee and the one a
+user is least able to check. This view is what makes a refusal verifiable
+rather than something to take on trust.
+
+Read-only throughout: no route added for it mutates a document, a chunk or an
+extraction record, and nothing on the ingestion or retrieval path changed. Only
+the page you are looking at is fetched as an image, so a 200-page document
+costs one render, not two hundred.
 
 ## When things go wrong
 
