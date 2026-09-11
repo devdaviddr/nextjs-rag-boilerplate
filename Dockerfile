@@ -3,7 +3,29 @@
 # ---------- Base ----------
 FROM node:22-alpine AS base
 # libc6-compat helps some native addons resolve on Alpine/musl.
-RUN apk add --no-cache libc6-compat
+#
+# `font-liberation` is not a nicety. Alpine ships NO fonts, and a PDF is not
+# required to embed the ones it names — the standard 14 (Helvetica, Times,
+# Courier) may simply be referenced and left to the reader. With no font on the
+# box, `@napi-rs/canvas` draws no glyphs and a page of text renders as a blank
+# sheet: no error, no log line.
+#
+# That is not a cosmetic bug. The rendered PNG is what `nemotron-parse` is
+# shown, so a blank render means the parser is handed an empty page, reports
+# "no elements", and the document is indexed from its text layer if it has one
+# — or from the few vector rules that did draw, if it does not. Measured on a
+# real clinical guideline (2026-09-11): 0.32% of pixels inked instead of 4.7%,
+# and three pages whose parse "succeeded" indexed 16-32 tokens each, all of it
+# table borders. Ingestion reported success throughout.
+#
+# It never reproduced in development because macOS has Helvetica installed.
+# Liberation Sans is metric-compatible with Helvetica/Arial, so substituted
+# text keeps the layout the boxes are positioned against.
+#
+# pdf.js's own bundled `standard_fonts` are NOT an alternative: it loads them
+# over a `file://` URL, which Node's `fetch` refuses, so every one fails with
+# "Unable to load font data" and the page still comes out blank.
+RUN apk add --no-cache libc6-compat font-liberation fontconfig
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 # Skip git hooks (husky) inside the container — there is no .git here.

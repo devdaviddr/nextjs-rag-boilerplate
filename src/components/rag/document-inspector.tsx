@@ -58,7 +58,10 @@ export function DocumentInspector({
     )
   }
 
-  const description = describePage(page)
+  const description = describePage({
+    ...page,
+    hasChunks: page.chunks.length > 0,
+  })
 
   const select = (n: number) => {
     if (n === selectedPage) return
@@ -100,7 +103,7 @@ export function DocumentInspector({
         <nav aria-label="Pages" className="max-h-[70vh] overflow-auto pr-1">
           <ul className="space-y-1">
             {pages.map((p) => {
-              const d = describePage(p)
+              const d = describePage({ ...p, hasChunks: p.chunks.length > 0 })
               return (
                 <li key={p.page}>
                   <button

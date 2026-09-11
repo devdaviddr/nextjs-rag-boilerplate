@@ -107,8 +107,19 @@ export function describePage(page: {
   route?: ExtractionPage['route']
   outcome?: ExtractionPage['outcome']
   reason?: string
+  /**
+   * Whether the page produced any chunks.
+   *
+   * `outcome: 'failed'` does NOT mean the page is unindexed. When the parser
+   * fails, `crack.ts` falls back to the text layer, and on a page with a good
+   * text layer that recovers everything — observed on a real document, three
+   * "failed" pages carrying 621, 602 and 318 tokens between them. Calling
+   * those "Not indexed" is the same lie of omission as calling a half-indexed
+   * document `Ready`, pointing the other way.
+   */
+  hasChunks?: boolean
 }): { headline: string; detail?: string; indexed: boolean } {
-  const { route, outcome, reason } = page
+  const { route, outcome, reason, hasChunks } = page
 
   if (!outcome) {
     return {
@@ -120,6 +131,17 @@ export function describePage(page: {
   }
 
   if (outcome === 'failed') {
+    // The fallback worked. The page is searchable; what failed was the
+    // expensive route, which is worth saying and is not the same warning.
+    if (hasChunks) {
+      return {
+        headline: "Read from the page's own text",
+        detail:
+          reason ??
+          'Page-by-page reading failed here, so it was read from the text layer instead.',
+        indexed: true,
+      }
+    }
     return {
       headline: 'Not indexed',
       // The recorded reason is written for a user already; passing it through
@@ -254,7 +276,13 @@ export function indexingCompleteness(
   const reasons: string[] = []
   if (!extraction) return { partial: false, reasons }
 
-  const failed = extraction.pages.filter((p) => p.outcome === 'failed')
+  // A failed page that still produced chunks was recovered from the text
+  // layer and IS searchable. Counting it as unreadable overstates the damage,
+  // and a warning that cries wolf is how the real ones stop being read.
+  const failed = extraction.pages.filter(
+    (p) =>
+      p.outcome === 'failed' && (chunksByPage.get(p.page)?.length ?? 0) === 0,
+  )
   if (failed.length > 0) {
     reasons.push(
       `${failed.length} page${failed.length === 1 ? '' : 's'} could not be read — ${pageList(failed.map((p) => p.page))}`,

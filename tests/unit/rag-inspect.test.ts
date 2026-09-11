@@ -62,6 +62,30 @@ describe('describePage', () => {
     expect(d.detail).toContain('not indexed')
   })
 
+  it('does not call a page unindexed when the text-layer fallback recovered it', () => {
+    // `outcome: 'failed'` means the expensive route failed, not that the page
+    // is missing. Observed on a real document: three "failed" pages carrying
+    // 621, 602 and 318 tokens, every one of them searchable.
+    const recovered = describePage({
+      route: 'structured',
+      outcome: 'failed',
+      reason:
+        'Parser found no elements on page 6. Read from the text layer instead.',
+      hasChunks: true,
+    })
+    expect(recovered.indexed).toBe(true)
+    expect(recovered.headline).not.toMatch(/not indexed/i)
+
+    const lost = describePage({
+      route: 'structured',
+      outcome: 'failed',
+      reason: 'Parser found no elements. This page is not indexed.',
+      hasChunks: false,
+    })
+    expect(lost.indexed).toBe(false)
+    expect(lost.headline).toBe('Not indexed')
+  })
+
   it('never renders the stored enum (FR3)', () => {
     const routes = [
       'clean-text',
@@ -143,6 +167,28 @@ describe('indexingCompleteness', () => {
     expect(partial).toBe(true)
     // Which page, not just how many — a bare count is not actionable.
     expect(reasons.join(' ')).toContain('page 2')
+  })
+
+  it('does not count a failed page the text layer recovered', () => {
+    // A warning that cries wolf is how the real ones stop being read.
+    const extraction = summary([
+      { page: 1, route: 'clean-text', outcome: 'text-layer' },
+      {
+        page: 2,
+        route: 'structured',
+        outcome: 'failed',
+        reason: 'Parser found no elements. Read from the text layer instead.',
+      },
+    ])
+    expect(
+      indexingCompleteness(
+        extraction,
+        new Map([
+          [1, [chunk(1)]],
+          [2, [chunk(2)]],
+        ]),
+      ),
+    ).toEqual({ partial: false, reasons: [] })
   })
 
   it('flags an exhausted budget even when every page succeeded (FR7)', () => {
