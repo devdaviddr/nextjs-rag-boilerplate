@@ -159,13 +159,33 @@ the same two functions the cracked path calls.
 
 ## Acceptance criteria
 
-- [ ] A text-layer page produces one element per paragraph, heading and caption
-- [ ] The running header and footer are absent from the indexed content
-- [ ] A text-layer chunk's `heading` is the section heading, with a box
-- [ ] Two columns do not merge into one passage
-- [ ] A PDF reporting no point sizes produces exactly what it did before
-- [ ] Detection runs with `RAG_CRACK_ENABLED` off
-- [ ] `pnpm rag:eval` is run and its numbers reported against the reference
+- [x] A text-layer page produces one element per paragraph, heading and caption
+- [x] The running header and footer are absent from the indexed content
+- [x] A text-layer chunk's `heading` is the section heading, with a box
+- [x] Two columns do not merge into one passage
+- [x] A PDF reporting no point sizes produces exactly what it did before
+- [x] Detection runs with `RAG_CRACK_ENABLED` off
+- [x] `pnpm rag:eval` is run and its numbers reported against the reference
+
+### Measured, 2026-09-11
+
+Identical to the run of 2026-09-10, before this spec and
+[`0038`](0038-store-the-search-key.md):
+
+|                          | 2026-09-10 | after 0038 + 0039 |
+| ------------------------ | ---------- | ----------------- |
+| single-hop hit@1 (n=17)  | 0.882      | 0.882             |
+| single-hop MRR           | 0.912      | 0.912             |
+| refusal accuracy         | 1.000      | 1.000             |
+| cross-KB leakage         | 0          | 0                 |
+| layout suite hit@1 (n=8) | 1.000      | 1.000             |
+
+Chunk boundaries moved for every text-layer document in the corpus and the
+numbers did not move at all. That is the result: **no regression, and no
+measured gain either**. The gains this spec claims — furniture out of the
+index, a heading that is the real heading, consistent regions on the page — are
+not things these questions ask about. Worth saying plainly rather than
+implying the eval endorsed them.
 
 ## Security & privacy
 

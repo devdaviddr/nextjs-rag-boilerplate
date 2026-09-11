@@ -10,6 +10,35 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **A document's structure is found in its text layer**
+  ([spec 0039](specs/0039-structure-from-the-text-layer.md)). A page read by
+  the layout parser came back as typed elements and got everything built on
+  them — furniture dropped, headings attached with their boxes, one chunk per
+  element. A page read from the text layer got none of it: one page-sized
+  chunk, the running header promoted to a heading, the footer indexed as prose.
+  Same document, and nothing told the reader the difference was in how the page
+  was _read_ rather than in what it contains.
+
+  The signals were already in the pipeline and being discarded: every text item
+  carries a **point size** and an **end-of-line** flag, and only its string and
+  box were kept. Measured on a real report — body 10.5pt, section headers 12.5,
+  title 17, running header and footer both 7.5 — separating those needs
+  arithmetic, not a model. So a text-layer page now produces the parser's own
+  element shape and flows through the same two functions, with no API call and
+  with document cracking disabled as well as enabled.
+
+  Two thresholds were wrong until real geometry corrected them. Furniture is
+  positioned by line **rank**, not by a margin band: the measured footer sits
+  71% down a page whose content stops early. And the paragraph test is bounded
+  below as well as above, because a column break is a large negative gap that a
+  one-sided test reads as no gap — which merged the foot of one column into the
+  head of the next.
+
+  `pnpm rag:eval` after this and spec 0038: hit@1 0.882, MRR 0.912, refusal
+  accuracy 1.000, cross-KB leakage 0, layout suite 1.000 — identical to the run
+  before both. Chunk boundaries moved for every text-layer document and the
+  numbers did not.
+
 - **The search key is stored, not just embedded**
   ([spec 0038](specs/0038-store-the-search-key.md)). A figure's caption — or,
   for a caption-less figure, the sentence a vision model spends ~40 seconds

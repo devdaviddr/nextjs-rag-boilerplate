@@ -259,10 +259,25 @@ names a document or section has something to match. The original `content` is
 stored separately and is what a citation shows, so the synthetic preamble never
 reaches the user.
 
-Heading detection is deliberately conservative — a short first line that is not
-a sentence. Missing a heading loses a little context; promoting a _sentence_ to
-a heading prepends it to every chunk on that page and pollutes their embeddings,
-so the detector prefers to miss.
+Heading detection reads the PDF's **point sizes**
+([spec 0039](../specs/0039-structure-from-the-text-layer.md)). A short line set
+above the document's body size is a heading; well above it, the title. Measured
+on a real report: body 10.5pt, section headers 12.5, the title 17.
+
+The same pass finds **page furniture** — a line repeated at the same end of
+every page, set smaller than body text, is a running header or footer and is
+dropped rather than indexed as prose. Before it, a document's running header
+became the "heading" of every text-layer chunk in it, and the footer was
+indexed as content.
+
+Every rule fails towards plain text. Missing a heading loses a little context;
+promoting a _sentence_ to a heading prepends it to every chunk on the page, and
+mistaking a paragraph for furniture **deletes it from the index** — so the
+furniture test requires repetition across pages _and_ a size strictly smaller
+than body text.
+
+A PDF that reports no point sizes falls back to page-level chunking, exactly as
+this path worked before.
 
 ### 4. Embed
 
