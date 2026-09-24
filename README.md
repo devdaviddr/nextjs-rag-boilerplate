@@ -56,7 +56,8 @@ Two rules are built into the code, so the model can't break them:
   query, not an instruction the model could be talked out of.
 
 Sign-in, the database, file storage, offline support and Docker are already set
-up. `pnpm rag:eval` scores how well the search is working.
+up. They come from **[nextjs-fullstack-boilerplate](https://github.com/devdaviddr/nextjs-fullstack-boilerplate)**,
+which this project is built on. `pnpm rag:eval` scores how well the search is working.
 
 ---
 
