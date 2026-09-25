@@ -224,6 +224,40 @@ export async function runAgenticLoop(
     elapsedMs: elapsed(),
   })
 
+  /**
+   * Stop because the planner is unusable — but never with NO evidence.
+   *
+   * With the agentic path on by default, a planner that fails before its first
+   * search (endpoint down, call timed out, nothing usable in the response) used
+   * to end the loop with zero chunks, and zero chunks can only become a
+   * refusal. Observed 2026-09-25: the planner model hung on every call, and
+   * every question was refused after the 15s budget while the embedding and
+   * chat models were healthy. So, as when the planner answers before
+   * searching, the original question is searched once — the fixed path's
+   * retrieval — and the answer is grounded in that instead.
+   */
+  const unavailable = async (): Promise<LoopOutcome> => {
+    if (searches === 0 && chunks.length === 0 && deps.fallbackQuery) {
+      deps.onPlanFailure?.(
+        'planner unavailable before searching; falling back to one search',
+      )
+      searches += 1
+      const found = await deps.search(deps.fallbackQuery, undefined)
+      chunks = accumulate(chunks, found)
+      steps.push({
+        iteration: searches,
+        query: deps.fallbackQuery,
+        resultCount: found.length,
+        bestSimilarity: found.length
+          ? Math.max(...found.map((c) => c.similarity))
+          : null,
+        found: '',
+        elapsedMs: elapsed(),
+      })
+    }
+    return finish('planner-unavailable')
+  }
+
   for (;;) {
     // Budgets are checked BEFORE the expensive call, never after. Checking
     // afterwards would let each bound be exceeded by exactly one call.
@@ -243,7 +277,7 @@ export async function runAgenticLoop(
       // The planner failing is not the request failing. Whatever was gathered
       // so far still stands, and the caller decides whether it is enough.
       deps.onPlanFailure?.('planner call threw', error)
-      return finish('planner-unavailable')
+      return unavailable()
     }
     tokensUsed += result.tokens
 
@@ -253,7 +287,7 @@ export async function runAgenticLoop(
     // usable is how a bounded loop quietly becomes an unbounded one.
     if (!decision) {
       deps.onPlanFailure?.('no usable decision in the response')
-      return finish('planner-unavailable')
+      return unavailable()
     }
     if (decision.action === 'answer') {
       // Answering before any evidence exists is not a decision the planner is
@@ -279,7 +313,7 @@ export async function runAgenticLoop(
       const figureQuestion = decision.figureQuestion?.trim()
       if (!chunkId || !figureQuestion || !deps.readFigure) {
         deps.onPlanFailure?.('figure decision was not usable')
-        return finish('planner-unavailable')
+        return unavailable()
       }
 
       searches += 1
@@ -317,7 +351,7 @@ export async function runAgenticLoop(
     const query = decision.query?.trim()
     if (!query) {
       deps.onPlanFailure?.('search decision carried no query')
-      return finish('planner-unavailable')
+      return unavailable()
     }
 
     searches += 1

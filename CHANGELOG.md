@@ -8,6 +8,19 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chat no longer refuses every question when the planner model is down**
+  ([#32](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/32)).
+  With the agentic path on by default, a planner that failed before its first
+  search — endpoint down, call timed out, or nothing usable in the reply —
+  ended retrieval with no evidence, and every answer became a refusal after
+  the 15s budget. Observed on 2026-09-25 when `nemotron-3.5-lightning` stopped
+  responding while the embedding and chat models were fine. The loop now
+  searches the original question once in that case, so an outage degrades to
+  the fixed pipeline's retrieval and answers stay grounded. It still waits out
+  the planner's budget first.
+
 ## [0.21.0] - 2026-09-25
 
 ### Security
