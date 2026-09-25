@@ -21,6 +21,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   running commit for README, specs and source), and all 12 architecture
   diagrams drawn, in light and dark. Signed-in users only. `pnpm docs:check`,
   now in CI, fails on an unindexed doc or any broken link or anchor.
+- **Search the docs**
+  ([#62](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/62),
+  spec 0041 FR7). A search box at the top of `/docs` (press `/` to jump to it)
+  finds the page and the heading that mention what you type, shows the
+  matching passage, and links straight to that heading. It searches in the
+  browser; nothing is sent to a model. The Docs pages were restyled with it:
+  illustrated cards on the index, a section label and title on each page, and
+  an "On this page" panel that follows along as you scroll.
 
 ## [0.22.0] - 2026-09-25
 

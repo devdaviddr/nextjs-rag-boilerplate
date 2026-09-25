@@ -1,5 +1,9 @@
 export const REPO_URL: string
-export const DOC_SECTIONS: { title: string; slugs: string[] }[]
+export const DOC_SECTIONS: {
+  title: string
+  description: string
+  slugs: string[]
+}[]
 export const DOC_ORDER: string[]
 export function unmappedDocs(slugsOnDisk: string[]): {
   missingFromIndex: string[]
@@ -12,6 +16,10 @@ export function headings(
 export function docTitle(markdown: string, slug: string): string
 export function docSummary(markdown: string): string
 export function stripBackLinks(markdown: string): string
+export function stripTitle(markdown: string): string
+export function searchEntries(
+  markdown: string,
+): { id: string; heading: string; depth: number; text: string }[]
 export type ResolvedHref =
   | { kind: 'external'; href: string }
   | { kind: 'anchor'; href: string }

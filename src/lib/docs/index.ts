@@ -9,8 +9,11 @@ import {
   docSummary,
   docTitle,
   headings,
+  searchEntries,
   stripBackLinks,
+  stripTitle,
 } from '../../../scripts/docs-lib.mjs'
+import type { SearchEntry } from './search'
 
 /**
  * The repo's docs/*.md, loaded for the in-app Docs section (spec 0041).
@@ -37,8 +40,10 @@ export interface Doc {
   title: string
   summary: string
   section: string
+  /** The markdown to render: no back link, no `# ` title (the page header shows it). */
   body: string
   headings: DocHeading[]
+  search: SearchEntry[]
 }
 
 let cache: Map<string, Doc> | null = null
@@ -52,13 +57,23 @@ function load(): Map<string, Doc> {
   for (const file of readdirSync(DOCS_DIR).filter((f) => f.endsWith('.md'))) {
     const slug = file.slice(0, -3)
     const raw = readFileSync(join(DOCS_DIR, file), 'utf8')
+    const title = docTitle(raw, slug)
+    const section = sectionOf.get(slug) ?? 'Other'
     docs.set(slug, {
       slug,
-      title: docTitle(raw, slug),
+      title,
       summary: docSummary(raw),
-      section: sectionOf.get(slug) ?? 'Other',
-      body: stripBackLinks(raw),
+      section,
+      body: stripTitle(stripBackLinks(raw)),
       headings: headings(raw),
+      search: searchEntries(raw).map((e) => ({
+        slug,
+        title,
+        section,
+        id: e.id,
+        heading: e.heading,
+        text: e.text,
+      })),
     })
   }
   cache = docs
@@ -70,10 +85,15 @@ export function getDoc(slug: string): Doc | null {
 }
 
 /** The index: sections in reading order, each with its docs. */
-export function docSections(): { title: string; docs: Doc[] }[] {
+export function docSections(): {
+  title: string
+  description: string
+  docs: Doc[]
+}[] {
   const docs = load()
   return DOC_SECTIONS.map((s) => ({
     title: s.title,
+    description: s.description,
     docs: s.slugs.map((slug) => docs.get(slug)).filter((d): d is Doc => !!d),
   })).filter((s) => s.docs.length > 0)
 }
@@ -88,4 +108,10 @@ export function neighbours(slug: string): {
   const at = (j: number) =>
     j >= 0 ? (docs.get(DOC_ORDER[j] ?? '') ?? null) : null
   return { prev: i > 0 ? at(i - 1) : null, next: i >= 0 ? at(i + 1) : null }
+}
+
+/** Every page's search entries, in reading order (spec 0041 FR7). */
+export function searchIndex(): SearchEntry[] {
+  const docs = load()
+  return DOC_ORDER.flatMap((slug) => docs.get(slug)?.search ?? [])
 }

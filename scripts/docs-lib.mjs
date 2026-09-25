@@ -16,13 +16,34 @@ export const REPO_URL = 'https://github.com/devdaviddr/nextjs-rag-boilerplate'
  * silently go missing from the app.
  */
 export const DOC_SECTIONS = [
-  { title: 'About', slugs: ['summary'] },
-  { title: 'Using the app', slugs: ['tutorial', 'usage'] },
-  { title: 'Features', slugs: ['features', 'pwa', 'push', 'email', 'oauth'] },
-  { title: 'Architecture & retrieval', slugs: ['architecture', 'rag'] },
-  { title: 'Data', slugs: ['database', 'backups'] },
+  {
+    title: 'About',
+    description: 'What this project is and what it is for.',
+    slugs: ['summary'],
+  },
+  {
+    title: 'Using the app',
+    description: 'Learn how it works end to end, then run and configure it.',
+    slugs: ['tutorial', 'usage'],
+  },
+  {
+    title: 'Features',
+    description: 'What the app does besides chat, and how to switch it on.',
+    slugs: ['features', 'pwa', 'push', 'email', 'oauth'],
+  },
+  {
+    title: 'Architecture & retrieval',
+    description: 'How the pieces fit together and how answers are grounded.',
+    slugs: ['architecture', 'rag'],
+  },
+  {
+    title: 'Data',
+    description: 'Where the data lives and how to get it back.',
+    slugs: ['database', 'backups'],
+  },
   {
     title: 'Operations',
+    description: 'Hosting, deploying and shipping a change.',
     slugs: ['self-hosting', 'deployment', 'ci-cd', 'workflow'],
   },
 ]
@@ -103,9 +124,13 @@ export function docTitle(markdown, slug) {
   return headings(markdown).find((h) => h.depth === 1)?.text ?? slug
 }
 
+/** The label that opens a doc's lead paragraph. */
+const LEAD_LABEL = /^\*\*(?:What this covers|You'll learn):\*\*\s*/
+
 /**
- * One line describing the page for the index: the **What this covers:** line
- * where the doc has one, otherwise its first real paragraph.
+ * One line describing the page for the index: the **What this covers:** (or
+ * **You'll learn:**) line where the doc has one, otherwise its first real
+ * paragraph. Capitalised, since the label that came before it is gone.
  */
 export function docSummary(markdown) {
   const lines = proseLines(markdown).map((l) => l.line)
@@ -116,14 +141,15 @@ export function docSummary(markdown) {
       if (!l) break
       buf.push(l)
     }
-    return buf
+    const plain = buf
       .join(' ')
-      .replace(/\*\*What this covers:\*\*\s*/, '')
+      .replace(LEAD_LABEL, '')
       .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/[*_`]/g, '')
       .trim()
+    return plain.charAt(0).toUpperCase() + plain.slice(1)
   }
-  const covers = lines.findIndex((l) => l.startsWith('**What this covers:**'))
+  const covers = lines.findIndex((l) => LEAD_LABEL.test(l))
   if (covers !== -1) return text(covers)
   const first = lines.findIndex(
     (l) =>
@@ -139,9 +165,67 @@ export function docSummary(markdown) {
   return first === -1 ? '' : text(first)
 }
 
-/** Drop the "[← Back to README](../README.md)" lines; the app has its own index. */
+/**
+ * Drop the "[← Back to README](../README.md)" lines, and anything after the
+ * link on the same line (such as "· Specs: …"); the app has its own index.
+ */
 export function stripBackLinks(markdown) {
-  return markdown.replace(/^\[← Back to [^\]]*\]\([^)]*\)\s*\n+/gm, '')
+  return markdown.replace(/^\[← Back to [^\]]*\]\([^)]*\)[^\n]*\n+/gm, '')
+}
+
+/**
+ * Drop the page's `# ` title when it is the first line, so the app can show
+ * it in its own header. The page's anchors are unchanged: `headings` still
+ * reads the original markdown.
+ */
+export function stripTitle(markdown) {
+  return markdown.replace(/^\s*# [^\n]*\n+/, '')
+}
+
+/** Markdown syntax removed, leaving the words a reader sees. */
+function plainText(line) {
+  return line
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<\/?[a-z][^>]*>/gi, ' ')
+    .replace(/^\s*(?:>\s*)+/, '')
+    .replace(/^\s*(?:[-*+]|\d+\.)\s+/, '')
+    .replace(/\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/g, '')
+    .replace(/[*`]|(^|\s)_+|_+(?=\s|$)/g, '$1')
+    .replace(/\|/g, ' ')
+    .replace(/^\s*:?-{3,}:?(\s+:?-{3,}:?)*\s*$/, '')
+}
+
+/**
+ * The page cut into searchable pieces (spec 0041 FR7): one per `##`–`####`
+ * heading, plus the introduction before the first of them (`id: ''`). Ids
+ * are the ones rehype-slug puts on the page, so a result can link straight
+ * to its heading. Fenced code is left out; inline code is kept, since names
+ * like `RAG_TOP_K` are what people search for.
+ */
+export function searchEntries(markdown) {
+  const slugger = new GithubSlugger()
+  const out = [{ id: '', heading: '', depth: 1, text: '' }]
+  const words = []
+  const flush = () => {
+    out[out.length - 1].text = words.join(' ').replace(/\s+/g, ' ').trim()
+    words.length = 0
+  }
+  for (const { line } of proseLines(markdown)) {
+    const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line)
+    if (m) {
+      const text = headingText(m[2])
+      const id = slugger.slug(text)
+      if (m[1].length === 1) continue
+      flush()
+      out.push({ id, heading: text, depth: m[1].length, text: '' })
+      continue
+    }
+    if (/^\[← Back to /.test(line)) continue
+    words.push(plainText(line))
+  }
+  flush()
+  return out.filter((e) => e.id || e.text)
 }
 
 /** Normalise `a/../b/./c` segments. */

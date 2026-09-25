@@ -137,6 +137,9 @@ or deployment are in the same position.
 - [x] NFR1: Mermaid is absent from the bundle of pages without diagrams —
       imported only by `import('mermaid')` inside `MermaidDiagram`, which only
       `DocMarkdown` renders
+- [x] FR7: searching "halfvec" finds the Database and RAG pages at the right
+      headings — `tests/unit/docs-search.test.ts` _"FR7"_ against the real
+      docs, and e2e _"search finds a heading and jumps to it"_
 
 ### As built (2026-09-25)
 
@@ -151,6 +154,20 @@ process.
 
 **`/docs-assets` checks the session itself**: the proxy's matcher skips paths
 with an image extension, so the protected-prefix check never ran for them.
+
+**FR7: the index is built per process, not at build time**, for the same
+reason as FR5. `searchEntries` in `scripts/docs-lib.mjs` cuts each page at its
+`##`–`####` headings (ids from the same slugger as the page) and keeps the
+prose without markup or fenced code. The server serves the result at
+`/docs/search-index` (signed in only, about 270 KB before compression), and the
+search box fetches it the first time it is focused, so the index page does
+not carry it. Matching runs in the browser (`src/lib/docs/search.ts`): every
+term must appear; a heading match outranks the page title, which outranks the
+text; at most three results come from one page. `/` focuses the box.
+
+The index and page layouts were restyled at the same time: cards with an icon
+per page, a page header with the section and title, the lead paragraph set
+apart, and a contents panel that marks the section being read.
 
 ## Security & privacy
 
@@ -178,7 +195,7 @@ with an image extension, so the protected-prefix check never ran for them.
    contributors; docs link to them on GitHub (FR3).
 3. **`/docs` requires sign-in in v1.** A public-docs flag can follow if wanted.
 4. **Search is phase 2** (FR7, #62). Sixteen pages with a grouped index are
-   navigable without it.
+   navigable without it. It followed in #62; see _As built_.
 
 ## Out of scope / future
 

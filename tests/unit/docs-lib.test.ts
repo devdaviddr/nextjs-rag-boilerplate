@@ -97,7 +97,13 @@ describe('titles, summaries and back links', () => {
 
   it('reads the title and the What-this-covers line', () => {
     expect(docTitle(md, 'database')).toBe('Database')
-    expect(docSummary(md)).toBe('the tables, the ERD and migrations.')
+    expect(docSummary(md)).toBe('The tables, the ERD and migrations.')
+  })
+
+  it("also reads a **You'll learn:** line", () => {
+    expect(docSummary("# T\n\n**You'll learn:** how `RAG` works.")).toBe(
+      'How RAG works.',
+    )
   })
 
   it('falls back to the first paragraph', () => {
@@ -108,6 +114,14 @@ describe('titles, summaries and back links', () => {
 
   it('drops the Back-to-README line', () => {
     expect(stripBackLinks(md)).not.toContain('Back to README')
+  })
+
+  it('drops the whole line, including a Specs list after the link', () => {
+    expect(
+      stripBackLinks(
+        '# T\n\n[← Back to README](../README.md) · Specs: [`0025`](../specs/0025-x.md)\n\nBody',
+      ),
+    ).toBe('# T\n\nBody')
   })
 })
 

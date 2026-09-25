@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { DocMarkdown } from '@/components/docs/doc-markdown'
+import { DocToc } from '@/components/docs/doc-toc'
+import { Button } from '@/components/ui/button'
 import { getDoc, neighbours } from '@/lib/docs'
 import { env } from '@/lib/env'
 
@@ -32,69 +34,62 @@ export default async function DocPage({ params }: { params: Params }) {
   const { prev, next } = neighbours(slug)
   const toc = doc.headings.filter((h) => h.depth === 2 || h.depth === 3)
 
+  const titleId = doc.headings.find((h) => h.depth === 1)?.id
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl gap-10 px-4 py-8 sm:px-6">
-      <article className="min-w-0 flex-1">
-        <Link
-          href="/docs"
-          className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1 text-sm"
-        >
-          <ChevronLeft className="size-4" />
-          Docs · {doc.section}
-        </Link>
-        <DocMarkdown gitRef={gitRef()}>{doc.body}</DocMarkdown>
-        <nav
-          aria-label="Previous and next"
-          className="mt-12 flex justify-between gap-4 border-t pt-6 text-sm"
-        >
-          {prev ? (
-            <Link
-              href={`/docs/${prev.slug}`}
-              className="hover:underline"
-              rel="prev"
-            >
-              <ChevronLeft className="mr-1 inline size-4" />
-              {prev.title}
-            </Link>
-          ) : (
-            <span />
-          )}
-          {next && (
-            <Link
-              href={`/docs/${next.slug}`}
-              className="text-right hover:underline"
-              rel="next"
-            >
-              {next.title}
-              <ChevronRight className="ml-1 inline size-4" />
-            </Link>
-          )}
-        </nav>
-      </article>
-      {toc.length > 1 && (
-        <aside
-          className="hidden w-56 shrink-0 lg:block"
-          aria-label="On this page"
-        >
-          <div className="sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto text-sm">
-            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
-              On this page
+    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+      <div className="mb-6 flex justify-end">
+        <Button asChild variant="outline" size="sm" className="rounded-lg">
+          <Link href="/docs">
+            <ArrowLeft />
+            Back to Docs
+          </Link>
+        </Button>
+      </div>
+      <div className="flex gap-10">
+        <article className="min-w-0 flex-1">
+          <header className="mb-8">
+            <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+              {doc.section}
             </p>
-            <ul className="space-y-1.5">
-              {toc.map((h) => (
-                <li key={h.id} className={h.depth === 3 ? 'pl-3' : undefined}>
-                  <a
-                    href={`#${h.id}`}
-                    className="text-muted-foreground hover:text-foreground line-clamp-2"
-                  >
-                    {h.text}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
-      )}
+            <h1
+              id={titleId}
+              className="mt-2 scroll-mt-6 text-4xl font-bold tracking-tight"
+            >
+              {doc.title}
+            </h1>
+          </header>
+          <DocMarkdown gitRef={gitRef()}>{doc.body}</DocMarkdown>
+          <nav
+            aria-label="Previous and next"
+            className="mt-12 flex justify-between gap-4 border-t pt-6 text-sm"
+          >
+            {prev ? (
+              <Link
+                href={`/docs/${prev.slug}`}
+                className="hover:underline"
+                rel="prev"
+              >
+                <ChevronLeft className="mr-1 inline size-4" />
+                {prev.title}
+              </Link>
+            ) : (
+              <span />
+            )}
+            {next && (
+              <Link
+                href={`/docs/${next.slug}`}
+                className="text-right hover:underline"
+                rel="next"
+              >
+                {next.title}
+                <ChevronRight className="ml-1 inline size-4" />
+              </Link>
+            )}
+          </nav>
+        </article>
+        {toc.length > 1 && <DocToc items={toc} />}
+      </div>
     </div>
   )
 }
