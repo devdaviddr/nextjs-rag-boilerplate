@@ -74,6 +74,7 @@ jobs:
       - run: pnpm test:coverage
         if: env.CODE == 'true'
       - run: pnpm specs:check
+      - run: pnpm docs:check
       - name: Audit dependencies
         if: env.CODE == 'true'
         run: pnpm audit --audit-level=high

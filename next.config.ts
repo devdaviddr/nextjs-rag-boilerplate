@@ -30,6 +30,13 @@ const nextConfig: NextConfig = {
   // nothing reranked. Only the three files Node uses are included (the package
   // carries ~140 MB of browser and WebGPU variants).
   outputFileTracingIncludes: {
+    // The in-app Docs section reads docs/*.md and serves docs/images at run
+    // time (spec 0041); the tracer cannot see those paths, so they are listed.
+    // Keys are globs over route paths: `[slug]` would be a character class, so
+    // dynamic segments are matched with `*`.
+    '/docs': ['./docs/*.md'],
+    '/docs/*': ['./docs/*.md'],
+    '/docs-assets/*': ['./docs/images/*'],
     '/api/chat': [
       './node_modules/.pnpm/onnxruntime-web@*/node_modules/onnxruntime-web/dist/{ort.node.min.mjs,ort-wasm-simd-threaded.mjs,ort-wasm-simd-threaded.wasm}',
     ],

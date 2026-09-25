@@ -1,4 +1,4 @@
-import { FileText, type LucideIcon } from 'lucide-react'
+import { BookOpen, FileText, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   title: string
@@ -13,4 +13,6 @@ export interface NavItem {
  */
 export const navItems: NavItem[] = [
   { title: 'Knowledge bases', href: '/documents', icon: FileText },
+  // How the platform works, rendered from docs/*.md (spec 0041).
+  { title: 'Docs', href: '/docs', icon: BookOpen },
 ]

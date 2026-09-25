@@ -347,6 +347,10 @@ the compose files, the backup sidecars and the tunnel.
   a `backup-verify.sh` doctor, and a tested restore runbook. See [Backups](backups.md).
 - **Cloudflare Tunnel deployment** — `make setup` takes a fresh clone to a live HTTPS URL
   with no open ports; `make deploy` is continuous deployment after that. See [Self-hosting](self-hosting.md) and [Deployment](deployment.md).
+- **In-app documentation** — a Docs section in the sidebar renders these
+  `docs/*.md` pages inside the app: grouped index, table of contents, in-app
+  links, Mermaid diagrams, signed-in only. `pnpm docs:check` keeps every link
+  and anchor valid (spec 0041).
 - **CI pipeline** — GitHub Actions runs format, lint, typecheck, unit tests with
   coverage, `specs:check` and the Playwright suite on every PR and push to `main`,
   then publishes multi-arch app + migrate images to GHCR; a `v*` tag re-tags the
