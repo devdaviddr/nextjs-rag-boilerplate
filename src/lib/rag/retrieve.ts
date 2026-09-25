@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
 import type { ChunkKind } from '@/db/schema'
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { embedQuery } from './embed'
 import { hypotheticalQuery } from './hyde'
 import {
@@ -219,10 +219,10 @@ const CANDIDATE_POOL_CEILING = 200
  * only way to find out, which is what the flag is for.
  */
 function candidatePoolSize(topK: number): number {
-  if (!env.RAG_RERANK_ENABLED) return topK
+  if (!aiSettings().RAG_RERANK_ENABLED) return topK
   // Below topK a "wider" pool would be narrower than the answer and would
   // discard chunks the gate would have kept, so the floor is topK, not 1.
-  return Math.max(topK, env.RAG_RERANK_CANDIDATES)
+  return Math.max(topK, aiSettings().RAG_RERANK_CANDIDATES)
 }
 
 export async function retrieveForOwner(
@@ -240,9 +240,9 @@ export async function retrieveForOwner(
   // predicate is the one failure mode this whole feature exists to prevent.
   if (knowledgeBaseIds.length === 0) return []
 
-  const topK = options.topK ?? env.RAG_TOP_K
-  const minSimilarity = options.minSimilarity ?? env.RAG_MIN_SIMILARITY
-  const rrfK = env.RAG_RRF_K
+  const topK = options.topK ?? aiSettings().RAG_TOP_K
+  const minSimilarity = options.minSimilarity ?? aiSettings().RAG_MIN_SIMILARITY
+  const rrfK = aiSettings().RAG_RRF_K
 
   // How many fused rows survive to the rerank stage, before the gate and the
   // cut to topK. `topK` unless reranking is on — see candidatePoolSize above
@@ -258,7 +258,8 @@ export async function retrieveForOwner(
   // way to see the user's total KB count, so the number of KBs actually
   // selected is the only signal available; scale the per-channel LIMIT by
   // it, capped so the worst case (many KBs selected at once) stays bounded.
-  const perChannel = env.RAG_HYBRID_CANDIDATES * knowledgeBaseIds.length
+  const perChannel =
+    aiSettings().RAG_HYBRID_CANDIDATES * knowledgeBaseIds.length
   const candidates = Math.min(
     // A channel that offers fewer rows than the pool wants makes the widened
     // pool a fiction: fusion cannot hand on 20 candidates if neither channel
@@ -440,7 +441,7 @@ export async function retrieveForOwner(
   // section run become that run — so an empty list stays empty and refusal
   // cannot flip. With reranking off `admitted.length <= topK`, so assembling
   // before the cut equals assembling after it.
-  const assemble = options.assembleParents ?? env.RAG_PARENT_ASSEMBLY
+  const assemble = options.assembleParents ?? aiSettings().RAG_PARENT_ASSEMBLY
   const assembled = assemble
     ? await assembleParents(ownerId, knowledgeBaseIds, admitted)
     : admitted
@@ -511,7 +512,7 @@ export async function assembleParents(
   // Derived, not configured: three chunks' worth. A run bigger than that is
   // not one passage, and stays as the children the gate admitted.
   return collapseParents(admitted, pageRows, {
-    maxTokens: parentMaxTokens(env.RAG_CHUNK_TOKENS),
+    maxTokens: parentMaxTokens(aiSettings().RAG_CHUNK_TOKENS),
   })
 }
 
@@ -578,7 +579,7 @@ export async function retrieveDocumentChunks(
       AND c.document_id = ${documentId}
       AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
     ORDER BY c.chunk_index ASC
-    LIMIT ${env.RAG_DOC_SCOPE_MAX_CHUNKS}
+    LIMIT ${aiSettings().RAG_DOC_SCOPE_MAX_CHUNKS}
   `)
 
   // Similarity is not meaningful here — the whole document was requested, not

@@ -76,7 +76,7 @@ the `halfvec` choice is in
 
 ## How the schema is organised
 
-Fifteen tables in three groups.
+Sixteen tables in four groups.
 
 **Accounts and access** — `users`, `accounts`, `sessions`,
 `verification_tokens`, `authenticators`, `roles`, `user_roles`. These follow the
@@ -90,6 +90,11 @@ can be added later without rewriting migrations.
 and `conversation_knowledge_bases`. These are the ones worth understanding
 before you read the diagram, because their shape is driven by how retrieval
 queries them.
+
+**Settings** — `ai_settings`: AI settings saved from Settings, one row per
+environment variable name, holding the string you would put in `.env`. A row
+overrides the variable; no row means the environment applies. API keys are not
+stored here.
 
 A **knowledge base** is a named collection of documents owned by one user. A
 **document** is one uploaded PDF, and it lives in exactly one knowledge base. A
@@ -289,6 +294,7 @@ sit on the same row as the text a citation displays.
 | `conversations`                | Chat threads, ordered in Recents by `updated_at`                                     |
 | `messages`                     | Turns, with stored citations and generation metrics                                  |
 | `conversation_knowledge_bases` | Which knowledge bases a thread may search — fixed at creation                        |
+| `ai_settings`                  | AI settings saved from Settings, overriding the matching `RAG_*` env var             |
 
 `sessions` is empty in practice. The Auth.js Drizzle adapter requires the table,
 but `session.strategy` stays `'jwt'` so that edge route protection in

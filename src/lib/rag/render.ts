@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 
 /**
  * Rendering one PDF page to an image for the parser (spec 0031 Stage 1).
@@ -38,7 +38,7 @@ export class RenderError extends Error {
 export async function renderPage(
   pdf: unknown,
   pageNumber: number,
-  { scale = env.RAG_CRACK_RENDER_SCALE }: { scale?: number } = {},
+  { scale = aiSettings().RAG_CRACK_RENDER_SCALE }: { scale?: number } = {},
 ): Promise<Buffer> {
   // Lazily imported for the same reason `extract.ts` does it: keeping the PDF
   // machinery out of every route that happens to touch this module's siblings.

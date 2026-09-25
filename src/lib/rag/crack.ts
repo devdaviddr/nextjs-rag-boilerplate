@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { ChunkKind, ExtractionPage, ExtractionSummary } from '@/db/schema'
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { type Chunk, chunkElements, chunkPages } from './chunk'
 import {
@@ -327,7 +327,7 @@ export async function crackDocument(
     // and then cracked 15 more, it would produce a different — more
     // expensive — document than the uninterrupted run it is resuming. The
     // resume must be invisible in the output, not just cheaper.
-    if (parseCalls >= env.RAG_CRACK_MAX_PAGES) {
+    if (parseCalls >= aiSettings().RAG_CRACK_MAX_PAGES) {
       budgetExhausted = true
       chunks.push(
         ...textLayerChunks(page, chunks.length, {
@@ -338,7 +338,7 @@ export async function crackDocument(
       )
       record(
         'budget-skipped',
-        `Document reached its ${env.RAG_CRACK_MAX_PAGES}-page cracking budget.`,
+        `Document reached its ${aiSettings().RAG_CRACK_MAX_PAGES}-page cracking budget.`,
       )
       await onPageProcessed?.(pageNumber, summarySoFar())
       continue
@@ -377,7 +377,8 @@ export async function crackDocument(
           element.type !== 'Picture' || isDescribableFigure(element.bbox),
       )
 
-      const describeBudget = env.RAG_DESCRIBE_MAX_FIGURES - describeCalls
+      const describeBudget =
+        aiSettings().RAG_DESCRIBE_MAX_FIGURES - describeCalls
       const wantsDescription = normalised.some(
         (element) =>
           element.type === 'Picture' && !element.caption && describeBudget > 0,
@@ -473,7 +474,7 @@ export async function chunksFromPdf(
   buffer: Buffer,
   options: CrackOptions,
 ): Promise<DocumentChunks> {
-  const cracking = env.RAG_CRACK_ENABLED
+  const cracking = aiSettings().RAG_CRACK_ENABLED
   const { pages, pageCount, allPageTexts, pdf, itemsByPage } = await extractPdf(
     buffer,
     { allowImageOnly: cracking },

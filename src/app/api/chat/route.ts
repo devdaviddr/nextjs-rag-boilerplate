@@ -13,7 +13,7 @@ import { getCurrentSession } from '@/lib/auth/session'
 import { toStoredCitations } from '@/lib/chat/citations'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
-import { env } from '@/lib/env'
+import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { RAG_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
@@ -79,6 +79,7 @@ function line(payload: unknown): Uint8Array {
 }
 
 export async function POST(request: Request) {
+  await refreshAiSettings()
   const session = await getCurrentSession()
   if (!session?.user.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -220,7 +221,7 @@ export async function POST(request: Request) {
     // prevents the latter from getting this far.
     if (permittedKbIds.length === 0) return []
 
-    if (env.RAG_AGENTIC_ENABLED) {
+    if (aiSettings().RAG_AGENTIC_ENABLED) {
       // The last few turns, oldest first, for pronoun resolution.
       const priorRows = await db
         .select({ role: messages.role, content: messages.content })

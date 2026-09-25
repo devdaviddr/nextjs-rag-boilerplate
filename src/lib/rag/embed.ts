@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { createEmbeddings } from './client'
 import { EMBEDDING_DIMENSIONS } from './constants'
 
@@ -68,9 +68,11 @@ function batched<T>(items: T[], size: number): T[][] {
 export async function embedPassages(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return []
 
-  const batches = batched(texts, env.RAG_EMBED_BATCH)
-  const results = await pooled(batches, env.RAG_EMBED_CONCURRENCY, (batch) =>
-    createEmbeddings(batch, 'passage'),
+  const batches = batched(texts, aiSettings().RAG_EMBED_BATCH)
+  const results = await pooled(
+    batches,
+    aiSettings().RAG_EMBED_CONCURRENCY,
+    (batch) => createEmbeddings(batch, 'passage'),
   )
 
   const vectors = results.flat()

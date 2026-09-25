@@ -172,14 +172,43 @@ default next to the floor, and the eval must be run after an embedding switch.
       are rejected with the allowed range
 - [ ] FR5: source badges, reset, audit (secrets redacted), and
       `AI_SETTINGS_LOCKED` enforced server-side
-- [ ] FR6: no direct `env.RAG_*` reads remain outside the resolver (lint rule or
-      grep check in CI)
+- [x] FR6: no direct `env.RAG_*` reads remain outside the resolver (lint rule or
+      grep check in CI) — `no-restricted-syntax` in `eslint.config.mjs`, run by
+      `pnpm lint` in CI; resolver behaviour in `tests/unit/ai-settings.test.ts`
 - [ ] FR7: non-admins get 403 from every AI settings action
 - [ ] FR9: chat and planner through OpenRouter with embeddings on NIM, and
       chat on a llama.cpp server, both work; a llama.cpp planner without tool
       support fails its test with the `--jinja` hint; an existing `.env`
       deployment shows its NIM connection unchanged
-- [ ] NFR1: with nothing saved, `pnpm rag:eval` equals the baseline
+- [x] NFR1: with nothing saved, `pnpm rag:eval` equals the baseline — run
+      2026-09-25 on #53: hit@1 0.941, hit@3 0.941, MRR 0.941, refusal 1.000,
+      cross-KB leakage 0, identical to `eval/results/baseline.json`; the 821
+      existing unit tests pass unchanged
+
+### As built: the resolver (#53)
+
+`src/lib/ai-settings` is the resolver, with three differences from the design
+above.
+
+- **Reads are synchronous.** `aiSettings()` returns the saved values, held in
+  memory, laid over `env`, so the 17 callers changed from `env.RAG_X` to
+  `aiSettings().RAG_X` and none of them became async. `refreshAiSettings()`
+  loads the table at most every 30 seconds; the chat route, the document
+  actions and the eval await it first, and a stale read starts a reload in the
+  background. A save reloads at once. If the database is down the last good
+  values stay in force.
+- **Keys keep their environment names, and values are strings.** A row is
+  `RAG_TOP_K = "5"`, parsed by the same zod field as the variable (now in
+  `src/lib/ai-env.ts`, spread into `env.ts`), so a saved value cannot mean
+  something the variable would not. The one rule across fields (chunk overlap
+  below chunk size) is checked on save and on load. One table, `ai_settings`
+  (text value); the audit table comes with FR5 (#58).
+- **Connection settings are not stored.** `NVIDIA_API_KEY` and
+  `RAG_LLM_BASE_URL` resolve through `aiSettings()` like the rest, but cannot
+  be saved as rows: they belong to encrypted connections (FR1, #54).
+
+With nothing saved, `aiSettings()` reads `env` directly, so behaviour is the
+environment's exactly.
 
 ## Security & privacy
 

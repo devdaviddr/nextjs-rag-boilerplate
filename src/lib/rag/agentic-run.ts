@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { type LoopStep, effectiveFloor, runAgenticLoop } from './agentic'
 import { createChatCompletion } from './client'
@@ -176,7 +176,7 @@ export async function runAgenticRetrieval(input: {
   // With cracking off no chunk is a figure, so advertising the tool would cost
   // planner tokens on every question to describe something that cannot exist.
   const figureReadingEnabled =
-    env.RAG_READ_FIGURE_ENABLED && env.RAG_CRACK_ENABLED
+    aiSettings().RAG_READ_FIGURE_ENABLED && aiSettings().RAG_CRACK_ENABLED
 
   // `RAG_MAX_LOOP_MS` defaults to 15s, which was sized for TEXT searches at a
   // measured 2.6-4.4s each. One `read_figure` is ~13.5s (render, crop, vision),
@@ -188,14 +188,14 @@ export async function runAgenticRetrieval(input: {
   // deployment that set the value explicitly before turning figures on. It only
   // ever raises: a larger configured budget wins.
   const maxMs = figureReadingEnabled
-    ? Math.max(env.RAG_MAX_LOOP_MS, FIGURE_LOOP_FLOOR_MS)
-    : env.RAG_MAX_LOOP_MS
+    ? Math.max(aiSettings().RAG_MAX_LOOP_MS, FIGURE_LOOP_FLOOR_MS)
+    : aiSettings().RAG_MAX_LOOP_MS
   const maxTokens = figureReadingEnabled
-    ? Math.max(env.RAG_MAX_LOOP_TOKENS, FIGURE_LOOP_FLOOR_TOKENS)
-    : env.RAG_MAX_LOOP_TOKENS
+    ? Math.max(aiSettings().RAG_MAX_LOOP_TOKENS, FIGURE_LOOP_FLOOR_TOKENS)
+    : aiSettings().RAG_MAX_LOOP_TOKENS
   const outcome = await runAgenticLoop(
     {
-      maxSearches: env.RAG_MAX_SEARCHES,
+      maxSearches: aiSettings().RAG_MAX_SEARCHES,
       maxMs,
       maxTokens,
     },
@@ -208,7 +208,7 @@ export async function runAgenticRetrieval(input: {
             { role: 'user', content: historyPrompt(question, turns, steps) },
           ],
           {
-            model: env.RAG_PLANNER_MODEL,
+            model: aiSettings().RAG_PLANNER_MODEL,
             tools: figureReadingEnabled
               ? [SEARCH_TOOL, READ_FIGURE_TOOL]
               : [SEARCH_TOOL],
@@ -282,9 +282,9 @@ export async function runAgenticRetrieval(input: {
   // once, rather than inside the loop: the loop must still SEE weak results so
   // its planner can judge that a second phrasing is worth trying.
   const floor = effectiveFloor(
-    env.RAG_MIN_SIMILARITY,
+    aiSettings().RAG_MIN_SIMILARITY,
     outcome.searches,
-    env.RAG_AGENTIC_FLOOR_STEP,
+    aiSettings().RAG_AGENTIC_FLOOR_STEP,
   )
   const kept = outcome.chunks.filter((c) => c.similarity >= floor)
 
@@ -356,7 +356,7 @@ export async function verifyCitations(
         { role: 'user', content: `Sources:\n${sources}\n\nAnswer:\n${answer}` },
       ],
       {
-        model: env.RAG_PLANNER_MODEL,
+        model: aiSettings().RAG_PLANNER_MODEL,
         maxTokens: 500,
         temperature: 0,
         signal,

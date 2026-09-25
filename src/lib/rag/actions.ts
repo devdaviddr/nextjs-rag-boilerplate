@@ -8,7 +8,7 @@ import { db } from '@/db'
 import { chunks, documents, files, knowledgeBases } from '@/db/schema'
 import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
-import { env } from '@/lib/env'
+import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
 import { toCitationBoxes } from '@/lib/citations/boxes'
 import { logger } from '@/lib/logger'
 import { buildEmbeddingText } from './chunk'
@@ -79,7 +79,11 @@ export async function ragStatus(): Promise<{
    */
   cracking: boolean
 }> {
-  return { configured: isRagConfigured(), cracking: env.RAG_CRACK_ENABLED }
+  await refreshAiSettings()
+  return {
+    configured: isRagConfigured(),
+    cracking: aiSettings().RAG_CRACK_ENABLED,
+  }
 }
 
 /**
@@ -93,6 +97,7 @@ export async function ragStatus(): Promise<{
 export async function uploadDocument(
   formData: FormData,
 ): Promise<ActionResult<DocumentSummary>> {
+  await refreshAiSettings()
   const userId = await requireUserId()
 
   if (!isRagConfigured()) {
@@ -311,6 +316,7 @@ export async function inspectDocument(documentId: string): Promise<{
   knowledgeBaseId: string | null
   inspection: InspectedDocument
 } | null> {
+  await refreshAiSettings()
   const userId = await requireUserId()
 
   const doc = await db.query.documents.findFirst({
@@ -350,7 +356,7 @@ export async function inspectDocument(documentId: string): Promise<{
     pageCount: doc.pageCount,
     knowledgeBaseId: doc.knowledgeBaseId,
     inspection: buildInspection({
-      parentMaxTokens: parentMaxTokens(env.RAG_CHUNK_TOKENS),
+      parentMaxTokens: parentMaxTokens(aiSettings().RAG_CHUNK_TOKENS),
       pageCount: doc.pageCount,
       extraction: doc.extraction ?? null,
       chunks: rows.map((r) => ({
@@ -420,6 +426,7 @@ export async function deleteDocument(
 export async function retryDocument(
   documentId: string,
 ): Promise<ActionResult<null>> {
+  await refreshAiSettings()
   const userId = await requireUserId()
 
   const doc = await db.query.documents.findFirst({

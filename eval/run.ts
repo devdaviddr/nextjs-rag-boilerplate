@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { chunks, documents, files, knowledgeBases, users } from '@/db/schema'
-import { env } from '@/lib/env'
+import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
 import { runAgenticRetrieval } from '@/lib/rag/agentic-run'
 import { buildEmbeddingText } from '@/lib/rag/chunk'
 import { createChatCompletion } from '@/lib/rag/client'
@@ -395,8 +395,8 @@ async function ingestCorpus(): Promise<void> {
       pageCount,
       extraction,
     } = await chunksFromPdf(buffer, {
-      chunkTokens: env.RAG_CHUNK_TOKENS,
-      overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
+      chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
+      overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
     })
 
     // Upload the PDF for real. `read_figure` (spec 0031 FR9) fetches the
@@ -876,7 +876,7 @@ function coreMetrics(results: readonly QuestionResult[]): CoreMetrics {
   return {
     hitAt1: Number(hitAt(1).toFixed(3)),
     hitAt3: Number(hitAt(3).toFixed(3)),
-    hitAtK: Number(hitAt(env.RAG_TOP_K).toFixed(3)),
+    hitAtK: Number(hitAt(aiSettings().RAG_TOP_K).toFixed(3)),
     mrr: Number(mrr.toFixed(3)),
     refusalAccuracy:
       refusals.length === 0
@@ -1269,6 +1269,7 @@ function formatCostDelta(
 }
 
 async function main(): Promise<void> {
+  await refreshAiSettings()
   const compare = hasFlag('compare')
   const parentsAb = hasFlag('parents-ab')
   // The one-run A/B (spec 0033 1c) scores the flat list and the assembled one
@@ -1277,7 +1278,7 @@ async function main(): Promise<void> {
   // pool would be cut to topK before assembly in one column and after it in
   // the other. And it is a fixed-pipeline measurement: it does not combine
   // with the agentic A/B.
-  if (parentsAb && env.RAG_RERANK_ENABLED) {
+  if (parentsAb && aiSettings().RAG_RERANK_ENABLED) {
     console.error(
       '--parents-ab needs RAG_RERANK_ENABLED=false: with a widened pool the ' +
         'flat and assembled columns would not be one retrieval scored twice.',
@@ -1304,10 +1305,10 @@ async function main(): Promise<void> {
         : `\nRetrieval evaluation — label: ${label}`,
   )
   console.log(
-    `top_k=${env.RAG_TOP_K}  floor=${env.RAG_MIN_SIMILARITY}  ` +
-      `chunk=${env.RAG_CHUNK_TOKENS}/${env.RAG_CHUNK_OVERLAP_TOKENS}` +
+    `top_k=${aiSettings().RAG_TOP_K}  floor=${aiSettings().RAG_MIN_SIMILARITY}  ` +
+      `chunk=${aiSettings().RAG_CHUNK_TOKENS}/${aiSettings().RAG_CHUNK_OVERLAP_TOKENS}` +
       (compare
-        ? `  planner=${env.RAG_PLANNER_MODEL}  maxSearches=${env.RAG_MAX_SEARCHES}  maxLoopMs=${env.RAG_MAX_LOOP_MS}\n`
+        ? `  planner=${aiSettings().RAG_PLANNER_MODEL}  maxSearches=${aiSettings().RAG_MAX_SEARCHES}  maxLoopMs=${aiSettings().RAG_MAX_LOOP_MS}\n`
         : '\n'),
   )
 
@@ -1499,11 +1500,11 @@ async function main(): Promise<void> {
     label: compare ? 'baseline' : label,
     at: new Date().toISOString(),
     config: {
-      topK: env.RAG_TOP_K,
-      minSimilarity: env.RAG_MIN_SIMILARITY,
-      chunkTokens: env.RAG_CHUNK_TOKENS,
-      overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
-      embedModel: env.RAG_EMBED_MODEL,
+      topK: aiSettings().RAG_TOP_K,
+      minSimilarity: aiSettings().RAG_MIN_SIMILARITY,
+      chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
+      overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
+      embedModel: aiSettings().RAG_EMBED_MODEL,
     },
     knowledgeBases: kbRows.map((k) => ({
       id: k.id,
@@ -1525,7 +1526,7 @@ async function main(): Promise<void> {
     multiHopRefusal: baselineMultiHopCore,
     // Spec 0033 1c, additive like `cost` below.
     section: { ...baselineSectionCore, line: sectionLine(baselineResults) },
-    parentAssembly: parentsAb ? true : env.RAG_PARENT_ASSEMBLY,
+    parentAssembly: parentsAb ? true : aiSettings().RAG_PARENT_ASSEMBLY,
     // New in spec 0032, and purely additive: older files in eval/results/ have
     // no `cost` key at all, and the only field this harness ever reads back
     // out of a saved file is `metrics.refusalAccuracy` (the --baseline gate
@@ -1540,7 +1541,9 @@ async function main(): Promise<void> {
   console.log('\nBaseline summary (single-hop, n=%d)', baselineSingleHop.length)
   console.log(`  hit@1              ${baselineCore.hitAt1}`)
   console.log(`  hit@3              ${baselineCore.hitAt3}`)
-  console.log(`  hit@${env.RAG_TOP_K}              ${baselineCore.hitAtK}`)
+  console.log(
+    `  hit@${aiSettings().RAG_TOP_K}              ${baselineCore.hitAtK}`,
+  )
   console.log(`  MRR                ${baselineCore.mrr}`)
   console.log(`  refusal accuracy   ${baselineCore.refusalAccuracy}`)
   console.log(`  cross-KB leakage   ${crossKbLeakage}`)
@@ -1663,15 +1666,15 @@ async function main(): Promise<void> {
       label: 'agentic',
       at: new Date().toISOString(),
       config: {
-        topK: env.RAG_TOP_K,
-        minSimilarity: env.RAG_MIN_SIMILARITY,
-        chunkTokens: env.RAG_CHUNK_TOKENS,
-        overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
-        embedModel: env.RAG_EMBED_MODEL,
-        plannerModel: env.RAG_PLANNER_MODEL,
-        maxSearches: env.RAG_MAX_SEARCHES,
-        maxLoopMs: env.RAG_MAX_LOOP_MS,
-        maxLoopTokens: env.RAG_MAX_LOOP_TOKENS,
+        topK: aiSettings().RAG_TOP_K,
+        minSimilarity: aiSettings().RAG_MIN_SIMILARITY,
+        chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
+        overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
+        embedModel: aiSettings().RAG_EMBED_MODEL,
+        plannerModel: aiSettings().RAG_PLANNER_MODEL,
+        maxSearches: aiSettings().RAG_MAX_SEARCHES,
+        maxLoopMs: aiSettings().RAG_MAX_LOOP_MS,
+        maxLoopTokens: aiSettings().RAG_MAX_LOOP_TOKENS,
       },
       knowledgeBases: baselineSummary.knowledgeBases,
       // Same slice, same reason as baselineSummary.metrics: single-hop only,
@@ -1964,7 +1967,7 @@ function reportParentsAb(
   const rows: [string, keyof CoreMetrics][] = [
     ['hit@1', 'hitAt1'],
     ['hit@3', 'hitAt3'],
-    [`hit@${env.RAG_TOP_K}`, 'hitAtK'],
+    [`hit@${aiSettings().RAG_TOP_K}`, 'hitAtK'],
     ['MRR', 'mrr'],
     ['refusal accuracy', 'refusalAccuracy'],
   ]

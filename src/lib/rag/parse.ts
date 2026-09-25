@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { createChatCompletion } from './client'
 import type { BBox, ParsedElement } from './parse-types'
@@ -147,7 +147,7 @@ export async function parseRenderedPage(
         content: [{ type: 'image_url', image_url: { url: toDataUri(png) } }],
       },
     ],
-    { model: env.RAG_PARSE_MODEL, maxTokens: 6000, signal },
+    { model: aiSettings().RAG_PARSE_MODEL, maxTokens: 6000, signal },
   )
 
   const call = choice.message?.tool_calls?.find(

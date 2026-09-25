@@ -31,6 +31,24 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // AI settings are read through `aiSettings()`, which applies a value
+    // saved from Settings over the environment (spec 0040 FR6). A direct
+    // `env.RAG_*` read would silently ignore it.
+    files: ['src/**/*.{ts,tsx}', 'eval/**/*.ts', 'scripts/**/*.{ts,mts}'],
+    ignores: ['src/lib/ai-settings/**', 'src/lib/env.ts', 'src/lib/ai-env.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "MemberExpression[object.name='env'][property.name=/^(RAG_|NVIDIA_API_KEY$)/]",
+          message:
+            'Read AI settings with aiSettings() from @/lib/ai-settings, so a value saved in Settings applies (spec 0040 FR6).',
+        },
+      ],
+    },
+  },
 ]
 
 export default eslintConfig
