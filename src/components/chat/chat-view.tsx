@@ -144,6 +144,9 @@ export function ChatView({
   const [conversationId, setConversationId] = useState(initialConversationId)
   const [question, setQuestion] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  // The answer whose citations are still being checked after the composer
+  // unlocked (#48). Verification runs in the background and may revise it.
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [phase, setPhase] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [source, setSource] = useState<StoredCitation | null>(null)
@@ -280,6 +283,11 @@ export function ChatView({
 
     setError(null)
     setQuestion('')
+    // Every event of THIS request is applied to THIS answer, by id — not to
+    // "the last message". Once the composer unlocks at `metrics`, a next
+    // question can be asked while this stream is still verifying, and its
+    // late revision must not land on the newer answer (#48).
+    const assistantId = `local-assistant-${Date.now()}`
     setMessages((prev) => [
       ...prev,
       {
@@ -290,7 +298,7 @@ export function ChatView({
         metrics: null,
       },
       {
-        id: `local-assistant-${Date.now()}`,
+        id: assistantId,
         role: 'assistant',
         content: '',
         citations: [],
@@ -309,13 +317,11 @@ export function ChatView({
     const applyToLast = (
       update: (m: ConversationMessage) => ConversationMessage,
     ) => {
-      setMessages((prev) => {
-        const next = [...prev]
-        const last = next[next.length - 1]
-        if (last) next[next.length - 1] = update(last)
-        return next
-      })
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? update(m) : m)),
+      )
     }
+    const isCurrent = () => seq === requestSeq.current
 
     // Captured now, before any response arrives: this is the scope that will
     // end up locked in if this call creates a new conversation.
@@ -392,16 +398,15 @@ export function ChatView({
             // version — this is what gets persisted, so the thread is
             // consistent when reopened.
             const verified = event.value
-            setMessages((prev) => {
-              const next = [...prev]
-              const last = next.length - 1
-              if (last >= 0 && next[last]) {
-                next[last] = { ...next[last], content: verified }
-              }
-              return next
-            })
+            applyToLast((m) => ({ ...m, content: verified }))
           } else if (event.type === 'step') {
-            setPhase(phaseLabel(event.phase, event.iteration))
+            if (event.phase === 'verifying') {
+              // After `metrics`: the composer is already free. Mark this
+              // answer instead of the shared phase label.
+              setVerifyingId(assistantId)
+            } else if (isCurrent()) {
+              setPhase(phaseLabel(event.phase, event.iteration))
+            }
           } else if (event.type === 'citations') {
             applyToLast((m) => ({ ...m, citations: event.citations ?? [] }))
           } else if (event.type === 'token') {
@@ -416,16 +421,33 @@ export function ChatView({
           } else if (event.type === 'metrics' && event.metrics) {
             const metrics = event.metrics
             applyToLast((m) => ({ ...m, metrics }))
+            // The answer is complete and saved: free the composer now rather
+            // than when the stream closes after citation verification (#48).
+            if (isCurrent()) {
+              setIsStreaming(false)
+              setPhase(undefined)
+            }
           } else if (event.type === 'error') {
-            setError(event.message ?? 'The answer could not be generated.')
+            if (isCurrent()) {
+              setError(event.message ?? 'The answer could not be generated.')
+            }
           }
         }
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The request failed.')
+      if (isCurrent()) {
+        setError(
+          caught instanceof Error ? caught.message : 'The request failed.',
+        )
+      }
     } finally {
-      setIsStreaming(false)
-      setPhase(undefined)
+      setVerifyingId((id) => (id === assistantId ? null : id))
+      // An older request finishing its verification must not unlock (or
+      // relabel) the composer while a newer answer is streaming.
+      if (isCurrent()) {
+        setIsStreaming(false)
+        setPhase(undefined)
+      }
       // Refresh so the new conversation (and its title) appears in Recents.
       //
       // Deferred and re-checked, not fired immediately. `router.refresh()`
@@ -628,6 +650,19 @@ export function ChatView({
                               {phase}
                             </p>
                           )}
+                        {/*
+                          Citation checking after the composer has unlocked
+                          (#48). Tied to this answer by id, so it stays on the
+                          right message if another question is already asked.
+                        */}
+                        {message.id === verifyingId && message.content && (
+                          <p
+                            className="text-muted-foreground mt-3 text-xs"
+                            role="status"
+                          >
+                            {phaseLabel('verifying')}
+                          </p>
+                        )}
                         {message.citations.length > 0 && (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <span className="text-muted-foreground text-xs">
