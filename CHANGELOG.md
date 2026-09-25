@@ -8,6 +8,18 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- **Next.js and Auth.js patched past critical advisories**
+  ([#11](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/11)).
+  `next` 16.2.10 → 16.3.6 fixes an unauthenticated RCE in image optimisation,
+  a proxy bypass, SSRF and a Server Action DoS; `next-auth` 5.0.0-beta.31 →
+  beta.32 (with `@auth/core` 0.41.3) fixes auth-check and email-normalisation
+  issues. `@auth/drizzle-adapter` 1.11.3, `nodemailer` 9.1.1, `sharp` 0.35.4
+  and `eslint-config-next` 16.3.6 follow, and pnpm overrides set floors for
+  `browserslist` and `baseline-browser-mapping`. `pnpm audit --prod` now
+  reports no known vulnerabilities (it reported 33, 5 of them critical).
+
 ### Added
 
 - **Work is tied to issues, and the release process is checked**
