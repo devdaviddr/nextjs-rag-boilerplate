@@ -59,6 +59,20 @@ suite is green. Fast where it is safe to be fast, strict where it matters.
 There is no CodeQL workflow. It was removed while the repository was private
 and code scanning was unavailable; restoring it is a separate decision.
 
+### Docs-only pull requests
+
+A `changes` job classifies each pull request. When every changed file is
+under `specs/` or `docs/`, or ends in `.md`, the PR is **docs-only**:
+
+- **Lint · Typecheck · Unit** runs only install, `format:check` and
+  `specs:check`.
+- **E2E (Playwright)** and **Build image** are skipped. A job skipped by an
+  `if:` counts as passing for the ruleset's required checks, so the PR stays
+  mergeable in about a minute instead of several.
+
+Pushes to `main` always run the full pipeline. The `release` job re-tags the
+image `main` built for the tagged commit, so every `main` commit needs one.
+
 ### Shared setup
 
 All jobs run on `ubuntu-latest` with **Node 22** (no version matrix) and pnpm
