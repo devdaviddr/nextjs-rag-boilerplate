@@ -20,6 +20,7 @@ import { createChatCompletion } from '@/lib/rag/client'
 import { chunksFromPdf } from '@/lib/rag/crack'
 import { embedPassages } from '@/lib/rag/embed'
 import {
+  assembleParents,
   listReadyDocuments,
   retrieveDocumentChunks,
   retrieveForOwner,
@@ -75,6 +76,11 @@ import { deleteObjectsUnderPrefix, putObject } from '@/lib/storage/client'
  *                                 # it is reported separately and never folded
  *                                 # into hit@k. Costs one chat call per
  *                                 # checked question.
+ *   pnpm rag:eval --parents-ab --label 1c
+ *                                 # spec 0033 1c: score ONE retrieval twice —
+ *                                 # flat (children only) and with parents
+ *                                 # assembled — and save both,
+ *                                 # eval/results/{1c-flat,1c}.json
  *   pnpm rag:eval --compare       # ALSO run the agentic path; save
  *                                 # eval/results/{baseline,agentic}.json; print
  *                                 # ONE comparison carrying both passes'
@@ -116,7 +122,13 @@ const RESULTS_DIR = 'eval/results'
 const KNOWLEDGE_BASES = [
   {
     name: 'HR & Employment',
-    documents: ['staff-handbook', 'employment-contract'],
+    documents: [
+      'staff-handbook',
+      'employment-contract',
+      // Spec 0033 1c's sectioned document. HR-flavoured, and its vocabulary
+      // was checked against every unanswerable question before it was added.
+      'records-policy',
+    ],
   },
   {
     name: 'Facilities & Operations',
@@ -158,7 +170,8 @@ interface AnswerFact {
   page: number
 }
 
-type QuestionType = 'single-hop' | 'followup' | 'multi-hop' | 'layout'
+type QuestionType =
+  'single-hop' | 'followup' | 'multi-hop' | 'layout' | 'section'
 
 interface Question {
   id: string
@@ -200,6 +213,17 @@ interface Question {
    * decline rather than state a number nobody wrote down.
    */
   answerMustNotMatch?: string
+  /**
+   * `section` only (spec 0033 1c): substrings the retrieved PARENT must
+   * contain, drawn from different paragraphs of the section so that no single
+   * chunk can satisfy them. See `scoreQuestion`.
+   */
+  sectionMustContain?: string[]
+  /**
+   * `section` only. `false` marks a diagnostic question: scored and logged,
+   * never counted towards the section criterion.
+   */
+  gating?: boolean
 }
 
 function questionType(q: Question): QuestionType {
@@ -248,6 +272,17 @@ interface QuestionResult {
   searches?: number
   tokensUsed?: number
   termination?: string
+  /**
+   * `section` only (spec 0033 1c). `parentOf`: members of the first
+   * correct-page result (1 for a plain chunk). `adjacentChildren`: how many
+   * retrieved items sit on the answer's (document, page) — what the flat
+   * list returns in place of one parent. `assembledFrom`: how many of the
+   * parent's members the gate admitted on their own.
+   */
+  parentOf?: number
+  adjacentChildren?: number
+  assembledFrom?: number
+  gating?: boolean
 }
 
 /** One chunk that came back from a knowledge base it should never have. */
@@ -415,6 +450,10 @@ async function ingestCorpus(): Promise<void> {
         knowledgeBaseId,
         content: piece.content,
         heading: piece.heading,
+        // As ingest.ts writes it. Part of the section key parent assembly
+        // groups by (spec 0033 1c); without it two same-named headings on one
+        // page would group as one section here and not in production.
+        headingBbox: piece.headingBox ?? null,
         pageNumber: piece.pageNumber,
         chunkIndex: piece.chunkIndex,
         tokenCount: piece.tokenCount,
@@ -484,7 +523,40 @@ function scoreQuestion(
     return { rank: null, factRanks, passed }
   }
   const rank = findRank(retrieved, titleById, q.document!, q.page!)
+  if (questionType(q) === 'section') {
+    return { rank, passed: sectionPassed(q, retrieved, rank) }
+  }
   return { rank, passed: rank !== null }
+}
+
+/**
+ * A `section` question (spec 0033 1c) passes when the section came back as
+ * ONE unit, not merely when the right page did:
+ *
+ * - the first correct-page result is a parent — two or more members;
+ * - its content holds every `sectionMustContain` substring, which are drawn
+ *   from different paragraphs, so the parent really is the section;
+ * - no other retrieved item is one of its members, so the section was not
+ *   returned twice, once whole and once in slices.
+ *
+ * The flat list can never pass this by construction; that is the "before"
+ * the criterion is measured against.
+ */
+function sectionPassed(
+  q: Question,
+  retrieved: readonly RetrievedChunk[],
+  rank: number | null,
+): boolean {
+  if (rank === null) return false
+  const hit = retrieved[rank - 1]!
+  const members = hit.memberChunkIds ?? []
+  if (members.length < 2) return false
+  if (!(q.sectionMustContain ?? []).every((s) => hit.content.includes(s))) {
+    return false
+  }
+  return retrieved.every(
+    (other) => other === hit || !members.includes(other.chunkId),
+  )
 }
 
 function buildResult(
@@ -500,6 +572,25 @@ function buildResult(
 ): QuestionResult {
   const { rank, factRanks, passed } = scoreQuestion(q, retrieved, titleById)
   const top = retrieved[0]
+  const section =
+    questionType(q) === 'section'
+      ? {
+          gating: q.gating !== false,
+          adjacentChildren: retrieved.filter(
+            (r) =>
+              titleById.get(r.documentId) === q.document &&
+              r.pageNumber === q.page,
+          ).length,
+          ...(rank !== null
+            ? {
+                parentOf: retrieved[rank - 1]!.memberChunkIds?.length ?? 1,
+                ...(retrieved[rank - 1]!.assembledFrom !== undefined
+                  ? { assembledFrom: retrieved[rank - 1]!.assembledFrom }
+                  : {}),
+              }
+            : {}),
+        }
+      : {}
   return {
     id: q.id,
     type: questionType(q),
@@ -513,6 +604,7 @@ function buildResult(
     topDocument: top ? (titleById.get(top.documentId) ?? null) : null,
     topPage: top?.pageNumber ?? null,
     passed,
+    ...section,
     ...extra,
   }
 }
@@ -526,6 +618,9 @@ function logResult(r: QuestionResult): void {
       .join(' + ')
   } else if (r.answerable) {
     where = r.rank === null ? 'not retrieved' : `rank ${r.rank}`
+    if (r.parentOf !== undefined && r.parentOf > 1) {
+      where += ` (parent of ${r.parentOf})`
+    }
   } else {
     where = `${r.retrieved} chunk(s) above floor`
   }
@@ -549,6 +644,13 @@ function logResult(r: QuestionResult): void {
     console.log(
       `        searches: ${r.searches}  tokens: ${r.tokensUsed}  ` +
         `termination: ${r.termination}`,
+    )
+  }
+  if (r.type === 'section') {
+    console.log(
+      `        section: adjacentChildren ${r.adjacentChildren}  ` +
+        `assembledFrom ${r.assembledFrom ?? 'n/a'}` +
+        (r.gating === false ? '  (diagnostic, not gating)' : ''),
     )
   }
   if (!r.passed && r.hard) console.log(`        hard case: ${r.hard}`)
@@ -581,14 +683,33 @@ async function baselineRetrieve(
   ownerId: string,
   kbIds: readonly string[],
   docsInScope: { id: string; title: string }[],
-): Promise<{ chunks: RetrievedChunk[]; latencyMs: number }> {
+  options: { assembleParents?: boolean } = {},
+): Promise<{
+  chunks: RetrievedChunk[]
+  latencyMs: number
+  mode: 'document' | 'search'
+}> {
   const startedAt = Date.now()
   const scope = resolveScope(q.question, docsInScope)
   const chunks =
     scope.mode === 'document'
       ? await retrieveDocumentChunks(ownerId, scope.documentId, kbIds)
-      : await retrieveForOwner(ownerId, q.question, kbIds)
-  return { chunks, latencyMs: Date.now() - startedAt }
+      : await retrieveForOwner(ownerId, q.question, kbIds, options)
+  return {
+    chunks,
+    latencyMs: Date.now() - startedAt,
+    mode: scope.mode === 'document' ? 'document' : 'search',
+  }
+}
+
+/**
+ * The section slice's one line (spec 0033 1c): how many GATING section
+ * questions came back as a parent at rank 1.
+ */
+function sectionLine(results: readonly QuestionResult[]): string {
+  const gating = results.filter((r) => r.type === 'section' && r.gating)
+  const atOne = gating.filter((r) => r.passed && r.rank === 1).length
+  return `parent@1 ${atOne}/${gating.length}`
 }
 
 /**
@@ -1149,6 +1270,26 @@ function formatCostDelta(
 
 async function main(): Promise<void> {
   const compare = hasFlag('compare')
+  const parentsAb = hasFlag('parents-ab')
+  // The one-run A/B (spec 0033 1c) scores the flat list and the assembled one
+  // from the SAME retrieval. That is exact only while retrieval returns at
+  // most topK admitted chunks, which is true only with reranking off — a wider
+  // pool would be cut to topK before assembly in one column and after it in
+  // the other. And it is a fixed-pipeline measurement: it does not combine
+  // with the agentic A/B.
+  if (parentsAb && env.RAG_RERANK_ENABLED) {
+    console.error(
+      '--parents-ab needs RAG_RERANK_ENABLED=false: with a widened pool the ' +
+        'flat and assembled columns would not be one retrieval scored twice.',
+    )
+    process.exit(1)
+  }
+  if (parentsAb && compare) {
+    console.error(
+      '--parents-ab and --compare measure different things; run one.',
+    )
+    process.exit(1)
+  }
   const label = arg('label') ?? 'baseline'
   const baselineLabel = arg('baseline') ?? 'baseline'
   const { questions } = JSON.parse(
@@ -1158,7 +1299,9 @@ async function main(): Promise<void> {
   console.log(
     compare
       ? '\nA/B evaluation — spec 0029'
-      : `\nRetrieval evaluation — label: ${label}`,
+      : parentsAb
+        ? `\nParent assembly A/B (spec 0033 1c) — label: ${label}`
+        : `\nRetrieval evaluation — label: ${label}`,
   )
   console.log(
     `top_k=${env.RAG_TOP_K}  floor=${env.RAG_MIN_SIMILARITY}  ` +
@@ -1210,21 +1353,39 @@ async function main(): Promise<void> {
   // Kept so `--answers` can generate from exactly what retrieval returned,
   // rather than retrieving a second time and scoring a different context.
   const retrievedById = new Map<string, RetrievedChunk[]>()
+  // --parents-ab only: the same retrieval, scored before assembly.
+  const flatResults: QuestionResult[] = []
   for (const q of questions) {
     const outcome = await baselineRetrieve(
       q,
       EVAL_USER_ID,
       allKbIds,
       docsInScope,
+      parentsAb ? { assembleParents: false } : {},
     )
-    retrievedById.set(q.id, outcome.chunks)
+    let chunks = outcome.chunks
+    let latencyMs = outcome.latencyMs
+    if (parentsAb) {
+      flatResults.push(buildResult(q, outcome.chunks, titleById, { latencyMs }))
+      // Assembled from the flat list itself — no second embedding call, so
+      // the two columns cannot differ for any reason but assembly. The
+      // whole-document path has nothing to assemble.
+      if (outcome.mode === 'search') {
+        const startedAt = Date.now()
+        chunks = await assembleParents(EVAL_USER_ID, allKbIds, outcome.chunks)
+        latencyMs += Date.now() - startedAt
+      }
+    }
+    retrievedById.set(q.id, chunks)
     // Only `latencyMs`. `searches`, `tokensUsed` and `termination` are left
     // off entirely rather than passed as 0 — see QuestionResult's note.
-    const result = buildResult(q, outcome.chunks, titleById, {
-      latencyMs: outcome.latencyMs,
-    })
+    const result = buildResult(q, chunks, titleById, { latencyMs })
     baselineResults.push(result)
     logResult(result)
+  }
+  if (parentsAb) {
+    console.log('\nFlat (children only, the same retrieval) — per question:')
+    for (const result of flatResults) logResult(result)
   }
 
   // --- Agentic pass, ONLY under --compare: real NVIDIA calls, several per
@@ -1300,6 +1461,11 @@ async function main(): Promise<void> {
     (r) => r.type === 'multi-hop',
   )
   const baselineMultiHopCore = coreMetrics(baselineMultiHopSlice)
+  // Spec 0033 1c. Its own slice, like layout: these questions exist to fail
+  // until parents assemble, and a new document's questions in the headline
+  // pool would move it for a reason that is not a retrieval regression.
+  const baselineSection = baselineResults.filter((r) => r.type === 'section')
+  const baselineSectionCore = coreMetrics(baselineSection)
   // Pooled over every question the pass ran, exactly like the agentic block —
   // not over the single-hop headline slice. Cost does not care which slice a
   // question belongs to, and pooling the two blocks differently would put two
@@ -1357,6 +1523,9 @@ async function main(): Promise<void> {
     layout: baselineLayoutCore,
     multiHop: baselineMultiHop,
     multiHopRefusal: baselineMultiHopCore,
+    // Spec 0033 1c, additive like `cost` below.
+    section: { ...baselineSectionCore, line: sectionLine(baselineResults) },
+    parentAssembly: parentsAb ? true : env.RAG_PARENT_ASSEMBLY,
     // New in spec 0032, and purely additive: older files in eval/results/ have
     // no `cost` key at all, and the only field this harness ever reads back
     // out of a saved file is `metrics.refusalAccuracy` (the --baseline gate
@@ -1392,6 +1561,11 @@ async function main(): Promise<void> {
   for (const row of baselineLayout.filter((r) => !r.passed)) {
     console.log(`    ✗ ${row.id} — ${row.hard ?? 'no note'}`)
   }
+  console.log(
+    `Baseline section (n=${baselineSection.length}, ` +
+      `${baselineSection.filter((r) => r.gating).length} gating): ` +
+      `${sectionLine(baselineResults)}  hit@1 ${baselineSectionCore.hitAt1}`,
+  )
 
   // Printed on EVERY run, not only under --compare. A plain `pnpm rag:eval`
   // should be able to answer "how long does the fixed path take?" out of its
@@ -1417,6 +1591,17 @@ async function main(): Promise<void> {
   console.log(`\nSaved eval/results/${baselineSummary.label}.json`)
 
   printGates(crossKbLeakage, leaks, complementFailures)
+
+  // --- The parent-assembly A/B (spec 0033 1c), if asked for.
+  let parentsGateFailed = false
+  if (parentsAb) {
+    parentsGateFailed = reportParentsAb(
+      label,
+      baselineSummary.config,
+      flatResults,
+      baselineResults,
+    )
+  }
 
   // --- Refusal-accuracy hard gate against a SAVED baseline file (unchanged
   // from before spec 0029) — only meaningful outside --compare, for gating
@@ -1717,10 +1902,113 @@ async function main(): Promise<void> {
     crossKbLeakage > 0 ||
     complementFailures.length > 0 ||
     savedLabelGateFailed ||
-    compareGateFailed
+    compareGateFailed ||
+    parentsGateFailed
   ) {
     process.exit(1)
   }
+}
+
+/**
+ * Save and compare the two columns of `--parents-ab` (spec 0033 1c).
+ *
+ * The original 20 single-hop questions are the control. Their pages are one
+ * chunk each (see `$comment-0033` in questions.json), so assembly cannot
+ * touch them and any movement there between this run and an earlier one is
+ * the new document entering the pool, not 1c. The flat column is what
+ * separates the two.
+ *
+ * Refusal is the gate, as everywhere in this harness: 1.000 in both columns,
+ * and the SAME questions refused in both. Assembly only rewrites a non-empty
+ * list, so a difference would be a bug, not a trade.
+ */
+function reportParentsAb(
+  label: string,
+  config: Record<string, unknown>,
+  flat: readonly QuestionResult[],
+  assembled: readonly QuestionResult[],
+): boolean {
+  const slice = (rows: readonly QuestionResult[], type: QuestionType) =>
+    rows.filter((r) => r.type === type)
+  const flatCore = coreMetrics(slice(flat, 'single-hop'))
+  const assembledCore = coreMetrics(slice(assembled, 'single-hop'))
+
+  const flatSummary = {
+    label: `${label}-flat`,
+    at: new Date().toISOString(),
+    config: { ...config, parentAssembly: false },
+    metrics: flatCore,
+    followup: coreMetrics(slice(flat, 'followup')),
+    layout: coreMetrics(slice(flat, 'layout')),
+    multiHop: multiHopMetrics(flat),
+    multiHopRefusal: coreMetrics(slice(flat, 'multi-hop')),
+    section: {
+      ...coreMetrics(slice(flat, 'section')),
+      line: sectionLine(flat),
+    },
+    results: flat,
+  }
+  writeFileSync(
+    join(RESULTS_DIR, `${flatSummary.label}.json`),
+    JSON.stringify(flatSummary, null, 2),
+  )
+  console.log(`\nSaved eval/results/${flatSummary.label}.json`)
+
+  console.log(
+    '\nParent assembly A/B (spec 0033 1c) — single-hop, n=%d',
+    slice(flat, 'single-hop').length,
+  )
+  console.log(`  ${col('metric', 20)}${col('flat')}${col('1c')}`)
+  const rows: [string, keyof CoreMetrics][] = [
+    ['hit@1', 'hitAt1'],
+    ['hit@3', 'hitAt3'],
+    [`hit@${env.RAG_TOP_K}`, 'hitAtK'],
+    ['MRR', 'mrr'],
+    ['refusal accuracy', 'refusalAccuracy'],
+  ]
+  for (const [name, key] of rows) {
+    console.log(
+      `  ${col(name, 20)}${col(flatCore[key])}${col(assembledCore[key])}`,
+    )
+  }
+  for (const type of ['followup', 'layout', 'multi-hop'] as const) {
+    const f = coreMetrics(slice(flat, type))
+    const a = coreMetrics(slice(assembled, type))
+    console.log(
+      `  ${col(`${type} hit@1`, 20)}${col(f.hitAt1)}${col(a.hitAt1)}` +
+        `refusal ${f.refusalAccuracy} / ${a.refusalAccuracy}`,
+    )
+  }
+  const gatingSection = slice(assembled, 'section').filter((r) => r.gating)
+  console.log(
+    `  Section (n=${gatingSection.length} gating): ` +
+      `${sectionLine(assembled)}, flat ${sectionLine(flat).replace('parent@1 ', '')}`,
+  )
+
+  // Refusal: 1.000 in both, and the same questions refused in both.
+  const refusedIn = (rows: readonly QuestionResult[]) =>
+    rows
+      .filter((r) => !r.answerable)
+      .map((r) => `${r.id}:${r.passed}`)
+      .join(',')
+  const allRefusal = (rows: readonly QuestionResult[]) =>
+    rows.filter((r) => !r.answerable).every((r) => r.passed)
+  const identical = refusedIn(flat) === refusedIn(assembled)
+  const perfect = allRefusal(flat) && allRefusal(assembled)
+  if (!identical || !perfect) {
+    console.error(`\n${'!'.repeat(72)}`)
+    console.error(
+      'REFUSAL CHANGED UNDER PARENT ASSEMBLY (spec 0033 NFR2) — HARD FAIL. ' +
+        `identical: ${identical}, 1.000 in both: ${perfect}.`,
+    )
+    console.error('!'.repeat(72))
+    return true
+  }
+  console.log(
+    '\nRefusal gate (0033 NFR2): every unanswerable question refused in both ' +
+      'columns, identically — OK',
+  )
+  return false
 }
 
 main().catch(async (error) => {

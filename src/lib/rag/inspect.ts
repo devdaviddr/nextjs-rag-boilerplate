@@ -1,5 +1,6 @@
 import type { ChunkKind, ExtractionPage, ExtractionSummary } from '@/db/schema'
 import type { CitationBox } from '@/lib/citations/boxes'
+import { sectionRuns } from './parents'
 
 /**
  * Turning what ingestion recorded into something a user can read (spec 0037).
@@ -58,6 +59,17 @@ export interface InspectedChunk {
    * exactly the kind of confident wrongness this whole feature exists against.
    */
   embeddedText: string
+  /**
+   * Which section run on its page this chunk belongs to, 1-based, and how
+   * many chunks that run holds (spec 0033, 1c). A run is what retrieval can
+   * return as one PARENT when two or more of its chunks match a question —
+   * computed by the same `sectionRuns` retrieval uses, so the view cannot
+   * disagree with what a search would assemble. Absent for a figure, which
+   * is never part of a run, and optional so a caller that builds chunks
+   * before `buildInspection` numbers them need not invent one.
+   */
+  run?: number
+  runSize?: number
 }
 
 /**
@@ -343,9 +355,28 @@ export function buildInspection(input: {
 
   const pages: InspectedPage[] = pageNumbers.map((n) => {
     const record = recorded.get(n)
-    const pageChunks = (byPage.get(n) ?? []).sort(
+    const sorted = (byPage.get(n) ?? []).sort(
       (a, b) => a.chunkIndex - b.chunkIndex,
     )
+    // Section runs, grouped exactly as parent assembly groups them. The
+    // heading box here is the reconciled one; every chunk of a section
+    // carries the same stored box, so it reconciles identically.
+    const runs = sectionRuns(
+      sorted.map((chunk) => ({
+        ...chunk,
+        headingBbox: chunk.headingBox,
+      })),
+    )
+    const runById = new Map<string, { run: number; runSize: number }>()
+    runs.forEach((members, i) => {
+      for (const member of members) {
+        runById.set(member.id, { run: i + 1, runSize: members.length })
+      }
+    })
+    const pageChunks = sorted.map((chunk) => ({
+      ...chunk,
+      ...runById.get(chunk.id),
+    }))
     return {
       page: n,
       chunks: pageChunks,

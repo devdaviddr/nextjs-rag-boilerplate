@@ -574,6 +574,13 @@ export interface StoredCitation {
   documentTitle: string
   pageNumber: number
   similarity: number
+  /**
+   * The source was an assembled section PARENT (spec 0033, 1c): `chunkId` is
+   * the first chunk of the run, and the citation panel asks for the whole
+   * run's boxes. Optional, and `jsonb`, so no migration — every message
+   * written before this keeps single-chunk behaviour.
+   */
+  parent?: true
 }
 
 /** Mirrors MessageMetrics in lib/chat/metrics.ts. */

@@ -516,6 +516,79 @@ const PLANT_SERVICES_PAGES = [
 
 DOCS['plant-services-manual.pdf'] = PLANT_SERVICES_PAGES
 
+// --- Spec 0033 1c: a document with SECTIONS -------------------------------
+//
+// Parent-child chunking needs a page on which one section is several chunks.
+// Not one of the six documents above has one: every legacy page is set in a
+// single 11pt size, so layout.ts (spec 0039) finds no heading and each page is
+// one paragraph, one chunk — 1c changes nothing there, which is what makes
+// those pages the control. The layout pages are one section each or a table.
+//
+// So this page states its structure the way a real policy does, in POINT
+// SIZES: a 16pt title, 13pt numbered headings and 11pt body paragraphs with a
+// blank line between them. The text-layer path turns each heading into a
+// Section-header and each paragraph into its own chunk, so "4. Disposing of
+// records" is a run of four chunks and "5. Retention periods" a run of two.
+//
+// The questions over it (`type: "section"` in questions.json) are answered by
+// the whole of one section, never by one paragraph of it. The vocabulary is
+// kept away from every unanswerable question's topic — leave, bonuses,
+// contracts, parking, holidays — so the new chunks do not give a refusal
+// question something to clear the floor on.
+function paragraphOps(x, top, size, leading, paragraphs) {
+  const ops = []
+  let y = top
+  for (const lines of paragraphs) {
+    ops.push(draw.block(x, y, size, leading, lines))
+    // One blank line between paragraphs: layout.ts ends a paragraph on a gap
+    // wider than 0.6 of a line, and the gap inside one is ~0.3.
+    y -= leading * (lines.length + 1)
+  }
+  return { ops, bottom: y }
+}
+
+const disposal = paragraphOps(60, 684, 11, 14, [
+  [
+    'Before any record is disposed of, the records officer confirms that it is',
+    'listed in the records register and that its disposal date has passed.',
+  ],
+  [
+    'Disposal needs written custodian sign-off. The custodian named in the',
+    'register approves each batch before it leaves the office.',
+  ],
+  [
+    'Paper records are destroyed by cross-cut shredding on site. Electronic',
+    'records are erased from every server and every backup copy.',
+  ],
+  [
+    'When a batch has been destroyed, the records officer completes a',
+    'destruction certificate and files it against the register entry.',
+  ],
+])
+
+const retention = paragraphOps(60, disposal.bottom - 34, 11, 14, [
+  [
+    'Financial and tax records are kept for seven years from the end of the',
+    'financial year they relate to.',
+  ],
+  [
+    'Board minutes, company registers and title deeds are kept permanently',
+    'and are never destroyed.',
+  ],
+])
+
+DOCS['records-policy.pdf'] = [
+  {
+    ops: [
+      draw.text(60, 740, 16, 'RECORDS MANAGEMENT POLICY'),
+      draw.text(60, 706, 13, '4. Disposing of records'),
+      ...disposal.ops,
+      draw.text(60, disposal.bottom - 12, 13, '5. Retention periods'),
+      ...retention.ops,
+    ],
+  },
+]
+
 DOCS['site-operations-report.pdf'] = SITE_REPORT_PAGES
 DOCS['maintenance-log.pdf'] = MAINTENANCE_LOG_PAGES
 

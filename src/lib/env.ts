@@ -397,6 +397,18 @@ const envSchema = z
       .optional()
       .default('.cache/rerank-models'),
 
+    // --- Parent–child assembly (spec 0033, 1c) ------------------------------
+    // After the similarity gate, two or more admitted chunks of one section
+    // run on one page are replaced by that whole run (the "parent"). Nothing
+    // is embedded or stored for it, so the gate — and refusal — decide exactly
+    // what they decided before; see src/lib/rag/parents.ts. Read by
+    // `retrieveForOwner` as the default for `RetrieveOptions.assembleParents`.
+    // The parent's size cap is derived (3 x RAG_CHUNK_TOKENS), not configured.
+    RAG_PARENT_ASSEMBLY: z
+      .string()
+      .optional()
+      .default('true')
+      .transform((v) => v === 'true'),
     // --- HyDE (spec 0033 FR6, 0027 1g) -------------------------------------
     // Embed a hypothetical ANSWER instead of the question, because an answer
     // looks more like the passage containing it than a question does.

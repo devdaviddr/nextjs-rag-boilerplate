@@ -2,6 +2,7 @@
   "$comment": "Ground truth for the retrieval harness (spec 0027, Recommendation 0; spec 0029 Evaluation). Each question names the document and page that answers it. `answerable: false` means the corpus does not contain the answer and the system must refuse. `hard` labels why a case is included, so a regression report says what kind of retrieval broke. `type` is 'single-hop' (default, the original 20 — untouched, so the recorded baseline stays comparable), 'followup' (a fixture whose `turns` are prior conversation; the standalone `question` is a reference that only retrieves correctly once resolved — spec 0029's whole reason for existing), or 'multi-hop' (the answer needs facts from more than one page, given as `answerDocuments`; a single `document`/`page` cannot express it).",
   "$comment-0032": "Spec 0032 grew the two slices that carry the RAG_AGENTIC_ENABLED decision: followup 3 -> 20 and multi-hop 2 -> 15, so one question no longer moves a metric by a third. Every new fact is traceable to eval/make-corpus.mjs, or — for the maintenance log's scanned Appendix B — to eval/corpus-assets/make-appendix-b-scan.py, which was written for this change so that page's ground truth is readable in source instead of only inside a JPEG. No document was added: the retrieval pool is the same six the recorded baseline ran against. The followup slice spans four reference kinds (pronoun, elided subject, correction, and a referent two turns back rather than one) and the multi-hop slice spans three shapes (two facts in one document, two facts across two documents, and a fact needing a table or figure plus prose).",
   "$comment-0032-refusals": "Four followups and three multi-hops are `answerable: false` so the refusal gate covers the new slices. NOTE for whoever owns eval/run.ts: `scoreQuestion` tests `type === 'multi-hop'` BEFORE it tests `!q.answerable`, so an unanswerable multi-hop takes the multi-hop branch, finds no `answerDocuments`, and scores `passed: false` however well the system refuses — multi-hop refusal accuracy reads 0.000 until those two branches are reordered. The questions below are shaped correctly (no `answerDocuments`, the same way an unanswerable single-hop carries no `document`/`page`); the scorer is what needs the fix.",
+  "$comment-0033": "Spec 0033 1c (parent-child assembly) adds `type: \"section\"`: a question answered by a WHOLE section, never by one paragraph of it. `sectionMustContain` lists substrings drawn from different paragraphs of that section, so no single chunk can satisfy it. A section question passes only when the first correct-page result is an assembled parent (two or more members) whose content contains every substring, and no other retrieved item is one of its members. They need eval/corpus/records-policy.pdf, the only document whose pages carry more than one chunk per section: every legacy page is set in one point size, so layout.ts finds no heading and each is a single chunk, which leaves the original 20 single-hop questions as the control for this change. `gating: false` marks a diagnostic question that is reported and never counted towards the section criterion.",
   "questions": [
     {
       "id": "leave-entitlement",
@@ -923,6 +924,45 @@
       "answerable": true,
       "hard": "A seven-column table with three two-column spans. Flattened, the row is 'Plumbing 88 132 110 165 154 231' and the two header rows are separate lines, so the answer requires mapping the fourth of six sub-columns to the second of three spans with nothing to count from.",
       "answerMustContain": ["165"]
+    },
+    {
+      "id": "section-records-disposal",
+      "type": "section",
+      "question": "What is the process for disposing of records?",
+      "document": "records-policy",
+      "knowledgeBase": "HR & Employment",
+      "page": 1,
+      "answerable": true,
+      "hard": "The answer is the whole of '4. Disposing of records': four paragraphs, four chunks, each holding one step. Measured 2026-09-25 against this document alone, each child clears the 0.35 floor on its own (0.556, 0.500, 0.468, 0.489), so the flat list returns four adjacent slices of one section; 1c returns the section once.",
+      "sectionMustContain": [
+        "records register",
+        "custodian",
+        "cross-cut shredding",
+        "destruction certificate"
+      ]
+    },
+    {
+      "id": "section-records-retention",
+      "type": "section",
+      "question": "What are the retention periods for records?",
+      "document": "records-policy",
+      "knowledgeBase": "HR & Employment",
+      "page": 1,
+      "answerable": true,
+      "hard": "'5. Retention periods' is two paragraphs, one per retention rule. Measured 2026-09-25: the two children score 0.428 and 0.403 — both admitted, the second close to the floor. The disposal section's children score 0.232-0.312 for this question and stay below it, so the two sections on the page must not merge.",
+      "sectionMustContain": ["seven years", "permanently"]
+    },
+    {
+      "id": "section-downtime-table",
+      "type": "section",
+      "gating": false,
+      "question": "How do planned and unplanned downtime hours compare across Ballarat, Geelong and Bendigo?",
+      "document": "site-operations-report",
+      "knowledgeBase": "Facilities & Operations",
+      "page": 2,
+      "answerable": true,
+      "hard": "Diagnostic, not gating. With cracking off, Table 3.1 is read from the text layer as one line per row and no heading, so its rows are one heading-less run on the page. Shows whether a real text-layer table page assembles into one parent when several rows clear the floor.",
+      "sectionMustContain": ["Ballarat", "Geelong", "Bendigo"]
     }
   ]
 }

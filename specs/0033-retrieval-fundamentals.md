@@ -103,7 +103,9 @@ the same problem, neither measured against the other.
   citation resolve to an exact page (spec 0025 FR6) and it is not negotiable
   for a recall gain.
 - **NFR4** — Any change requiring a re-ingest says so, and existing documents
-  keep working until re-ingested.
+  keep working until re-ingested. 1c requires none: pre-0039 rows carry no
+  heading position and group at page granularity — coarser, still
+  single-page, still gated.
 
 ## Design / approach
 
@@ -208,12 +210,46 @@ tokenizer at ingestion only (FR2).
 
 Cracked pages already produce `NormalizedElement`s carrying `heading` and
 `atomic`. A parent is the run of elements under one `Section-header`; children
-are today's token-budget chunks. Both are embedded; retrieval prefers the parent
+are today's token-budget chunks. ~~Both are embedded~~ **Children are embedded;
+the parent is assembled from gated children**; retrieval prefers the parent
 when several children of the same parent match.
 
-The text-layer path has no elements, so it needs a heading-run equivalent from
+> **Amended (2026-09-25, #26) — the parent is assembled, not embedded.** A
+> section-sized vector is a new similarity distribution, and the 0.35 floor
+> (NFR2) was calibrated against chunk-sized ones; embedding parents would move
+> what the floor means on exactly the metric this spec holds at 1.000. So a
+> parent is the contiguous run of non-figure chunks on one page sharing a
+> section key — `heading` plus `heading_bbox`, both already stored — and it is
+> assembled after the gate, only when **two or more** of its chunks were
+> admitted on their own cosine. Its score is the best admitted child's. FR3's
+> "retrievable unit" is met because the parent is the unit retrieval returns;
+> FR4 is met by construction. What it costs, stated: a section where no two
+> children clear the floor on their own can never surface as a parent. No
+> migration and no re-ingest (NFR4). Code: `src/lib/rag/parents.ts`, with
+> `assembleParents` in `retrieve.ts`.
+
+~~The text-layer path has no elements, so it needs a heading-run equivalent from
 `detectHeading` — weaker, and that asymmetry should be stated rather than
-hidden. It also means the benefit accrues mostly to cracked documents.
+hidden. It also means the benefit accrues mostly to cracked documents.~~
+
+> **Corrected (2026-09-25).** Since
+> [`0039`](0039-structure-from-the-text-layer.md) the text-layer path DOES
+> produce elements: a PDF that reports point sizes gets headings from
+> `layout.ts`. There are three paths, and the parent differs by path:
+>
+> - **cracked** — the parser's `Section-header` elements; the parent is the
+>   section.
+> - **text layer with point sizes** — lines set larger than the body; the
+>   parent is the section.
+> - **`chunkPages` fallback** — one `detectHeading` line per page and no heading
+>   box, so the parent is the whole page, capped at `3 × RAG_CHUNK_TOKENS`.
+>
+> **Measured limitation.** A heading set at body size — the ALL-CAPS first line
+> of every page in `eval/corpus`'s original documents — is not detected by
+> `layout.ts`, so each of those pages is one chunk and 1c changes nothing there.
+> That makes them the control for 1c's own measurement. The evaluation adds
+> `records-policy`, generated with explicit point sizes, for the questions 1c
+> is meant to change.
 
 ### 1e — filtered ANN
 

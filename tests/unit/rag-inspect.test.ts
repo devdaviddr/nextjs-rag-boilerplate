@@ -223,6 +223,37 @@ describe('indexingCompleteness', () => {
   })
 })
 
+describe('buildInspection — section runs (spec 0033, 1c)', () => {
+  it("numbers each page's section runs the way retrieval groups them", () => {
+    const box = { xmin: 0.1, ymin: 0.1, xmax: 0.5, ymax: 0.12 }
+    const other = { xmin: 0.1, ymin: 0.5, xmax: 0.5, ymax: 0.52 }
+    const result = buildInspection({
+      pageCount: 1,
+      extraction: null,
+      chunks: [
+        chunk(1, { id: 'a', chunkIndex: 0, heading: 'One', headingBox: box }),
+        chunk(1, {
+          id: 'f',
+          chunkIndex: 1,
+          kind: 'figure',
+          heading: 'One',
+          headingBox: box,
+        }),
+        chunk(1, { id: 'b', chunkIndex: 2, heading: 'One', headingBox: box }),
+        chunk(1, { id: 'c', chunkIndex: 3, heading: 'Two', headingBox: other }),
+      ],
+    })
+    const runs = result.pages[0]!.chunks.map((c) => [c.id, c.run, c.runSize])
+    expect(runs).toEqual([
+      ['a', 1, 2],
+      // A figure is never part of a run.
+      ['f', undefined, undefined],
+      ['b', 1, 2],
+      ['c', 2, 1],
+    ])
+  })
+})
+
 describe('buildInspection', () => {
   it('lists a page that produced no chunks — the whole point of the view (FR6)', () => {
     const result = buildInspection({

@@ -54,6 +54,52 @@ describe('accumulate', () => {
   })
 })
 
+describe('accumulate — section parents (spec 0033, 1c)', () => {
+  function parent(
+    id: string,
+    members: string[],
+    similarity: number,
+  ): RetrievedChunk {
+    return {
+      ...chunk(id, similarity),
+      content: members.map((m) => `content ${m}`).join('\n\n'),
+      memberChunkIds: members,
+      assembledFrom: 2,
+    }
+  }
+
+  it('lets a parent absorb a member found by an earlier search', () => {
+    const merged = accumulate(
+      [chunk('b', 0.6), chunk('z', 0.4)],
+      [parent('a', ['a', 'b', 'c'], 0.5)],
+    )
+    expect(merged.map((c) => c.chunkId)).toEqual(['a', 'z'])
+    expect(merged[0]?.memberChunkIds).toEqual(['a', 'b', 'c'])
+    // The absorbed member's better score is kept, so the floor re-filter
+    // after the loop can never drop evidence it would have kept.
+    expect(merged[0]?.similarity).toBe(0.6)
+  })
+
+  it('drops a member that arrives after its parent', () => {
+    const merged = accumulate(
+      [parent('a', ['a', 'b'], 0.5)],
+      [chunk('a', 0.45), chunk('b', 0.4)],
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.memberChunkIds).toEqual(['a', 'b'])
+    expect(merged[0]?.similarity).toBe(0.5)
+  })
+
+  it('keeps one entry for the same parent from two searches, with the best score', () => {
+    const merged = accumulate(
+      [parent('a', ['a', 'b'], 0.45)],
+      [parent('a', ['a', 'b'], 0.55)],
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.similarity).toBe(0.55)
+  })
+})
+
 describe('runAgenticLoop — termination', () => {
   it('stops when the planner chooses to answer, without searching', async () => {
     const d = deps()

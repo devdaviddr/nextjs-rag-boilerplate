@@ -347,6 +347,9 @@ export async function POST(request: Request) {
           documentTitle: chunk.documentTitle,
           pageNumber: chunk.pageNumber,
           similarity: Number(chunk.similarity.toFixed(4)),
+          // An assembled section parent (spec 0033, 1c): the panel asks for
+          // the whole run's boxes, not only its first chunk's.
+          ...(chunk.memberChunkIds?.length ? { parent: true as const } : {}),
         }))
         send({ type: 'citations', citations })
 

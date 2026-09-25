@@ -77,7 +77,9 @@ export function SourceViewer({
   // answer's path — nothing here runs until a citation is clicked).
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/citations/${encodeURIComponent(citation.chunkId)}`, {
+    // A section parent (spec 0033, 1c) highlights every chunk of its run.
+    const query = citation.parent ? '?parent=1' : ''
+    fetch(`/api/citations/${encodeURIComponent(citation.chunkId)}${query}`, {
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : null))
@@ -89,7 +91,7 @@ export function SourceViewer({
         // a supported outcome, so there is nothing to report.
       })
     return () => controller.abort()
-  }, [citation.chunkId])
+  }, [citation.chunkId, citation.parent])
 
   const goTo = useCallback((next: number) => {
     setRender('loading')

@@ -163,18 +163,64 @@ export function effectiveFloor(
  *
  * Two searches routinely return overlapping passages. Without dedup the same
  * chunk would be cited twice and would crowd out a distinct one.
+ *
+ * Parents (spec 0033, 1c) make "the same passage" wider than one id: a parent
+ * CONTAINS its members, so one search's lone chunk and another search's
+ * parent of it are the same evidence twice. So:
+ *
+ * - a parent absorbs any lone chunk whose id is among its `memberChunkIds`,
+ *   whichever search found which first;
+ * - the same parent from two searches is one entry;
+ * - either way the survivor keeps the BEST similarity it was seen with. Every
+ *   one of those scores is a real child cosine that cleared the gate, so the
+ *   attempt-scaled floor applied after the loop treats the parent exactly as
+ *   it would have treated its best child — never worse, which is what keeps
+ *   absorbing a chunk from ever losing it.
  */
 export function accumulate(
   existing: readonly RetrievedChunk[],
   incoming: readonly RetrievedChunk[],
 ): RetrievedChunk[] {
-  const byId = new Map<string, RetrievedChunk>()
-  for (const chunk of [...existing, ...incoming]) {
-    const seen = byId.get(chunk.chunkId)
-    if (!seen || chunk.similarity > seen.similarity)
-      byId.set(chunk.chunkId, chunk)
+  const all = [...existing, ...incoming]
+
+  // Which parent (keyed by its own id) holds each member id.
+  const parentOf = new Map<string, string>()
+  for (const chunk of all) {
+    if (!chunk.memberChunkIds?.length) continue
+    for (const id of chunk.memberChunkIds) parentOf.set(id, chunk.chunkId)
   }
-  return [...byId.values()].sort((a, b) => b.similarity - a.similarity)
+
+  // A parent's id is its run's FIRST chunk, which may also arrive as a lone
+  // chunk — so parents and lone chunks are keyed apart.
+  const keyOf = (chunk: RetrievedChunk): string =>
+    chunk.memberChunkIds?.length
+      ? `parent:${chunk.chunkId}`
+      : parentOf.has(chunk.chunkId)
+        ? `parent:${parentOf.get(chunk.chunkId)}`
+        : `chunk:${chunk.chunkId}`
+
+  const byKey = new Map<string, RetrievedChunk>()
+  for (const chunk of all) {
+    const key = keyOf(chunk)
+    const seen = byKey.get(key)
+    if (!seen) {
+      byKey.set(key, chunk)
+      continue
+    }
+    const seenIsParent = Boolean(seen.memberChunkIds?.length)
+    const chunkIsParent = Boolean(chunk.memberChunkIds?.length)
+    const similarity = Math.max(seen.similarity, chunk.similarity)
+    if (chunkIsParent && !seenIsParent) {
+      // A parent arriving after one of its members: the parent wins the slot.
+      byKey.set(key, { ...chunk, similarity })
+    } else if (seenIsParent && !chunkIsParent) {
+      // A member arriving after its parent: dropped, its score kept.
+      if (similarity > seen.similarity) byKey.set(key, { ...seen, similarity })
+    } else if (chunk.similarity > seen.similarity) {
+      byKey.set(key, chunk)
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.similarity - a.similarity)
 }
 
 export async function runAgenticLoop(

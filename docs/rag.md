@@ -240,6 +240,12 @@ until it fits.
 Env validation rejects an overlap ≥ the chunk size at boot, because that
 combination makes the chunker unable to make progress.
 
+These chunks are also the **children** of parent–child retrieval (spec 0033,
+1c). Chunking itself did not change for it: no bigger unit is cut, embedded or
+stored. A section is recognised at query time from the `heading` and
+`heading_bbox` every chunk already carries, and returned whole when two or more
+of its chunks match — see [Parent–child assembly](#parentchild-assembly).
+
 ### 3. What actually gets embedded
 
 A chunk pulled out of the middle of a document loses the fact that it came from
@@ -434,6 +440,68 @@ full of verbs and filler that never appear in the passage answering them.
 **The gate stays on cosine alone**, and that is a measured decision rather than
 a conservative default — see [Known gaps](#known-gaps).
 
+### Parent–child assembly
+
+A section of a document is often several chunks: the cracked path and the
+text-layer path ([spec 0039](../specs/0039-structure-from-the-text-layer.md))
+make one chunk per paragraph. Ask a question the whole section answers — "what
+is the process for disposing of records?" — and every paragraph clears the
+floor on its own. The model is handed four adjacent slices of one section, in
+whatever order their scores put them, and four citations that all point at the
+same passage.
+
+Since spec 0033 (1c), retrieval hands over the **section** instead. After the
+similarity gate, when **two or more** admitted chunks sit in the same **section
+run** on one page, they are replaced by the whole run — the **parent** — at the
+position of the best-ranked one. `src/lib/rag/parents.ts` does it, and it is
+pure and unit-tested.
+
+- **A section run** is the contiguous chunks on one page that share a heading
+  and the heading's position (`chunks.heading`, `chunks.heading_bbox`). The
+  position separates two sections that share a title on one page. Figures are
+  skipped and never part of a run — their text is a search key, not evidence.
+  Tables and scanned text are members.
+- **Nothing is embedded or stored for a parent.** Children are the chunks
+  ingestion already writes, with the same vectors. The parent is assembled at
+  query time from the page's rows, by one extra owner- and KB-scoped query that
+  runs only when two admitted chunks share a page and heading.
+- **The gate still decides everything.** A parent appears only where two of its
+  own children would have appeared anyway, and its score is the best child's
+  real cosine. So an empty list stays empty — refusal cannot change — and the
+  0.35 floor keeps the meaning it was calibrated for. The cost of that choice:
+  a section where no two children clear the floor on their own is never
+  returned as a parent.
+- **Runs never cross a page**, so a parent's citation is exact. Opening it
+  highlights every chunk of the run, as a list of regions, never their union.
+- **A parent is capped** at `3 × RAG_CHUNK_TOKENS`. A longer run stays as the
+  separate chunks the gate admitted. The un-admitted siblings of a parent do
+  reach the prompt — that is the point — but only once two of their neighbours
+  have cleared the floor.
+- **Overlap is removed.** Consecutive chunks of one long paragraph share their
+  junction text; the parent says it once.
+
+How good the grouping is depends on which path read the page — the same
+asymmetry as everything else structural:
+
+| Path                                    | Where the section comes from            | Parent is              |
+| --------------------------------------- | --------------------------------------- | ---------------------- |
+| Cracked page                            | the parser's `Section-header` elements  | the section            |
+| Text layer with point sizes (0039)      | lines set larger than the body text     | the section            |
+| Text layer without sizes (`chunkPages`) | the page's first line (`detectHeading`) | the whole page, capped |
+
+A heading set in body type — ALL CAPS at the body's own point size, as in
+`eval/corpus`'s original three documents — is not detected, so each of those
+pages is one chunk and assembly changes nothing there. **No re-ingest is
+needed**: rows ingested before 0039 have no heading position and group at page
+level, which is coarser but still single-page and still gated.
+
+The agentic loop dedupes by the same rule: a parent absorbs any lone chunk of
+its run found by another search, and keeps the best score either was seen with,
+so the attempt-scaled floor treats a parent exactly as it would its best child.
+Whole-document requests are untouched — they already return every chunk.
+`RAG_PARENT_ASSEMBLY=false` turns it off; `pnpm rag:eval --parents-ab` scores
+one retrieval both ways (see [Evaluation](#evaluation)).
+
 ### The floor, and the refusal gate
 
 Fusion gives you a ranked list. `RAG_TOP_K` (8) of them are kept — the **top-k**
@@ -556,6 +624,7 @@ touching deliberately.
 | `RAG_MAX_DOCUMENT_PAGES`                    | 200     | Bounds worst-case ingestion cost                    |
 | `RAG_HYBRID_CANDIDATES`                     | 20      | Per-channel pool before RRF, scaled by selected KBs |
 | `RAG_RRF_K`                                 | 60      | RRF damping constant; not sensitive                 |
+| `RAG_PARENT_ASSEMBLY`                       | true    | Return a whole section when 2+ of its chunks match  |
 
 On the corpus above, true positives scored **0.41–0.62** and an off-topic
 question **0.13**. The 0.35 default sits in that gap but nearer the true
@@ -599,6 +668,7 @@ and what a free-tier rate limit costs you per question.
 | Ingestion state machine                    | `src/lib/rag/ingest.ts`     |
 | Content question vs whole-document request | `src/lib/rag/scope.ts`      |
 | Owner- and KB-scoped retrieval             | `src/lib/rag/retrieve.ts`   |
+| Section runs and parent assembly (pure)    | `src/lib/rag/parents.ts`    |
 | Prompt construction and fencing            | `src/lib/rag/prompt.ts`     |
 | Upload / list / delete / retry actions     | `src/lib/rag/actions.ts`    |
 | Knowledge base CRUD and `moveDocument`     | `src/lib/rag/kb-actions.ts` |
@@ -978,7 +1048,21 @@ pnpm rag:corpus                 # regenerate the corpus PDFs
 pnpm rag:eval                   # run, print a report
 pnpm rag:eval --label hybrid    # save results for comparison
 pnpm rag:eval --no-ingest       # reuse what is already indexed
+pnpm rag:eval --parents-ab --label 1c  # one retrieval, scored flat and assembled
 ```
+
+`--parents-ab` (spec 0033 1c) retrieves each question once with parent
+assembly off, scores that list as **flat**, then assembles parents from the
+same list and scores it as **1c** — no second embedding call, so the columns
+differ only by assembly. It saves `eval/results/<label>-flat.json` and
+`<label>.json` and fails unless every unanswerable question is refused, in
+both columns, identically. It refuses to run with reranking on, where the
+wider pool would make the two columns different retrievals. The **section**
+slice (`type: "section"`) is what it exists for: a section question passes
+only when the first right-page result is a parent holding every
+`sectionMustContain` phrase, drawn from different paragraphs of the section.
+Its questions run against `records-policy`, the one corpus document with
+real headings.
 
 The corpus is three documents that deliberately overlap: the handbook's fire
 assembly point and the facilities guide's staff parking are both on Wellington

@@ -446,6 +446,12 @@ Both are `jsonb` on the message. Reopening an old conversation therefore shows
 the sources the answer was actually built from, even if the document has since
 been deleted or re-ingested into different chunks.
 
+A citation carries `parent: true` when its source was an assembled section
+(spec 0033, 1c): its `chunkId` is the first chunk of the section run, and the
+citation panel asks `/api/citations/[chunkId]?parent=1` for the boxes of the
+whole run. It is an optional key in `jsonb`, so it needed no migration, and
+every message written before it keeps single-chunk behaviour.
+
 ### Indexes follow the queries that exist
 
 `chunks_owner_kb_idx` leads with `owner_id`, so owner-only queries still use it
