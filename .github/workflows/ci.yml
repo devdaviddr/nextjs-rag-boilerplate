@@ -15,12 +15,49 @@ env:
   NEXT_TELEMETRY_DISABLED: '1'
 
 jobs:
+  # Is this a docs-only pull request? Every changed file under specs/ or docs/,
+  # or any *.md. Then the build, E2E and image jobs are skipped — a job skipped
+  # by `if:` counts as passing for the ruleset's required checks — and quality
+  # runs only formatting and the spec index. Pushes to main always run
+  # everything: the release job re-tags the image main built for the tagged
+  # commit, so every main commit needs one.
+  changes:
+    name: Detect docs-only change
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          echo "$changed"
+          if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '^(specs/|docs/)|\.md$'; then
+            echo "Docs-only change: skipping build, E2E and image jobs."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   quality:
     name: Lint · Typecheck · Unit
     # A release tag re-uses the image already built + tested on the `main` push
     # for the same commit (see the `release` job), so it does NOT re-run these.
+    needs: [changes]
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,16 +68,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
+        if: env.CODE == 'true'
       - run: pnpm typecheck
+        if: env.CODE == 'true'
       - run: pnpm test:coverage
+        if: env.CODE == 'true'
       - run: pnpm specs:check
       - name: Audit dependencies
+        if: env.CODE == 'true'
         run: pnpm audit --audit-level=high
         continue-on-error: true
 
   e2e:
     name: E2E (Playwright)
-    if: github.ref_type != 'tag'
+    needs: [changes]
+    if: github.ref_type != 'tag' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -149,8 +191,8 @@ jobs:
   # the `release` job).
   docker:
     name: Build image (${{ matrix.platform }})
-    needs: [quality]
-    if: github.ref_type != 'tag'
+    needs: [changes, quality]
+    if: github.ref_type != 'tag' && needs.changes.outputs.code == 'true'
     permissions:
       contents: read
       packages: write
