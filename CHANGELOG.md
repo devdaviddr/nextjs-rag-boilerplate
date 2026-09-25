@@ -10,6 +10,17 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- **An overloaded model is reported as overloaded**
+  ([#43](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/43)).
+  The chat endpoint can answer `200` and then stream an error frame
+  (`"Service temporarily overloaded"`, code 503). The route read it as an
+  empty frame, retried 230ms later into the same overload, and told the user
+  "The model returned an empty answer". Error frames are now recognised, the
+  retry backs off (2s after an upstream error, 1s after an empty stream), and
+  a failure after the retry says the model is overloaded, with its code.
+
+### Fixed
+
 - **The send button unlocks within seconds of the answer**
   ([#42](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/42)).
   Citation verification runs after the answer streams and keeps the

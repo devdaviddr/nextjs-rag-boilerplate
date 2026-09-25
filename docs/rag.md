@@ -726,6 +726,14 @@ the client acts on each as it arrives.
 | `error`        | Instead of an answer                                                                             | `message`                                 |
 | `done`         | Last, always                                                                                     | —                                         |
 
+Drafting is retried once if the model produces no prose. The upstream can also
+answer `200` and then send an error _as a frame_ —
+`{"error":{"message":"Service temporarily overloaded","code":503}}` — which is
+recognised (`src/lib/rag/sse.ts`), ends that attempt, and backs off 2s before
+the retry (1s after an empty stream). If the retry fails too, the `error`
+frame says the model is overloaded or failed, with its code, rather than that
+it returned an empty answer (#43).
+
 The two numbers in `metrics` that decide whether an answer _feels_ fast are
 **TTFT** (time to first token — how long before any text appears) and **tok/s**
 (how quickly it arrives after that).

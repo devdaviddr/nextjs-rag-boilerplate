@@ -39,6 +39,11 @@ import type { RetrievedChunk } from '@/lib/rag/retrieve'
 import { resolvePermittedKnowledgeBaseIds } from '@/lib/rag/kb-scope'
 import { REWRITE_CONTEXT_TURNS } from '@/lib/rag/rewrite'
 import { resolveScope } from '@/lib/rag/scope'
+import {
+  draftFailureMessage,
+  draftRetryDelayMs,
+  parseStreamFrame,
+} from '@/lib/rag/sse'
 
 /**
  * Grounded document chat (spec 0025), now persisted (spec 0026).
@@ -387,6 +392,9 @@ export async function POST(request: Request) {
         let rawSample = ''
         let promptTokens: number | null = null
         let completionTokens: number | null = null
+        // An error sent INSIDE a 200 stream (#43), from the last attempt.
+        let upstreamError: { code: number | null; message: string } | null =
+          null
 
         // Draft, with ONE retry on an empty stream.
         //
@@ -402,10 +410,18 @@ export async function POST(request: Request) {
         for (let draft = 0; draft < 2; draft++) {
           if (draft > 0) {
             if (closed || request.signal.aborted) break
+            const delayMs = draftRetryDelayMs(upstreamError !== null)
             logger.warn('Drafting returned nothing; retrying once', {
               userId,
               conversationId,
+              upstreamError,
+              delayMs,
             })
+            // Backoff: the old immediate retry hit the same overloaded
+            // upstream 230ms later (#43).
+            await new Promise((resolve) => setTimeout(resolve, delayMs))
+            if (closed || request.signal.aborted) break
+            upstreamError = null
           }
           const upstream = await createChatStream(
             [
@@ -433,48 +449,39 @@ export async function POST(request: Request) {
             for (const raw of lines) {
               const trimmed = raw.trim()
               if (!trimmed.startsWith('data:')) continue
-              const data = trimmed.slice(5).trim()
-              if (data === '[DONE]') continue
-              try {
-                const parsed = JSON.parse(data) as {
-                  choices?: Array<{
-                    finish_reason?: string | null
-                    delta?: {
-                      content?: string
-                      // Reasoning models split their chain-of-thought out of
-                      // `content`. We never render it — it is not the answer —
-                      // but seeing it tells us the model was working rather than
-                      // silent, which is the difference between "no prose yet"
-                      // and "no prose at all".
-                      reasoning_content?: string
-                    }
-                  }>
-                  usage?: {
-                    prompt_tokens?: number
-                    completion_tokens?: number
-                  }
-                }
-                if (parsed.usage) {
-                  promptTokens = parsed.usage.prompt_tokens ?? null
-                  completionTokens = parsed.usage.completion_tokens ?? null
-                }
-                if (parsed.choices?.[0]?.finish_reason) {
-                  finishReason = parsed.choices[0].finish_reason ?? null
-                }
-                if (parsed.choices?.[0]?.delta?.reasoning_content) {
-                  reasoningChars +=
-                    parsed.choices[0].delta.reasoning_content.length
-                }
-                const token = parsed.choices?.[0]?.delta?.content
-                if (token) {
-                  firstTokenAt ??= Date.now()
-                  answer += token
-                  send({ type: 'token', value: token })
-                }
-              } catch {
-                // A malformed frame is skipped rather than aborting the answer;
-                // nemotron models are known to emit occasional bad JSON.
+              const frame = parseStreamFrame(trimmed.slice(5))
+              if (frame.kind === 'skip') continue
+              if (frame.kind === 'error') {
+                // The upstream failed after answering 200. Stop reading this
+                // attempt; the retry below backs off and tries once more.
+                upstreamError = { code: frame.code, message: frame.message }
+                logger.warn('Upstream error inside the drafting stream', {
+                  userId,
+                  conversationId,
+                  code: frame.code,
+                  message: frame.message,
+                  hadText: answer.length > 0,
+                })
+                break
               }
+              if (frame.usage) {
+                promptTokens = frame.usage.promptTokens
+                completionTokens = frame.usage.completionTokens
+              }
+              if (frame.finishReason) finishReason = frame.finishReason
+              // Reasoning models split their chain-of-thought out of
+              // `content`. It is never rendered, but its presence says the
+              // model was working rather than silent.
+              reasoningChars += frame.reasoningChars
+              if (frame.content) {
+                firstTokenAt ??= Date.now()
+                answer += frame.content
+                send({ type: 'token', value: frame.content })
+              }
+            }
+            if (upstreamError) {
+              await reader.cancel().catch(() => {})
+              break
             }
           }
           if (answer.trim()) break
@@ -498,12 +505,9 @@ export async function POST(request: Request) {
             sourceCount: citations.length,
             elapsedMs: Date.now() - startedAt,
             rawSample: rawSample.slice(0, 600),
+            upstreamError,
           })
-          send({
-            type: 'error',
-            message:
-              'The model returned an empty answer. Please try again — this is usually transient.',
-          })
+          send({ type: 'error', message: draftFailureMessage(upstreamError) })
           send({ type: 'done' })
           finish()
           return
