@@ -8,6 +8,17 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **Filtered vector search keeps its recall on large corpora**
+  ([#25](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/25),
+  spec 0033 1e). Migration `0017` sets `hnsw.iterative_scan = relaxed_order`
+  on the database. When Postgres uses the HNSW index for a tenant-filtered
+  query, the filter is applied after the scan, and a tenant holding 0.1% of all
+  chunks kept 1 in 20 true matches (recall 0.055); with the setting, 0.950. At
+  today's sizes the planner picks an exact scan for tenant queries, so nothing
+  changes yet — `pnpm rag:eval` is identical. Run `pnpm db:migrate`.
+
 ### Added
 
 - **A local reranker that needs no account**
