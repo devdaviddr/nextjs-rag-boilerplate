@@ -10,6 +10,17 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- **The send button unlocks within seconds of the answer**
+  ([#42](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/42)).
+  Citation verification runs after the answer streams and keeps the
+  conversation busy until it returns; it used the client defaults of a 60s
+  timeout and up to 4 attempts, so a slow planner held the composer for
+  92–113s. It now gets one attempt with a 12s deadline and still fails open
+  (nothing is stripped on a timeout). The answer's total time and tokens/sec
+  now describe drafting only, not the verification wait.
+
+### Fixed
+
 - **Follow-up questions survive a planner outage**
   ([#41](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/41)).
   Only the planner resolved "what about Sweden Central?" from the

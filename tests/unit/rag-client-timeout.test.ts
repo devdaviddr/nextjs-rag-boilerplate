@@ -100,6 +100,55 @@ describe('inference request deadlines', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  /**
+   * #42: citation verification fails open and has a user waiting on it, so it
+   * asks for ONE attempt — a retry would only add another full deadline.
+   */
+  it('makes exactly one attempt when maxAttempts is 1', async () => {
+    const fetchMock = stallingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const promise = createChatCompletion([{ role: 'user', content: 'hi' }], {
+      timeoutMs: 1_000,
+      maxAttempts: 1,
+    }).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    expect(await promise).toBeInstanceOf(RagUpstreamError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry a retryable status when maxAttempts is 1', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      text: async () => 'overloaded',
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createChatCompletion(
+      [{ role: 'user', content: 'hi' }],
+      { maxAttempts: 1 },
+    ).catch((error: unknown) => error)
+
+    expect(result).toBeInstanceOf(RagUpstreamError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never exceeds the client maximum, whatever is asked for', async () => {
+    const fetchMock = stallingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const promise = createChatCompletion([{ role: 'user', content: 'hi' }], {
+      timeoutMs: 1_000,
+      maxAttempts: 99,
+    }).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    await promise
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
   it('does NOT retry when the caller aborted', async () => {
     // A browser that navigated away is not a transient fault. Retrying it
     // would keep generating an answer nobody is waiting for.

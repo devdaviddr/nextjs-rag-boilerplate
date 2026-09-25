@@ -1388,6 +1388,13 @@ token streaming and makes time-to-first-token meaningless on every answer — a
 permanent regression to avoid a brief exposure the revision then removes. The
 persisted record is always the verified text.
 
+The stream — and so the composer — stays open until verification returns, so
+it gets **one attempt with a 12-second deadline** (`VERIFY_TIMEOUT_MS`), not
+the client's default of 60s × 4 retries. It fails open: a timeout strips
+nothing. Before this, a hanging planner kept the send button locked for up to
+~110s after the answer was on screen (#42). The answer's metrics (total time,
+tokens/sec) stop at the end of drafting and do not include verification.
+
 ---
 
 ## Document cracking
