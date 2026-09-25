@@ -4,7 +4,7 @@ title: The retrieval fundamentals that were skipped
 status: Proposed
 release: '—'
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-25
 ---
 
 # 0033 — The retrieval fundamentals that were skipped
@@ -178,6 +178,32 @@ tokenizer at ingestion only (FR2).
 >   test that needs an API key and a rate-limited shared account is not a unit
 >   test. Refitting these constants means rebuilding that harness first.
 
+> **1d — measured on retrieval (2026-09-25).** An A/B on the same tree
+> (main @ v0.21.1): `pnpm rag:eval` as shipped, then again with
+> `estimateTokens` temporarily returning `length / 4`, re-ingesting the corpus
+> each time, cracking off, fixed pipeline. Single-hop slice, n=20 (17
+> answerable):
+>
+> |                  | `length / 4` | calibrated (1d) |
+> | ---------------- | ------------ | --------------- |
+> | hit@1            | 0.941        | 0.882           |
+> | hit@3 / hit@8    | 0.941        | 0.941           |
+> | MRR              | 0.941        | 0.912           |
+> | refusal accuracy | 1.000        | **1.000**       |
+> | cross-KB leakage | 0            | 0               |
+>
+> The whole difference is **one question**: `notice-period` moves from rank 1
+> to rank 2 — employment-contract p1 (0.543) now outranks p2, which holds the
+> answer. Every other per-question result is identical, chunk counts per
+> document are identical, and the followup, multi-hop and layout slices do not
+> move. It is not noise: the same 0.941 → 0.882 step appears between the
+> hybrid-retrieval baseline in `docs/rag.md` and the first eval after 1d
+> landed. **Refusal holds**, which was the risk this section and _What a
+> reviewer must not get wrong_ flagged. The calibration stays: it is the
+> difference between a 512-token budget meaning ~512 tokens and meaning ~1,000
+> on table markup, and one rank-2 result on a 17-question slice does not
+> outweigh that. FR1 — a real tokenizer — is still open, unchanged by this.
+
 ### 1c — parent–child chunking
 
 Cracked pages already produce `NormalizedElement`s carrying `heading` and
@@ -261,7 +287,8 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
       for keeping the calibration** — this criterion asks only that a tolerance
       be stated and met, and that is a weaker thing than FR1 asks for. See the
       note under _1d — a real tokenizer_
-- [ ] `pnpm rag:eval` after 1d alone, recorded, refusal 1.000
+- [x] `pnpm rag:eval` after 1d alone, recorded, refusal 1.000 — the A/B under
+      _1d — measured on retrieval (2026-09-25)_: refusal 1.000 with and without
 - [ ] Filtered-ANN recall measured for a small-share tenant, with the
       `hnsw.iterative_scan` decision and its numbers recorded here
 - [ ] `pnpm rag:eval` after 1e alone, recorded
@@ -283,8 +310,10 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
 > **Not verified (2026-09-11).** Every remaining criterion needs a measurement
 > run, and none has been done:
 >
-> - **The four `pnpm rag:eval` checkpoints and the refusal-accuracy line.** 1d
->   is in the tree and **has not been measured**, which is the one thing the
+> - **The four `pnpm rag:eval` checkpoints and the refusal-accuracy line.**
+>   _(1d has since been measured — see 2026-09-25 above; this bullet stands for
+>   1e, 1c and 1g.)_ 1d
+>   was in the tree and **had not been measured**, which is the one thing the
 >   Design section's ordering argument said must not happen. Table chunks got
 >   roughly twice as small, `RAG_MIN_SIMILARITY` (0.35) was calibrated against
 >   the old sizes, and _What a reviewer must not get wrong_ is specifically
