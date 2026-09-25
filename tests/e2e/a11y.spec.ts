@@ -115,10 +115,10 @@ test('settings AI sections have no detectable a11y violations', async ({
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/chat/)
 
-  for (const section of ['ai-provider', 'models']) {
-    await page.goto(`/settings#${section}`)
-    await expect(page.locator(`#${section}`)).toBeVisible()
-    if (section === 'models') {
+  for (const section of ['configuration', 'configuration-open']) {
+    await page.goto('/settings#configuration')
+    await expect(page.locator('#configuration')).toBeVisible()
+    if (section === 'configuration-open') {
       // The model picker is a custom combobox: check it open, too.
       await page
         .locator('li[data-role="chat"]')

@@ -65,7 +65,7 @@ plain-language explanation.
   nothing changed says so.
 - **FR2 — Setting help.** Every setting and job has an ⓘ that explains, in
   plain words, what it does, when it matters and what to watch for. It opens
-  on hover and focus on a pointer device and on tap on touch.
+  on hover with a mouse, on click or tap, and with Enter from the keyboard.
 - **FR3 — Log store.** Every log line is also written to Postgres
   (`app_logs`): time, level, category, message, request id, user id and the
   rest as JSON. Writes are batched off the request path. Lines older than
@@ -161,8 +161,9 @@ descriptions.
 
 ## Acceptance criteria
 
-- [ ] FR1–FR2: one Configuration tab; every setting has help that opens by
-      hover, focus and tap
+- [x] FR1–FR2: one Configuration tab; every setting has help that opens by
+      hover, click or tap, and the keyboard — e2e `settings-ai.spec.ts`
+      _"every AI setting explains itself"_; axe clean with the model list open
 - [ ] FR3–FR5: a chat request's log lines are in `app_logs` with its request
       id and a category; retention deletes old lines
 - [ ] FR6: an agentic answer logs the planner's decisions and each search

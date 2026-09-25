@@ -30,7 +30,8 @@ import {
   testConnection,
 } from '@/lib/ai-settings/actions'
 import { PRESETS, type PresetId, presetById } from '@/lib/ai-settings/presets'
-import { ROLE_LABELS } from './ai-role-labels'
+import { InfoTip } from '@/components/ui/info-tip'
+import { FIELD_HELP, ROLE_LABELS } from './ai-role-labels'
 
 type TestState =
   | { kind: 'idle' }
@@ -174,7 +175,14 @@ function ConnectionDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="conn-preset">Provider</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="conn-preset">Provider</Label>
+              <InfoTip title={FIELD_HELP.preset.title}>
+                {FIELD_HELP.preset.details.map((d) => (
+                  <p key={d}>{d}</p>
+                ))}
+              </InfoTip>
+            </div>
             <Select
               value={form.preset}
               onValueChange={(v) => choosePreset(v as PresetId)}
@@ -194,7 +202,14 @@ function ConnectionDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="conn-name">Name</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="conn-name">Name</Label>
+              <InfoTip title={FIELD_HELP.name.title}>
+                {FIELD_HELP.name.details.map((d) => (
+                  <p key={d}>{d}</p>
+                ))}
+              </InfoTip>
+            </div>
             <Input
               id="conn-name"
               value={form.name}
@@ -203,7 +218,14 @@ function ConnectionDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="conn-url">Base URL</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="conn-url">Base URL</Label>
+              <InfoTip title={FIELD_HELP.baseUrl.title}>
+                {FIELD_HELP.baseUrl.details.map((d) => (
+                  <p key={d}>{d}</p>
+                ))}
+              </InfoTip>
+            </div>
             <Input
               id="conn-url"
               value={form.baseUrl}
@@ -218,14 +240,21 @@ function ConnectionDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="conn-key">
-              API key{' '}
-              {!preset.keyRequired && (
-                <span className="text-muted-foreground font-normal">
-                  (if the server needs one)
-                </span>
-              )}
-            </Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="conn-key">
+                API key{' '}
+                {!preset.keyRequired && (
+                  <span className="text-muted-foreground font-normal">
+                    (if the server needs one)
+                  </span>
+                )}
+              </Label>
+              <InfoTip title={FIELD_HELP.apiKey.title}>
+                {FIELD_HELP.apiKey.details.map((d) => (
+                  <p key={d}>{d}</p>
+                ))}
+              </InfoTip>
+            </div>
             <Input
               id="conn-key"
               type="password"
@@ -308,7 +337,7 @@ export function AiConnectionsCard({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted-foreground text-sm">
           {connections.length} connection{connections.length === 1 ? '' : 's'}.
-          Choose which job uses which under Models.
+          Choose which job uses which below.
         </p>
         <Button size="sm" onClick={() => setDialog(emptyForm())}>
           <Plus /> Add connection

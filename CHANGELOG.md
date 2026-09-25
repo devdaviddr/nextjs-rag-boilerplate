@@ -20,8 +20,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   with no restart and no `.env` edit. API keys are encrypted at rest and never
   sent back to the browser. The model box is a searchable dropdown of the
   models the connection lists. Settings is now laid out as tabs down the side
-  (a row on phones): Account, AI provider, Models, Users and About, each
-  linkable (`/settings#models`). Embeddings stay on the `.env` endpoint
+  (a row on phones): Account, Configuration (providers and models), Users and
+  About, each linkable (`/settings#configuration`). Every AI setting has an ⓘ
+  that explains it in plain words
+  ([#76](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/76)). Embeddings stay on the `.env` endpoint
   until re-indexing lands (#56).
 - **Documentation inside the app**
   ([#60](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/60),

@@ -237,8 +237,9 @@ environment's exactly.
   prompt and search tool with an 800-token budget (it is a reasoning model;
   a 3-token probe never reaches the tool call), and retries once on a 429 or
   5xx. Only status, latency and model ids reach the browser.
-- **FR8** has four of its five sections: Retrieval & answering arrives with
-  #57. A **Users** section holds the existing user admin. Sections are tabs
+- **FR8**: AI provider and Models were then merged into one **Configuration**
+  tab (spec 0042 FR1); Retrieval & answering joins it with #57. A **Users**
+  section holds the existing user admin. Sections are tabs
   down the side (a scrolling row on phones), one shown at a time, with the
   open one in the URL hash so `/settings#models` links straight to it.
 - **The model picker** is a searchable dropdown of the connection's

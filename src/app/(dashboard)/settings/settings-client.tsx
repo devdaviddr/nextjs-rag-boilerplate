@@ -1,7 +1,13 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
-import { Cpu, Info, type LucideIcon, Plug, User, Users } from 'lucide-react'
+import {
+  Info,
+  type LucideIcon,
+  SlidersHorizontal,
+  User,
+  Users,
+} from 'lucide-react'
 
 import { CurrentUserCard } from '@/components/auth/current-user-card'
 import { AdminPanel } from '@/components/auth/admin-panel'
@@ -12,6 +18,8 @@ import { AiConnectionsCard } from '@/components/settings/ai-connections-card'
 import { AiModelsCard } from '@/components/settings/ai-models-card'
 import { BuildInfoCard } from '@/components/settings/build-info-card'
 import type { AiSettingsView } from '@/lib/ai-settings/actions'
+import { InfoTip } from '@/components/ui/info-tip'
+import { FIELD_HELP } from '@/components/settings/ai-role-labels'
 import type { LinkedAccountsState } from '@/lib/auth/account-actions'
 import type { FileSummary } from '@/lib/storage/actions'
 
@@ -59,6 +67,12 @@ function subscribeHash(onChange: () => void) {
 }
 const hashSnapshot = () => window.location.hash.slice(1)
 const serverHashSnapshot = () => ''
+
+/** Tabs that were merged into Configuration (spec 0042 FR1). */
+const LEGACY_HASHES: Record<string, string> = {
+  'ai-provider': 'configuration',
+  models: 'configuration',
+}
 
 /** The pane that scrolls; a new section starts at its top. */
 const OUTLET_ID = 'settings-outlet'
@@ -122,18 +136,11 @@ export function SettingsClient({
     ...(ai
       ? [
           {
-            id: 'ai-provider',
-            title: 'AI provider',
+            id: 'configuration',
+            title: 'Configuration',
             description:
-              'The endpoints this app sends questions to. A provider receives the questions and the passages retrieved to answer them.',
-            icon: Plug,
-          },
-          {
-            id: 'models',
-            title: 'Models',
-            description:
-              'The model each job uses, and the connection it runs on. A change applies to the next request.',
-            icon: Cpu,
+              'Which AI providers this app can use, and which model does each job. A change applies to the next request.',
+            icon: SlidersHorizontal,
           },
         ]
       : []),
@@ -160,7 +167,9 @@ export function SettingsClient({
     hashSnapshot,
     serverHashSnapshot,
   )
-  const current = byId[hash] ? hash : 'account'
+  // Links from before the two AI tabs were merged still land in the right place.
+  const target = LEGACY_HASHES[hash] ?? hash
+  const current = byId[target] ? target : 'account'
   const def = (id: string) => byId[id]!
 
   return (
@@ -218,11 +227,22 @@ export function SettingsClient({
           {/* Server-authoritative gates: the admin server actions also enforce them. */}
           {ai && (
             <>
-              <Section def={def('ai-provider')} current={current}>
-                <AiConnectionsCard connections={ai.connections} />
-              </Section>
-              <Section def={def('models')} current={current}>
-                <AiModelsCard roles={ai.roles} connections={ai.connections} />
+              <Section def={def('configuration')} current={current}>
+                <div id="providers" className="space-y-4">
+                  <h3 className="flex items-center gap-1.5 font-semibold">
+                    Providers
+                    <InfoTip title={FIELD_HELP.providers.title}>
+                      {FIELD_HELP.providers.details.map((d) => (
+                        <p key={d}>{d}</p>
+                      ))}
+                    </InfoTip>
+                  </h3>
+                  <AiConnectionsCard connections={ai.connections} />
+                </div>
+                <div id="models" className="space-y-4 border-t pt-6">
+                  <h3 className="font-semibold">Models</h3>
+                  <AiModelsCard roles={ai.roles} connections={ai.connections} />
+                </div>
               </Section>
             </>
           )}

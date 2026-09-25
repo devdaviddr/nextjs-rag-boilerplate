@@ -23,7 +23,8 @@ import {
   saveRole,
   testRole,
 } from '@/lib/ai-settings/actions'
-import { ROLE_LABELS } from './ai-role-labels'
+import { InfoTip } from '@/components/ui/info-tip'
+import { FIELD_HELP, ROLE_LABELS } from './ai-role-labels'
 import { type ModelList, ModelPicker } from './model-picker'
 
 const SOURCE_TEXT: Record<Source, string> = {
@@ -61,6 +62,13 @@ function RoleRow({
   const customised = role.source === 'saved' || role.connectionId !== 'env'
 
   const save = () => {
+    if (!dirty) {
+      setStatus({
+        kind: 'ok',
+        text: 'Nothing to save. Change the connection or model first.',
+      })
+      return
+    }
     setStatus({ kind: 'busy', text: 'Saving…' })
     startTransition(async () => {
       const result = await saveRole({ role: role.role, connectionId, model })
@@ -106,6 +114,11 @@ function RoleRow({
       <div>
         <div className="flex items-center gap-2 font-medium">
           {labels.label}
+          <InfoTip title={labels.label}>
+            {labels.details.map((d) => (
+              <p key={d}>{d}</p>
+            ))}
+          </InfoTip>
           <Badge variant="outline" className="font-normal">
             {SOURCE_TEXT[role.source]}
           </Badge>
@@ -115,9 +128,16 @@ function RoleRow({
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
         <div className="space-y-1.5">
-          <Label htmlFor={`${listId}-conn`} className="text-xs">
-            Connection
-          </Label>
+          <div className="flex items-center gap-1">
+            <Label htmlFor={`${listId}-conn`} className="text-xs">
+              Connection
+            </Label>
+            <InfoTip title={FIELD_HELP.connection.title}>
+              {FIELD_HELP.connection.details.map((d) => (
+                <p key={d}>{d}</p>
+              ))}
+            </InfoTip>
+          </div>
           <Select
             value={connectionId}
             onValueChange={(v) => {
@@ -139,9 +159,16 @@ function RoleRow({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${listId}-model`} className="text-xs">
-            Model
-          </Label>
+          <div className="flex items-center gap-1">
+            <Label htmlFor={`${listId}-model`} className="text-xs">
+              Model
+            </Label>
+            <InfoTip title={FIELD_HELP.model.title}>
+              {FIELD_HELP.model.details.map((d) => (
+                <p key={d}>{d}</p>
+              ))}
+            </InfoTip>
+          </div>
           <ModelPicker
             id={`${listId}-model`}
             value={model}
@@ -158,7 +185,7 @@ function RoleRow({
 
       <div className="flex flex-wrap items-center gap-2">
         {editable && (
-          <Button size="sm" onClick={save} disabled={!dirty || pending}>
+          <Button size="sm" onClick={save} disabled={pending}>
             Save
           </Button>
         )}
