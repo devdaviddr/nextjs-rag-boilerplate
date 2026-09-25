@@ -1,19 +1,11 @@
 'use client'
 
-import { useId, useState, useTransition } from 'react'
+import { useCallback, useId, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Cpu, Loader2, RotateCcw } from 'lucide-react'
+import { Loader2, RotateCcw } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -32,6 +24,7 @@ import {
   testRole,
 } from '@/lib/ai-settings/actions'
 import { ROLE_LABELS } from './ai-role-labels'
+import { type ModelList, ModelPicker } from './model-picker'
 
 const SOURCE_TEXT: Record<Source, string> = {
   saved: 'saved here',
@@ -48,30 +41,24 @@ type Status =
 function RoleRow({
   role,
   connections,
+  modelList,
+  loadModels,
 }: {
   role: RoleView
   connections: ConnectionView[]
+  modelList: (connectionId: string) => ModelList
+  loadModels: (connectionId: string) => void
 }) {
   const router = useRouter()
   const listId = useId()
   const [connectionId, setConnectionId] = useState(role.connectionId)
   const [model, setModel] = useState(role.model)
-  const [models, setModels] = useState<Record<string, string[]>>({})
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [pending, startTransition] = useTransition()
   const labels = ROLE_LABELS[role.role]
   const editable = role.role !== 'embed'
   const dirty = connectionId !== role.connectionId || model !== role.model
   const customised = role.source === 'saved' || role.connectionId !== 'env'
-
-  /** Fill the model picker from the connection's /models, once. */
-  const loadModels = (id: string) => {
-    if (models[id]) return
-    startTransition(async () => {
-      const result = await modelsFor(id)
-      setModels((m) => ({ ...m, [id]: result.ok ? result.data : [] }))
-    })
-  }
 
   const save = () => {
     setStatus({ kind: 'busy', text: 'Saving…' })
@@ -114,8 +101,6 @@ function RoleRow({
     })
   }
 
-  const options = models[connectionId] ?? []
-
   return (
     <li className="space-y-3 p-4" data-role={role.role}>
       <div>
@@ -157,24 +142,17 @@ function RoleRow({
           <Label htmlFor={`${listId}-model`} className="text-xs">
             Model
           </Label>
-          <Input
+          <ModelPicker
             id={`${listId}-model`}
             value={model}
-            list={`${listId}-models`}
-            spellCheck={false}
-            className="font-mono text-sm"
+            list={modelList(connectionId)}
+            onOpen={() => loadModels(connectionId)}
             disabled={!editable}
-            onFocus={() => loadModels(connectionId)}
-            onChange={(e) => {
-              setModel(e.target.value)
+            onChange={(m) => {
+              setModel(m)
               setStatus({ kind: 'idle' })
             }}
           />
-          <datalist id={`${listId}-models`}>
-            {options.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
         </div>
       </div>
 
@@ -231,19 +209,35 @@ export function AiModelsCard({
   roles: RoleView[]
   connections: ConnectionView[]
 }) {
+  // One /models request per connection, shared by every job's picker.
+  const [lists, setLists] = useState<Record<string, ModelList>>({})
+  const requested = useRef(new Set<string>())
+  const loadModels = useCallback((connectionId: string) => {
+    if (requested.current.has(connectionId)) return
+    requested.current.add(connectionId)
+    setLists((l) => ({ ...l, [connectionId]: { status: 'loading' } }))
+    void modelsFor(connectionId).then((result) => {
+      if (!result.ok) requested.current.delete(connectionId) // retry next open
+      setLists((l) => ({
+        ...l,
+        [connectionId]: result.ok
+          ? { status: 'ready', models: result.data }
+          : { status: 'error', error: result.error },
+      }))
+    })
+  }, [])
+  const modelList = (connectionId: string): ModelList =>
+    lists[connectionId] ?? { status: 'idle' }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Cpu className="size-5" />
-          Models
-        </CardTitle>
-        <CardDescription>
-          The model each job uses, and where it runs. The model list comes from
-          the connection; you can also type a name.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
+      <div>
+        <p className="text-muted-foreground text-sm">
+          Pick from the models a connection lists, or type any name it serves.
+          Embeddings stay on the .env model until re-indexing lands.
+        </p>
+      </div>
+      <div>
         <ul className="divide-y rounded-lg border">
           {roles.map((role) => (
             <RoleRow
@@ -251,10 +245,12 @@ export function AiModelsCard({
               key={`${role.role}:${role.connectionId}:${role.model}`}
               role={role}
               connections={connections}
+              modelList={modelList}
+              loadModels={loadModels}
             />
           ))}
         </ul>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

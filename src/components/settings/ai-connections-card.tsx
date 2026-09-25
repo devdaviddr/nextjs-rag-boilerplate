@@ -7,13 +7,6 @@ import { Loader2, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -311,23 +304,17 @@ export function AiConnectionsCard({
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1.5">
-          <CardTitle className="flex items-center gap-2">
-            <Plug className="size-5" />
-            AI provider
-          </CardTitle>
-          <CardDescription>
-            The endpoints this app sends questions to. Choose which job uses
-            which under Models.
-          </CardDescription>
-        </div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-muted-foreground text-sm">
+          {connections.length} connection{connections.length === 1 ? '' : 's'}.
+          Choose which job uses which under Models.
+        </p>
         <Button size="sm" onClick={() => setDialog(emptyForm())}>
           <Plus /> Add connection
         </Button>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div>
         <ul className="divide-y rounded-lg border">
           {connections.map((c) => (
             <li key={c.id} className="space-y-2 p-4">
@@ -418,7 +405,7 @@ export function AiConnectionsCard({
             {removeError}
           </p>
         )}
-      </CardContent>
+      </div>
       {dialog && (
         <ConnectionDialog
           key={dialog.id ?? 'new'}
@@ -427,6 +414,6 @@ export function AiConnectionsCard({
           onOpenChange={(open) => !open && setDialog(null)}
         />
       )}
-    </Card>
+    </div>
   )
 }

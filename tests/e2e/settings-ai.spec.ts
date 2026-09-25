@@ -41,8 +41,15 @@ test('an admin adds, tests and removes a connection; the key never comes back', 
     'About',
   ])
 
+  // One section at a time; the open one is in the URL hash.
+  await expect(
+    page.getByRole('heading', { name: 'Account', level: 2 }),
+  ).toBeVisible()
+  await nav.getByRole('link', { name: 'AI provider' }).click()
+  await expect(page).toHaveURL(/#ai-provider$/)
   const provider = page.locator('#ai-provider')
   await expect(provider.getByText('Environment (.env)')).toBeVisible()
+  await expect(page.locator('#account')).toBeHidden()
 
   await provider.getByRole('button', { name: 'Add connection' }).click()
   const dialog = page.getByRole('dialog')
@@ -61,7 +68,9 @@ test('an admin adds, tests and removes a connection; the key never comes back', 
     timeout: 20_000,
   })
 
-  // The connection is offered to the jobs that can move.
+  // The connection is offered to the jobs that can move, and the model
+  // box lists what a connection serves (here: nothing answers, so it says so).
+  await nav.getByRole('link', { name: 'Models' }).click()
   const chat = page.locator('li[data-role="chat"]')
   await chat.getByLabel('Connection').click()
   await expect(page.getByRole('option', { name: 'E2E local' })).toBeVisible()
@@ -70,7 +79,8 @@ test('an admin adds, tests and removes a connection; the key never comes back', 
     page.locator('li[data-role="embed"]').getByLabel('Connection'),
   ).toBeDisabled()
 
-  await page.reload()
+  await page.goto('/settings#ai-provider')
+  await expect(page.locator('#ai-provider')).toBeVisible()
   expect(await page.content()).not.toContain(SECRET)
   expect(seen.some((body) => body.includes(SECRET))).toBe(false)
 

@@ -89,6 +89,7 @@ export function DocsSearch() {
     [index, query],
   )
   const showList = open && terms.length > 0
+  const listShowing = showList && index.status === 'ready' && results.length > 0
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
@@ -129,11 +130,12 @@ export function DocsSearch() {
         type="search"
         role="combobox"
         aria-label="Search the docs"
-        aria-expanded={showList}
-        aria-controls={listId}
+        // Expanded, and controlling the list, only while the list shows.
+        aria-expanded={listShowing}
+        aria-controls={listShowing ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={
-          showList && results[active] ? `${listId}-${active}` : undefined
+          listShowing && results[active] ? `${listId}-${active}` : undefined
         }
         placeholder="Search the docs"
         autoComplete="off"

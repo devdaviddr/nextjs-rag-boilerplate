@@ -18,8 +18,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   URL, test them, and choose the connection and model for each job (chat,
   planner, HyDE, vision, page parsing). Changes apply to the next request,
   with no restart and no `.env` edit. API keys are encrypted at rest and never
-  sent back to the browser. Settings is now split into sections: Account, AI
-  provider, Models, Users and About. Embeddings stay on the `.env` endpoint
+  sent back to the browser. The model box is a searchable dropdown of the
+  models the connection lists. Settings is now laid out as tabs down the side
+  (a row on phones): Account, AI provider, Models, Users and About, each
+  linkable (`/settings#models`). Embeddings stay on the `.env` endpoint
   until re-indexing lands (#56).
 - **Documentation inside the app**
   ([#60](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/60),

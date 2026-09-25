@@ -205,7 +205,7 @@ test("deleting a user removes their uploaded files' download access", async ({
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/chat/)
 
-  await page.goto('/settings')
+  await page.goto('/settings#users')
   const row = page.getByRole('row').filter({ hasText: emailD })
   await row.getByRole('button', { name: 'Open menu' }).click()
   await page.getByRole('menuitem', { name: 'Delete' }).click()

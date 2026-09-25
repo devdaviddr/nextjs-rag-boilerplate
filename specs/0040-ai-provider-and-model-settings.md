@@ -238,7 +238,12 @@ environment's exactly.
   a 3-token probe never reaches the tool call), and retries once on a 429 or
   5xx. Only status, latency and model ids reach the browser.
 - **FR8** has four of its five sections: Retrieval & answering arrives with
-  #57. A **Users** section holds the existing user admin.
+  #57. A **Users** section holds the existing user admin. Sections are tabs
+  down the side (a scrolling row on phones), one shown at a time, with the
+  open one in the URL hash so `/settings#models` links straight to it.
+- **The model picker** is a searchable dropdown of the connection's
+  `/models`, fetched once per connection and shared by every job; any name
+  can still be typed, since not every server lists all it serves.
 
 ## Security & privacy
 

@@ -30,7 +30,7 @@ test('an admin invites a user who then claims the account', async ({
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/chat/)
 
-  await page.goto('/settings')
+  await page.goto('/settings#users')
   await expect(page.getByRole('button', { name: 'Add User' })).toBeVisible()
 
   const email = `invited+${Date.now()}@example.com`
