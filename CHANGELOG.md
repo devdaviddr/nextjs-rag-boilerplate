@@ -30,6 +30,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   illustrated cards on the index, a section label and title on each page, and
   an "On this page" panel that follows along as you scroll.
 
+### Fixed
+
+- **The account avatar opens its menu again in development**
+  ([#74](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/74)).
+  Under `pnpm dev`, Next.js's dev-tools button sat on top of the avatar in the
+  bottom-left corner and took the click. It now sits bottom-right.
+
 ## [0.22.0] - 2026-09-25
 
 ### Added

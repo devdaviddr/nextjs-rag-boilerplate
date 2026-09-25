@@ -1,6 +1,10 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  // The dev-tools button defaults to the bottom-left corner, which is where
+  // the sidebar's account menu sits: it covered the avatar and took its
+  // clicks (#74). Development only; production has no button.
+  devIndicators: { position: 'bottom-right' },
   // Pin the workspace root so Next doesn't misdetect it from stray parent-dir
   // lockfiles; also keeps standalone output file-tracing scoped correctly.
   turbopack: {
