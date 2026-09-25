@@ -1,9 +1,15 @@
 ---
 name: ship
-description: Cut a release of THIS repo — choose the SemVer bump from the Conventional Commits since the last tag, roll CHANGELOG [Unreleased] into the new version, flip finished specs to Shipped, bump package.json, update docs, open and merge the release PR, tag it, and confirm CI published the image and the GitHub Release. Use when the user says ship, release, cut a release, tag a version, bump the version, or publish vX.Y.Z.
+description: Ship THIS repo — open and merge the PRs for finished branches (the only place PRs into main are opened), then cut a release — choose the SemVer bump from the Conventional Commits since the last tag, roll CHANGELOG [Unreleased] into the new version, flip finished specs to Shipped, bump package.json, update docs, open and merge the release PR, tag it, and confirm CI published the image and the GitHub Release. Use when the user says ship, release, cut a release, tag a version, bump the version, or publish vX.Y.Z.
 ---
 
 # Ship a release
+
+Shipping is the **only** time pull requests into `main` are opened, and only
+when the owner starts it. Between ships, work is committed to
+`<type>/<issue#>-<slug>` branches and pushed, and waits here (see `CLAUDE.md` →
+Work tracking). So a ship first lands the finished branches, then cuts the
+release.
 
 A release is a `vX.Y.Z` tag on a `main` commit. `main` is protected, so it is
 made in two parts: a **release PR** that makes the repo describe the new version,
@@ -32,7 +38,36 @@ gh issue list --milestone vX.Y.Z --state open
 ```
 
 Open issues in the milestone mean it is not ready. Tell the user which, and ask
-whether to move them to the next milestone or wait.
+whether to move them to the next milestone or wait. (Issues whose branch is
+ready are closed by landing it in the next step.)
+
+## 0.5 — Land the finished branches
+
+List the pushed branches that are ahead of `main`:
+
+```bash
+git fetch --prune origin
+for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
+    | grep -vE '^origin/(main|HEAD)$'); do
+  ahead=$(git rev-list --count origin/main.."$b")
+  [ "$ahead" -gt 0 ] && echo "$b  +$ahead  $(git log -1 --format=%s "$b")"
+done
+```
+
+Show the list with each branch's issue, and **ask the user which to include**.
+For each chosen branch, in dependency order:
+
+1. `gh pr create --base main --head <branch>`: Conventional Commit title,
+   `Closes #N`, template filled in. The PR checks enforce the issue link and
+   the CHANGELOG entry.
+2. Wait for CI. Merge only when every required check has **passed**:
+   `gh pr checks <n>` must list them all, none pending or failed. No checks yet
+   means keep waiting, not "fine".
+3. If a later branch conflicts after an earlier merge, rebase it on `main`, run
+   the local gate, push, and let its CI run again.
+
+Then confirm `main`'s CI is green on the last merge before choosing the
+version.
 
 ## 1 — Choose the version
 
