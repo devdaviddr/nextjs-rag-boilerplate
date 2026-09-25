@@ -15,7 +15,9 @@ Tracked in [#51](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/51)
 [#55](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/55),
 [#56](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/56),
 [#57](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/57),
-[#58](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/58).
+[#58](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/58),
+[#67](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/67) (provider
+presets).
 
 ## Summary
 
@@ -36,6 +38,12 @@ redeploying. On 2026-09-25 that cost was real: the planner model
 planner, or turn the agentic path off, was a redeploy.
 
 The Settings page today shows the user's account and the build (two cards).
+
+Changing provider is possible today only for everything at once:
+`RAG_LLM_BASE_URL` points every job at one OpenAI-compatible endpoint, whose key
+lives in the misleadingly named `NVIDIA_API_KEY`. So you cannot, for example,
+answer through OpenRouter while embedding on NVIDIA NIM, or run chat on a
+llama.cpp server in the house.
 
 ## Goals
 
@@ -59,8 +67,8 @@ The Settings page today shows the user's account and the build (two cards).
 ### Functional
 
 - **FR1 — Connections.** An admin can add, edit, test and remove one or more
-  _connections_: name, preset (NIM, OpenAI, Ollama, vLLM/LM Studio, Custom),
-  base URL, API key. The key is encrypted at rest and never returned to the
+  _connections_: name, preset (NVIDIA NIM, OpenRouter, llama.cpp, OpenAI,
+  Ollama, vLLM/LM Studio, Custom), base URL, API key. The key is encrypted at rest and never returned to the
   browser. **Test** calls `GET {base}/models`.
 - **FR2 — Model roles.** Chat, planner, HyDE, vision and parse each select a
   connection and a model. The model picker is filled from the connection's
@@ -90,6 +98,13 @@ The Settings page today shows the user's account and the build (two cards).
   About: the active chat model and provider name, never a URL or key.
 - **FR8 — Layout.** Settings is split into sections: **Account · AI provider ·
   Models · Retrieval & answering · About** (build info).
+- **FR9 — Provider presets.** Each preset knows its provider's behaviour (see
+  _Provider presets_): default URL, whether a key is required, extra headers,
+  and how models are listed. Per-role tests check what each job needs — chat
+  streams, the planner can call tools, embeddings return the expected
+  dimension — and a failure says what to change (for llama.cpp: start
+  `llama-server` with `--jinja` or `--embeddings`). An existing `.env`
+  deployment appears as a NIM connection with no setup.
 
 ### Non-functional
 
@@ -109,6 +124,18 @@ value jsonb, updated_by, updated_at), plus `ai_settings_audit`. Keys are
 encrypted with AES-256-GCM under a key derived from `AUTH_SECRET` via HKDF
 (info `ai-settings/v1`), or from `SETTINGS_ENCRYPTION_KEY` when set. Rotating
 that secret invalidates saved keys; the page says so and asks for them again.
+
+**Provider presets.**
+
+| Preset                     | Base URL                              | Key                   | Notes                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------- | ------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NVIDIA NIM                 | `https://integrate.api.nvidia.com/v1` | required              | Today's default; seeded from `RAG_LLM_BASE_URL` + `NVIDIA_API_KEY`. Free tier ~40 requests/min.                                                                                                                                                                                                                                                                                 |
+| OpenRouter                 | `https://openrouter.ai/api/v1`        | required              | Optional `HTTP-Referer` / `X-Title` attribution headers. `/models` lists hundreds of models, so the picker is searchable and shows context length and price. Streams may carry `:` keep-alive comments (already ignored) and error frames (handled since #43). Embeddings availability varies; the embeddings test decides.                                                     |
+| llama.cpp (`llama-server`) | e.g. `http://<host>:8080/v1`          | only with `--api-key` | One model per server process: the picker shows the loaded model, and chat and embeddings are normally two connections (two servers). Tool calling (the planner) needs `--jinja` and a model whose chat template supports tools; `/v1/embeddings` needs `--embeddings`. From inside Docker, `localhost` is the container — use the host's LAN address or `host.docker.internal`. |
+| OpenAI                     | `https://api.openai.com/v1`           | required              | Embedding models are 1536/3072 dimensions — not usable for embeddings until #64.                                                                                                                                                                                                                                                                                                |
+| Ollama                     | `http://<host>:11434/v1`              | none                  | Common embedding models are 768 dimensions (#64).                                                                                                                                                                                                                                                                                                                               |
+| vLLM / LM Studio           | `http://<host>:8000/v1` / `:1234/v1`  | optional              |                                                                                                                                                                                                                                                                                                                                                                                 |
+| Custom                     | any                                   | optional              | Any OpenAI-compatible endpoint.                                                                                                                                                                                                                                                                                                                                                 |
 
 **Resolution.** `src/lib/ai-settings.ts` (server-only) exports
 `getAiSettings()`, returning one typed object shaped like today's `env` subset.
@@ -148,12 +175,19 @@ default next to the floor, and the eval must be run after an embedding switch.
 - [ ] FR6: no direct `env.RAG_*` reads remain outside the resolver (lint rule or
       grep check in CI)
 - [ ] FR7: non-admins get 403 from every AI settings action
+- [ ] FR9: chat and planner through OpenRouter with embeddings on NIM, and
+      chat on a llama.cpp server, both work; a llama.cpp planner without tool
+      support fails its test with the `--jinja` hint; an existing `.env`
+      deployment shows its NIM connection unchanged
 - [ ] NFR1: with nothing saved, `pnpm rag:eval` equals the baseline
 
 ## Security & privacy
 
 - API keys: encrypted at rest, write-only in the UI, redacted in logs and audit.
 - Admin-only server actions; the page is not the only gate.
+- Third-party providers (OpenRouter, a remote llama.cpp) receive the question
+  and the retrieved passages. The connection form says so; choosing a provider
+  is choosing who sees document text.
 - A connection URL is an SSRF vector: an admin could point it at an internal
   host. Admins are trusted in this template, but the **Test** action should not
   return the response body, only status, latency and the model list.
