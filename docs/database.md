@@ -38,6 +38,15 @@ it three things:
 - **An index that makes it fast.** `USING hnsw` builds a navigable graph over
   the embeddings so Postgres can find the nearest rows without comparing the
   question against every row in the table.
+- **A setting that keeps filtered search honest.** HNSW applies the
+  `owner_id` / `knowledge_base_id` filter _after_ its scan, so a tenant with a
+  small share of all chunks can lose most of its true matches when the planner
+  uses the index. Migration `0017` sets `hnsw.iterative_scan = relaxed_order`
+  on the database, which keeps scanning until enough rows pass the filter.
+  Measured: top-20 recall for a 0.1%-share tenant went from 0.055 to 0.950 on
+  the HNSW path (spec 0033, 1e). At today's sizes the planner uses an exact
+  owner-index scan for tenant queries anyway, so the setting is insurance for
+  larger corpora.
 
 That is the whole addition. The dense half of retrieval is then a perfectly
 ordinary SQL query — this is the shape of it, simplified from

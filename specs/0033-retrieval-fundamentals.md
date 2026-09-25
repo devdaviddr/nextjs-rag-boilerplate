@@ -223,6 +223,38 @@ recall is already at parity, record that and change nothing — a tuning knob se
 without evidence is worse than an untuned default, because the next person
 believes it was measured.
 
+> **1e — measured (2026-09-25).** A scratch database with the same table
+> shape: the 61 real chunk embeddings plus 30,500 "other tenant" vectors, each
+> a real embedding perturbed to a mean cosine of 0.74 from its seed — near
+> enough to compete, which is the case that hurts. Tenants at 0.1%, 2%, 20%
+> and 78% of rows; 30 queries each (a tenant chunk, lightly perturbed); top-20
+> against exact search; HNSW defaults (`m=16`, `ef_search=40`).
+>
+> **What the planner chooses.** With literal query vectors, as `retrieve.ts`
+> binds them, the planner used the owner index plus a sort — exact — for every
+> share up to 20%, and HNSW only at 78%. So at this scale filtered queries
+> already get exact recall, by plan choice.
+>
+> **What HNSW does when it is used** (forced for the smaller shares):
+>
+> | tenant share | `off` | `relaxed_order` | `strict_order` |
+> | ------------ | ----- | --------------- | -------------- |
+> | 0.1%         | 0.055 | **0.950**       | 0.162          |
+> | 2%           | 0.087 | **0.895**       | 0.780          |
+> | 20%          | 0.373 | **0.805**       | 0.680          |
+> | 78%          | 0.777 | 0.777           | 0.777          |
+>
+> That is the failure 0027 predicted, and worse than it said: a tiny tenant
+> would keep one true neighbour in twenty, with no error anywhere.
+> `relaxed_order` never lowered recall, cost 2–36ms, and is inert when the
+> planner picks the exact plan. It is set per database in migration 0017.
+> `strict_order` is worse at small shares here and was not chosen. The 78% row
+> is ordinary HNSW approximation, not filtering, and `ef_search` is its lever;
+> left at the default, because no real query in the eval reaches that plan.
+>
+> `pnpm rag:eval` after the migration is identical per question to the 1d
+> baseline, as expected at the eval corpus's size.
+
 ### 1g — HyDE versus `scope.ts`
 
 Both address "the question does not look like the passage that answers it".
@@ -289,9 +321,11 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
       note under _1d — a real tokenizer_
 - [x] `pnpm rag:eval` after 1d alone, recorded, refusal 1.000 — the A/B under
       _1d — measured on retrieval (2026-09-25)_: refusal 1.000 with and without
-- [ ] Filtered-ANN recall measured for a small-share tenant, with the
-      `hnsw.iterative_scan` decision and its numbers recorded here
-- [ ] `pnpm rag:eval` after 1e alone, recorded
+- [x] Filtered-ANN recall measured for a small-share tenant, with the
+      `hnsw.iterative_scan` decision and its numbers recorded here — _1e —
+      measured (2026-09-25)_; `drizzle/0017_hnsw_iterative_scan.sql`
+- [x] `pnpm rag:eval` after 1e alone, recorded — identical per question to
+      the 1d baseline (hit@1 0.882, MRR 0.912, refusal 1.000, leakage 0)
 - [ ] A question answered by a whole section retrieves the parent rather than
       three adjacent children — `eval/questions.json`
 - [ ] `pnpm rag:eval` after 1c alone, recorded
@@ -311,8 +345,8 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
 > run, and none has been done:
 >
 > - **The four `pnpm rag:eval` checkpoints and the refusal-accuracy line.**
->   _(1d has since been measured — see 2026-09-25 above; this bullet stands for
->   1e, 1c and 1g.)_ 1d
+>   _(1d and 1e have since been measured — see 2026-09-25 above; this bullet
+>   stands for 1c and 1g.)_ 1d
 >   was in the tree and **had not been measured**, which is the one thing the
 >   Design section's ordering argument said must not happen. Table chunks got
 >   roughly twice as small, `RAG_MIN_SIMILARITY` (0.35) was calibrated against
