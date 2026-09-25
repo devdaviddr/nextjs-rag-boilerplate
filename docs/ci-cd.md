@@ -1,7 +1,5 @@
 # CI/CD
 
-[← Back to README](../README.md)
-
 This page covers what runs in GitHub Actions on every pull request, merge and
 release tag, how a merge becomes a published image, and the checks you can run
 locally before pushing.

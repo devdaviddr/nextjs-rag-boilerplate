@@ -1,7 +1,5 @@
 # Deployment — Cloudflare Tunnel
 
-[← Back to README](../README.md)
-
 This page covers the three ways to put this app on a public HTTPS address
 with a Cloudflare Tunnel, and how to drive each one by hand.
 

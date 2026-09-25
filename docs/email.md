@@ -1,7 +1,5 @@
 # Email (setup, verification & password reset)
 
-[← Back to README](../README.md)
-
 This page covers pointing the app at an SMTP server, testing it locally without
 sending real mail, and what the three flows that need email do: invites,
 password reset and address verification.

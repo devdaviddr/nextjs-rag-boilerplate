@@ -1,7 +1,5 @@
 # Feature → Production
 
-[← Back to README](../README.md)
-
 **What this covers:** the whole path from `git checkout -b` to your change
 running live on your own box, in order, with nothing skipped. Each step links to
 the doc that owns the detail, so this page is a map and does not repeat it.

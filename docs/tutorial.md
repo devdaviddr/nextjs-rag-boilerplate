@@ -1,7 +1,5 @@
 # Tutorial — build a RAG system step by step
 
-[← Back to README](../README.md)
-
 **You'll learn:** how retrieval-augmented generation actually works. You take a
 fresh clone of this repo to a running app that answers a question from your own
 PDF and cites the page the answer came from, and you understand every step

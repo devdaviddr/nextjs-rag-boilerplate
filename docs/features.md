@@ -1,7 +1,5 @@
 # Features
 
-[← Back to README](../README.md)
-
 This page lists everything that ships in this boilerplate, grouped by area, with
 a link to the page that explains each piece properly.
 

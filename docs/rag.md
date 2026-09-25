@@ -1,7 +1,5 @@
 # RAG — how it works
 
-[← Back to README](../README.md)
-
 This page covers what retrieval-augmented generation is, what happens to a PDF
 when you upload one, what happens when you ask a question, how to run all of it
 yourself, and why each piece is built the way it is.

@@ -1,7 +1,5 @@
 # Backups & restore
 
-[← Back to README](../README.md)
-
 This page covers what gets backed up automatically, how to check it is still
 working, and how to get your data back.
 

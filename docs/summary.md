@@ -1,7 +1,5 @@
 # Summary
 
-[← Back to README](../README.md)
-
 **What this covers:** the whole project on one page. It describes what the
 project is, what it is built from and what already works, and links to the page
 that explains each part properly.

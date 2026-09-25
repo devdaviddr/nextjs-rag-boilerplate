@@ -1,7 +1,5 @@
 # OAuth (GitHub & Google)
 
-[← Back to README](../README.md)
-
 This page covers adding "Continue with GitHub" and "Continue with Google"
 buttons to the sign-in page, linking a provider to an account that already
 exists, and why the app refuses to merge two accounts on its own.

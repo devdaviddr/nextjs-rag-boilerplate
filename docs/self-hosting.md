@@ -1,7 +1,5 @@
 # Self-hosting
 
-[← Back to README](../README.md)
-
 This page covers taking a fresh clone to a live app on your own domain, and
 keeping that machine up to date afterwards.
 

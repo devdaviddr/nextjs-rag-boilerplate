@@ -1,7 +1,5 @@
 # Web Push notifications
 
-[← Back to README](../README.md)
-
 This page covers generating VAPID keys, turning on the notifications
 toggle, sending a notification from server code, and what to keep out of the
 payload.

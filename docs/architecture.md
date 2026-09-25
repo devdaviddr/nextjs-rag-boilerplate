@@ -1,7 +1,5 @@
 # Architecture
 
-[← Back to README](../README.md)
-
 **What this covers:** the shape of the system before you read any code. It
 shows what runs where, what a request touches on its way through, why the app
 is the only door into Postgres and MinIO, and where each piece of code lives.

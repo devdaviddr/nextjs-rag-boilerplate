@@ -1,7 +1,5 @@
 # Database
 
-[← Back to README](../README.md)
-
 **You'll learn:** what pgvector adds to an ordinary Postgres, how the tables are
 laid out and why, and how to run migrations and seed data.
 

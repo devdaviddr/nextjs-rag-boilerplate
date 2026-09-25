@@ -1,7 +1,5 @@
 # Usage & Development
 
-[← Back to README](../README.md)
-
 **What this covers:** getting the app running locally, followed by the
 reference you keep coming back to: every environment variable, every script,
 how to test, how to run it in Docker, and what to check before you deploy.
