@@ -2,27 +2,26 @@
 
 [← Back to README](../README.md)
 
-**What this covers:** the three ways to put this app on a public HTTPS address
+This page covers the three ways to put this app on a public HTTPS address
 with a Cloudflare Tunnel, and how to drive each one by hand.
 
-A tunnel solves a specific problem. Your app is listening on port 3000 inside
-Docker, on a machine sitting behind a home router or a firewall. To reach it from
-the internet the usual answer is to forward a port, run a reverse proxy, and keep
-a TLS certificate renewed. Every one of those is a thing that can break, and the
-open port is a thing that can be attacked.
+Your app listens on port 3000 inside Docker, on a machine behind a home router
+or a firewall. The usual way to reach it from the internet is to forward a port,
+run a reverse proxy, and keep a TLS certificate renewed. Any of those can break,
+and the open port can be attacked.
 
-A **Cloudflare Tunnel** turns that inside out. You run a small daemon,
-`cloudflared`, alongside the app. It dials **out** to Cloudflare's edge and keeps
-that connection open. When someone visits your domain, Cloudflare terminates TLS
-at its edge and pushes the request **down the connection you already opened**, to
-the app container on the internal Docker network. Your host opens no inbound
+A **Cloudflare Tunnel** reverses the direction of the connection. You run a
+small daemon, `cloudflared`, alongside the app. It dials out to Cloudflare's
+edge and keeps that connection open. When someone visits your domain,
+Cloudflare terminates TLS at its edge and sends the request down the connection
+you already opened, to the app container on the internal Docker network. Your host opens no inbound
 port, runs no reverse proxy, and manages no certificate.
 
 The production stack in [`docker-compose.prod.yml`](../docker-compose.prod.yml)
-— app, database, migrator, MinIO and the backup sidecars — is unchanged by any of
-this. The tunnel is an opt-in overlay layered on top.
+(app, database, migrator, MinIO and the backup sidecars) is unchanged by any of
+this. The tunnel is an opt-in overlay on top.
 
-> In tunnel modes the app has **no published host ports** — it's reachable only
+> In tunnel modes the app has no published host ports. It is reachable only
 > through the tunnel.
 
 ## Which path do I want?
@@ -31,7 +30,7 @@ All three end at the same runtime. They differ only in who creates the tunnel.
 These are the same three modes `make setup` offers as Quick, Guided and
 Automated in [Self-hosting](self-hosting.md#choose-your-mode). The A/B letters
 below are the historical names of the two named-tunnel paths, and the rows are
-ordered easiest-first rather than alphabetically.
+ordered easiest first instead of alphabetically.
 
 | Path                                                       | Command                                   | You need                  | Good for                        |
 | ---------------------------------------------------------- | ----------------------------------------- | ------------------------- | ------------------------------- |
@@ -41,16 +40,16 @@ ordered easiest-first rather than alphabetically.
 
 If you would rather answer a few prompts than run these targets yourself,
 [`make setup`](self-hosting.md) wraps all three in a wizard and also seeds and
-verifies the deployment. This page is the manual route — the same primitives, one
+verifies the deployment. This page is the manual route: the same primitives, one
 command at a time.
 
 ## Prerequisites
 
-- Docker + Docker Compose (v2.24+ — the deploy compose files use a newer
+- Docker + Docker Compose (v2.24+, because the deploy compose files use a newer
   Compose merge feature).
 - A `.env` with at least `AUTH_SECRET` and `DATABASE_URL` (see [`.env.example`](../.env.example)).
 - For named tunnels: a domain on Cloudflare and (for the automated path) a
-  scoped API token — **Account → Cloudflare Tunnel: Edit**, **Zone → DNS: Edit**.
+  scoped API token with Account → Cloudflare Tunnel: Edit and Zone → DNS: Edit.
 
 ## Environment variables
 
@@ -71,7 +70,7 @@ Runtime vars go in `.env`; provisioning vars are best kept in
 
 ## Quick tunnel (no account)
 
-Instant public preview on a random `*.trycloudflare.com` URL:
+This gives you an instant public preview on a random `*.trycloudflare.com` URL:
 
 ```bash
 make tunnel-quick
@@ -81,17 +80,17 @@ The URL is printed in the `cloudflared` logs. `AUTH_TRUST_HOST=true` (set in the
 compose app) makes auth work on the random hostname.
 
 The URL is thrown away when the stack stops, and you get a different one next
-time. That is the trade for needing no account at all.
+time. In exchange, you need no account at all.
 
 ## Option B — Guided (dashboard)
 
-Produces the same `CLOUDFLARE_TUNNEL_TOKEN` + DNS record by hand:
+This produces the same `CLOUDFLARE_TUNNEL_TOKEN` + DNS record by hand:
 
-1. Zero Trust → **Networks → Tunnels → Create a tunnel** (Cloudflared). Copy the
-   **token** it shows.
+1. Go to Zero Trust → Networks → Tunnels → Create a tunnel (Cloudflared). Copy
+   the token it shows.
 2. Put it in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`, and set
    `AUTH_URL=https://app.yourdomain.com`.
-3. Add a **public hostname**: `app.yourdomain.com` → `http://app:3000`
+3. Add a public hostname: `app.yourdomain.com` → `http://app:3000`
    (Cloudflare creates the DNS record automatically).
 4. Start it and verify:
 
@@ -100,14 +99,14 @@ Produces the same `CLOUDFLARE_TUNNEL_TOKEN` + DNS record by hand:
    URL=https://app.yourdomain.com make tunnel-verify
    ```
 
-The service target in step 3 is `http://app:3000` — `app` is the Compose service
+The service target in step 3 is `http://app:3000`. `app` is the Compose service
 name, which `cloudflared` resolves on the internal Docker network. Using
 `localhost` there points the tunnel at the `cloudflared` container itself and
 gives you a 502.
 
 ## Option A — Automated (Terraform)
 
-Provisions the tunnel, its ingress, and the DNS record, then wires the token in.
+This path provisions the tunnel, its ingress and the DNS record, then wires the token in.
 
 ```bash
 cp infra/cloudflare/terraform.tfvars.example infra/cloudflare/terraform.tfvars
@@ -124,16 +123,16 @@ Tear down with `make tunnel-destroy`.
 
 ## How the app runs behind the tunnel
 
-Three things change once traffic arrives through Cloudflare rather than directly.
+Three things change once traffic arrives through Cloudflare instead of directly.
 
-- **`AUTH_TRUST_HOST=true`** + **`AUTH_URL`** so Auth.js trusts the proxied host
-  and issues secure cookies over HTTPS.
-- **Client IP** is read from `CF-Connecting-IP` (set by Cloudflare, unspoofable)
-  for rate limiting — see `src/lib/request-ip.ts`.
+- `AUTH_TRUST_HOST=true` + `AUTH_URL` make Auth.js trust the proxied host
+  and issue secure cookies over HTTPS.
+- The client IP is read from `CF-Connecting-IP` (set by Cloudflare, unspoofable)
+  for rate limiting; see `src/lib/request-ip.ts`.
 - HSTS / CSP / hardening headers are served from the origin as usual.
 
 The first two are why a tunnel deployment with the wrong `AUTH_URL` produces a
-login loop rather than an error: the app issues a cookie for one host and the
+login loop instead of an error: the app issues a cookie for one host and the
 browser presents it on another.
 
 ## Operating
@@ -150,18 +149,18 @@ Update `cloudflared` by re-pulling the image:
 
 ## Troubleshooting
 
-Full table (all symptoms, including deploy/timer failures):
-[self-hosting.md → Troubleshooting](self-hosting.md#troubleshooting). The one
-specific to this doc's Terraform path: if `make tunnel-provision` succeeds but
+The full table, covering all symptoms including deploy/timer failures, is in
+[self-hosting.md → Troubleshooting](self-hosting.md#troubleshooting). One case
+is specific to this doc's Terraform path. If `make tunnel-provision` succeeds but
 the tunnel never connects, re-check the API token's two scopes (Prerequisites,
-above) — a token missing either **Tunnel: Edit** or **DNS: Edit** fails silently
-partway through provisioning.
+above). **A token missing either Tunnel: Edit or DNS: Edit fails silently
+partway through provisioning.**
 
 ## Notes
 
 - Cloudflare Tunnel is free (Zero Trust free tier).
 - For production, use managed Postgres and a remote Terraform state backend.
-- Optional: gate the app (or staging) with **Cloudflare Access** for an
+- Optionally, gate the app (or staging) with Cloudflare Access for an
   edge SSO layer in front of the app's own auth.
 - The full diagram and the clone-to-live walkthrough live in
   [self-hosting.md → How it works](self-hosting.md#how-it-works-one-diagram);
@@ -169,5 +168,5 @@ partway through provisioning.
 
 ---
 
-**Next:** [Backups & restore](backups.md) — the deployment is only finished once
+Next: [Backups & restore](backups.md). The deployment is only finished once
 you can get the data back.

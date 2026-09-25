@@ -2,7 +2,7 @@
 
 [← Back to README](../README.md) · Specs: [`0025`](../specs/0025-rag-knowledge-base-and-chat.md) · [`0026`](../specs/0026-chat-first-ux-and-history.md) · [`0028`](../specs/0028-independent-knowledge-bases.md) · [`0029`](../specs/0029-agentic-retrieval-loop.md)
 
-**You'll learn:** what retrieval-augmented generation is, what happens to a PDF
+This page covers what retrieval-augmented generation is, what happens to a PDF
 when you upload one, what happens when you ask a question, how to run all of it
 yourself, and why each piece is built the way it is.
 
@@ -14,34 +14,33 @@ A language model knows what was in its training data and nothing else. Your
 staff handbook was not in there. Ask it "how many days of annual leave do I
 get?" and it will answer anyway, fluently and confidently, from something it
 half-remembers about employment law in general. A confident, fluent, wrong
-answer is called a **hallucination**, and it is the reason you cannot point a
-raw chat model at a business question and trust the result.
+answer is called a **hallucination**, and it is why you cannot point a raw chat
+model at a business question and trust the result.
 
-There are two obvious repairs and both are bad. You could retrain the model on
-your documents — slow, expensive, and it still blurs facts together rather than
-quoting them. Or you could paste every document into the prompt with every
-question — your documents do not fit, and you would pay for all of them every
-time someone asks anything.
+There are two obvious repairs, and both are bad. You could retrain the model on
+your documents, which is slow and expensive, and the model still blurs facts
+together instead of quoting them. Or you could paste every document into the
+prompt with every question, but your documents do not fit, and you would pay for
+all of them every time someone asks anything.
 
 **Retrieval-augmented generation** is the third option. You search your own
-documents first, and hand the model only the handful of passages you found.
-The model's job shrinks from "know the answer" to "read these passages and write
-the answer". An answer built that way is **grounded**: every claim in
-it traces back to a passage that was actually retrieved from your text, so you
-can show the reader which document and which page it came from. That reference
-is called a **citation**, and it is the thing that turns a plausible answer into
-a checkable one.
+documents first and hand the model only the handful of passages you found. The
+model's job shrinks from "know the answer" to "read these passages and write
+the answer". An answer built that way is grounded: every claim in it traces back
+to a passage that was actually retrieved from your text, so you can show the
+reader which document and which page it came from. That reference is called a
+citation, and it makes a plausible answer checkable.
 
-So a RAG system is really two jobs stapled together:
+A RAG system is two jobs joined together:
 
-- **Ingestion** — a one-off background job per document. Pull the text out of
-  the PDF, cut it into passages, convert each passage into a form you can search
-  by meaning, and store it. Runs once, when you upload.
-- **Answering** — runs per question. Search the stored passages, keep the best
-  few, and let the model write prose over exactly those.
+- Ingestion is a one-off background job per document. It pulls the text out of
+  the PDF, cuts it into passages, converts each passage into a form you can
+  search by meaning, and stores it. It runs once, when you upload.
+- Answering runs per question. It searches the stored passages, keeps the best
+  few, and lets the model write prose over exactly those.
 
-This page walks both, in that order. Everything the app does is one of those
-two jobs, plus the guarantees below that keep them honest.
+This page covers both, in that order. Everything the app does belongs to one of
+those two jobs, plus the guarantees below that keep them honest.
 
 ---
 
@@ -49,7 +48,7 @@ two jobs, plus the guarantees below that keep them honest.
 
 | Section                                                     | What it covers                                                                       |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [Two guarantees](#two-guarantees)                           | The two properties enforced in code, not asked of the model                          |
+| [Two guarantees](#two-guarantees)                           | The two properties enforced in code instead of asked of the model                    |
 | [The pipeline](#the-pipeline)                               | The whole system in one diagram                                                      |
 | [Ingestion](#ingestion)                                     | PDF → text → chunks → embeddings → rows                                              |
 | [Search](#search)                                           | Question → retrieved passages → grounded answer, or a refusal                        |
@@ -61,41 +60,39 @@ two jobs, plus the guarantees below that keep them honest.
 | [Document cracking](#document-cracking)                     | The optional path that reads tables, figures and scanned pages                       |
 | [Inspecting what was indexed](#inspecting-what-was-indexed) | What the system stored for a document, page by page, and what "partly indexed" means |
 | [When things go wrong](#when-things-go-wrong)               | Failures observed on a live endpoint, and how each is handled                        |
-| [Known gaps](#known-gaps)                                   | What this does not do, named rather than hidden                                      |
+| [Known gaps](#known-gaps)                                   | What this does not do, listed openly                                                 |
 
-A reader who wants the thing running can go straight to [Setup](#setup) and
-come back. Everything from [Under the hood](#under-the-hood) onwards is design
-rationale and measurement — useful, but not needed to use the feature.
+If you want the thing running, go straight to [Setup](#setup) and come back
+later. Everything from [Under the hood](#under-the-hood) onwards is design
+rationale and measurement, which you do not need in order to use the feature.
 
 ---
 
 ## Two guarantees
 
-Everything below follows from these. Both are enforced by ordinary code, so
+Everything below follows from these two. Both are enforced by ordinary code, so
 neither depends on the model behaving.
 
 **1. An answer is grounded, or there is no answer.** If retrieval finds nothing
 above the similarity floor, the chat model is **never called** and a fixed
-response is returned. Refusal is a code path, not a behaviour we hope the model
-exhibits — so an empty knowledge base cannot produce a confident hallucination,
-and costs nothing.
+response is returned. Refusal is a code path in the app, so an empty knowledge
+base cannot produce a confident hallucination, and it costs nothing.
 
 **2. You can only ever retrieve your own documents.** Ownership is enforced in
-the SQL `WHERE` clause, not by filtering results afterwards and not by asking
-the model to behave. `chunks.owner_id` is denormalised specifically so no join
-is required, because a join is one refactor away from being dropped.
+the SQL `WHERE` clause. Results are not filtered afterwards, and the model is not
+asked to behave. `chunks.owner_id` is denormalised specifically so no join is
+required, because a join could be dropped in a single refactor.
 
-The unit those guarantees are drawn around is a **knowledge base**: a named
-collection of documents belonging to one user. A conversation is pinned to a set
-of knowledge bases when it is created, and retrieval cannot see outside that
-set.
+Both guarantees are drawn around a **knowledge base**: a named collection of
+documents belonging to one user. A conversation is pinned to a set of knowledge
+bases when it is created, and retrieval cannot see outside that set.
 
 ---
 
 ## The pipeline
 
-One diagram, both halves. The top half runs once per document, the bottom half
-once per question.
+This diagram shows both halves. The top half runs once per document, the bottom
+half once per question.
 
 ```mermaid
 flowchart TB
@@ -122,9 +119,8 @@ flowchart TB
     S -.->|"by document id"| WD
 ```
 
-The one branch worth noticing is `F`: when nothing clears the floor, the arrow
-goes to a refusal and stops. There is no path from an empty search to the chat
-model.
+Look at branch `F`: when nothing clears the floor, the arrow goes to a refusal
+and stops. No path leads from an empty search to the chat model.
 
 A second diagram, showing which module owns each of these boxes, is in
 [Where the code lives](#where-the-code-lives).
@@ -133,54 +129,55 @@ A second diagram, showing which module owns each of these boxes, is in
 
 ## Ingestion
 
-Uploading a PDF turns it into rows you can search. Four steps — extract, chunk,
-embed, index — plus the state machine that sequences them. Each is a small
-module in `src/lib/rag/`.
+Uploading a PDF turns it into rows you can search. There are four steps
+(extract, chunk, embed, index) plus the state machine that sequences them. Each
+is a small module in `src/lib/rag/`.
 
 ### 1. Extract
 
 **Extraction** is pulling the readable text out of a PDF, page by page.
 `src/lib/rag/extract.ts` uses [`unpdf`](https://github.com/unjs/unpdf)
-in-process, producing **per-page** text. No sidecar container, works offline.
+in-process and produces per-page text. It needs no sidecar container and works
+offline.
 
-Keeping the page number attached from the very first step is what later lets
-every citation say "page 4" and be right.
+Because the page number stays attached from the first step, every citation can
+later say "page 4" and be right.
 
-An **image-only PDF is rejected, not ingested** — unless
+**An image-only PDF is rejected, not ingested**, unless
 [document cracking](#document-cracking) is on. If average extractable text
 across pages falls below `RAG_MIN_CHARS_PER_PAGE` (50), the document fails with
 a message naming OCR as the cause. A knowledge base that silently contains
 nothing is worse than an upload that refuses.
 
 The check averages across pages deliberately, so a legitimate document with a
-few image-only pages (a cover, a chart) still ingests. **That average is also
-the flaw cracking fixes**: a 40-page report with a scanned appendix passes it,
-ingests, reports success — and the appendix is not in the index, with nobody
+few image-only pages (a cover, a chart) still ingests. That average is also the
+flaw cracking fixes: a 40-page report with a scanned appendix passes it,
+ingests and reports success, and the appendix is not in the index. Nobody is
 told. Documents over
 `RAG_MAX_DOCUMENT_PAGES` (200) are rejected up front, which bounds worst-case
 ingestion cost.
 
 ### 2. Chunk
 
-A whole document is too coarse a thing to search. Ask about parental leave and
-"this 90-page handbook is relevant" is not an answer. So each document is cut
-into **chunks** — short passages, a few paragraphs each, stored as their own
-searchable rows. A chunk is the unit that gets retrieved, cited and shown.
+A whole document is too coarse to search. If you ask about parental leave, "this
+90-page handbook is relevant" does not answer the question. So each document is
+cut into **chunks**: short passages of a few paragraphs each, stored as their
+own searchable rows. A chunk is the unit that gets retrieved, cited and shown.
 
-`src/lib/rag/chunk.ts` does the cutting. It is pure and dependency-free, and
-therefore unit-tested without a database, a network or a PDF.
+`src/lib/rag/chunk.ts` does the cutting. It is pure and has no dependencies, so
+it is unit-tested without a database, a network or a PDF.
 
-**Chunks never span a page boundary.** That is what lets every citation resolve
-to an exact page. Overlap is carried _within_ a page only — carrying it across
-would put text from page N into a chunk cited as page N+1, which is exactly the
-kind of quiet citation error that makes a RAG answer untrustworthy.
+**Chunks never span a page boundary.** That lets every citation resolve to an
+exact page. Overlap is carried _within_ a page only. Carrying it across would
+put text from page N into a chunk cited as page N+1, a quiet citation error of
+the kind that makes a RAG answer untrustworthy.
 
 **Chunk overlap** means repeating the last few dozen tokens of one chunk at the
-start of the next. A fact that happens to straddle a split point would otherwise
-be cut in half and appear whole nowhere; overlap makes sure it survives in at
+start of the next. Without it, a fact that happens to straddle a split point
+would be cut in half and appear whole nowhere. With overlap, it survives in at
 least one chunk.
 
-Splitting degrades in three steps, so the chunker always terminates:
+Splitting falls back in three steps, so the chunker always terminates:
 
 ```mermaid
 flowchart LR
@@ -192,68 +189,67 @@ flowchart LR
     H --> K
 ```
 
-Prefer a paragraph, fall back to a sentence, and slice bluntly if even that does
-not fit. The third step matters: a table, an OCR run or minified text can be one
-"sentence" of 10,000 characters, and without a hard slice the chunker would loop
-or emit an over-budget chunk.
+The chunker prefers a paragraph, falls back to a sentence, and slices bluntly if
+even that does not fit. The third step is needed because a table, an OCR run or
+minified text can be one "sentence" of 10,000 characters, and without a hard
+slice the chunker would loop or emit an over-budget chunk.
 
-The budget is measured in **tokens** — the unit a language model counts text in,
-roughly a word-piece. Counts are **estimated, not tokenised**: the function is
-named `estimateTokens` because that is what it is, and shipping the model's
-actual vocabulary would add megabytes of dependency to size a chunk.
+The budget is measured in **tokens**, the unit a language model counts text in
+(roughly a word-piece). Counts are estimated, not tokenised. The function is
+named `estimateTokens` for that reason, and shipping the model's actual
+vocabulary would add megabytes of dependency just to size a chunk.
 
 The estimate used to be `length / 4`, and document cracking broke it. Measured
 against the embedding endpoint's own reported `usage` counts on 15 samples,
-`length / 4` was out by **48% on average and 60% at worst on table markup** —
-LaTeX `tabular` and pipe tables run at about **two** characters per token, not
-four, because a digit costs a token each. A chunk the system believed was 512
+`length / 4` was out by **48% on average and 60% at worst on table markup**.
+LaTeX `tabular` and pipe tables run at about two characters per token instead
+of four, because each digit costs a token. A chunk the system believed was 512
 tokens was really about a thousand, so every budget, overlap tail and boundary
-computed over it was wrong by a factor of two. That went unnoticed while the
-corpus was prose; [spec 0031](../specs/0031-tables-figures-and-complex-layouts.md)
+computed over it was wrong by a factor of two. Nobody noticed while the corpus
+was prose; [spec 0031](../specs/0031-tables-figures-and-complex-layouts.md)
 put tables and OCR text into it.
 
-What replaced it counts the things a tokenizer actually charges for — a token
-per ~6.6 letters, one per digit, one per ~2.5 symbol characters — with the
-constants fitted to minimise the **worst** error rather than the mean, because a
-chunk that overshoots its budget is the failure that matters. That brings table
-markup to 8% worst case and everything to ~10%.
+The replacement counts what a tokenizer actually charges for: a token per ~6.6
+letters, one per digit, and one per ~2.5 symbol characters. Its constants are
+fitted to minimise the worst error instead of the mean, because a chunk that
+overshoots its budget is the failure that matters. That brings table markup to
+8% worst case and everything to ~10%.
 
-**It is still an estimate, and ~10% is not what
-[spec 0033](../specs/0033-retrieval-fundamentals.md) asked for** — it set "within
-a few percent" as the bar for keeping a calibration instead of shipping a real
-tokenizer, and this is about four times that. The calibration is a six-fold
-improvement that costs no dependency, and it is not the requirement. A real
-tokenizer at ingestion time is still the open answer.
+**It is still an estimate, and ~10% is short of what
+[spec 0033](../specs/0033-retrieval-fundamentals.md) asked for.** That spec set
+"within a few percent" as the bar for keeping a calibration instead of shipping
+a real tokenizer, and this is about four times that. The calibration is a
+six-fold improvement that costs no dependency, but it does not meet the
+requirement. A real tokenizer at ingestion time is still the open answer.
 
-One consequence worth knowing if you are reading the code: the **hard slice**
-in the diagram above is where this mattered most. It used to size its first
-guess at `budget × 4` characters — the same fixed ratio, on the one path that
-exists precisely for the oversized table and OCR runs where the ratio is worst.
-It now takes that guess from the text's own measured density and walks it down
-until it fits.
+If you are reading the code, the hard slice in the diagram above is where this
+mattered most. It used to size its first guess at `budget × 4` characters, the
+same fixed ratio, on the one path that exists for the oversized table and OCR
+runs where the ratio is worst. It now takes that guess from the text's own
+measured density and walks it down until it fits.
 
 | Knob                       | Default | Effect                                                |
 | -------------------------- | ------- | ----------------------------------------------------- |
 | `RAG_CHUNK_TOKENS`         | 512     | Bigger = more context per hit, less precise retrieval |
 | `RAG_CHUNK_OVERLAP_TOKENS` | 64      | Guards a fact split across a chunk boundary           |
 
-Env validation rejects an overlap ≥ the chunk size at boot, because that
-combination makes the chunker unable to make progress.
+Env validation rejects an overlap ≥ the chunk size at boot, because with that
+combination the chunker cannot make progress.
 
-These chunks are also the **children** of parent–child retrieval (spec 0033,
+These chunks are also the children of parent/child retrieval (spec 0033,
 1c). Chunking itself did not change for it: no bigger unit is cut, embedded or
 stored. A section is recognised at query time from the `heading` and
 `heading_bbox` every chunk already carries, and returned whole when two or more
-of its chunks match — see [Parent–child assembly](#parentchild-assembly).
+of its chunks match. See [Parent–child assembly](#parentchild-assembly).
 
 ### 3. What actually gets embedded
 
 A chunk pulled out of the middle of a document loses the fact that it came from
-_that_ document and _that_ section. So a **contextual header** — the document
-title and the detected section heading — is prepended before the chunk is turned
-into numbers.
+_that_ document and _that_ section. So a **contextual header**, made of the
+document title and the detected section heading, is prepended before the chunk
+is turned into numbers.
 
-The text sent to the embedding model is **not** the text stored for display:
+The text sent to the embedding model differs from the text stored for display:
 
 ```
 staff handbook — STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
@@ -265,20 +261,20 @@ names a document or section has something to match. The original `content` is
 stored separately and is what a citation shows, so the synthetic preamble never
 reaches the user.
 
-Heading detection reads the PDF's **point sizes**
+Heading detection reads the PDF's point sizes
 ([spec 0039](../specs/0039-structure-from-the-text-layer.md)). A short line set
-above the document's body size is a heading; well above it, the title. Measured
-on a real report: body 10.5pt, section headers 12.5, the title 17.
+above the document's body size is a heading; one well above it is the title.
+Measured on a real report: body 10.5pt, section headers 12.5, the title 17.
 
-The same pass finds **page furniture** — a line repeated at the same end of
-every page, set smaller than body text, is a running header or footer and is
-dropped rather than indexed as prose. Before it, a document's running header
-became the "heading" of every text-layer chunk in it, and the footer was
-indexed as content.
+The same pass finds **page furniture**. A line repeated at the same end of every
+page and set smaller than body text is a running header or footer, and it is
+dropped instead of being indexed as prose. Before this pass, a document's
+running header became the "heading" of every text-layer chunk in it, and the
+footer was indexed as content.
 
-Every rule fails towards plain text. Missing a heading loses a little context;
-promoting a _sentence_ to a heading prepends it to every chunk on the page, and
-mistaking a paragraph for furniture **deletes it from the index** — so the
+Every rule fails towards plain text. Missing a heading loses a little context.
+Promoting a _sentence_ to a heading prepends it to every chunk on the page, and
+mistaking a paragraph for furniture **deletes it from the index**. So the
 furniture test requires repetition across pages _and_ a size strictly smaller
 than body text.
 
@@ -287,33 +283,34 @@ this path worked before.
 
 ### 4. Embed
 
-This is the step that makes searching by meaning possible.
+Embedding is what makes searching by meaning possible.
 
 An **embedding** is a list of numbers a model produces from a piece of text,
 arranged so that texts meaning similar things end up with similar lists. Read
 that list as coordinates and each chunk becomes a point in a space with one axis
-per number — a **vector**. "Close together in that space" is what "means
-something similar" turns into, which is why an embedding search can match _"where
-do we meet in a fire?"_ against a paragraph that never uses any of those words.
+per number, called a **vector**. Texts that mean similar things sit close
+together in that space, which is why an embedding search can match _"where do we
+meet in a fire?"_ against a paragraph that uses none of those words.
 
-How many numbers there are is the embedding's **dimensions**. Here it is fixed
-at 2048, because that is what the model emits — and the database column has to
-agree exactly, which is a constraint that comes back later.
+The number of values is the embedding's **dimensions**. Here it is fixed at
+2048, because that is what the model emits, and the database column has to
+agree exactly. That constraint comes back later.
 
-`src/lib/rag/embed.ts` does the calls: batched (`RAG_EMBED_BATCH`, 32) and
-pooled (`RAG_EMBED_CONCURRENCY`, 4), with exponential backoff and jitter on HTTP 429. A 200-page PDF is hundreds of calls against a rate-limited free tier; the
-client retries a 429, but staying under it is cheaper than backing off.
+`src/lib/rag/embed.ts` makes the calls: batched (`RAG_EMBED_BATCH`, 32) and
+pooled (`RAG_EMBED_CONCURRENCY`, 4), with exponential backoff and jitter on HTTP 429. A 200-page PDF is hundreds of calls against a rate-limited free tier. The
+client retries a 429, but staying under the limit is cheaper than backing off.
 
-**The embeddings are asymmetric, and this is not optional.** An asymmetric model
-is told whether the text it is embedding is a stored passage or a question, and
-produces a different vector for each. Measured against the live endpoint:
+**The embeddings are asymmetric, and you cannot skip this.** An asymmetric
+model is told whether the text it is embedding is a stored passage or a
+question, and it produces a different vector for each. Measured against the live
+endpoint:
 
-| Pair                                                  | Cosine    |
-| ----------------------------------------------------- | --------- |
-| `passage(t)` vs `query(t)` — the _identical_ sentence | **0.785** |
-| `passage(t)` vs `query(question about t)`             | 0.611     |
+| Pair                                                      | Cosine    |
+| --------------------------------------------------------- | --------- |
+| `passage(t)` vs `query(t)`, with the _identical_ sentence | **0.785** |
+| `passage(t)` vs `query(question about t)`                 | 0.611     |
 
-The identical sentence scores 0.785, not 1.0, purely because it was embedded
+The identical sentence scores 0.785 instead of 1.0 only because it was embedded
 under two different `input_type` values. Embed a question as a passage by
 mistake and every search quietly gets worse, with nothing in the logs to say so.
 
@@ -321,17 +318,17 @@ So the module exports `embedPassages()` and `embedQuery()` and deliberately
 **no** generic `embed()`. A single function with a defaulted `input_type` would
 let a call site pick the wrong one and degrade retrieval with no visible error.
 
-**Then indexing.** The vectors are written to `chunks.embedding` and searched
-through an index rather than by scanning every row. Which index is possible at
-all depends on the column type, and that argument is in
+After embedding comes indexing. The vectors are written to `chunks.embedding`
+and searched through an index instead of by scanning every row. Which index is
+possible at all depends on the column type; that argument is in
 [Why `halfvec(2048)`](#why-halfvec2048-and-not-vector2048).
 
 ### Ingestion is a state machine
 
-`src/lib/rag/ingest.ts`. Ingestion runs **out of band** from the request that
-triggered it, via Next's `after()` — hundreds of embedding calls cannot happen
-inside a Server Action. There is no queue and no worker container; the UI polls
-`documents.status`.
+Ingestion lives in `src/lib/rag/ingest.ts`. It runs out of band from the request
+that triggered it, via Next's `after()`, because hundreds of embedding calls
+cannot happen inside a Server Action. There is no queue and no worker container;
+the UI polls `documents.status`.
 
 ```
 pending ──▶ extracting ──▶ embedding ──▶ ready
@@ -346,16 +343,16 @@ document can never double up its chunks.
 
 ## Search
 
-Now the per-question half. The question goes through four decisions before any
-prose is written: what kind of question is this, which passages match it, are
-any of them good enough, and only then — write the answer.
+This is the per-question half. A question goes through four decisions before any
+prose is written: what kind of question it is, which passages match it, whether
+any of them are good enough, and then how to write the answer.
 
 ### Scoping: two retrieval paths
 
 Similarity search answers _"which passage is about X"_. It cannot answer
-_"summarise this document"_, because such a request has no semantic anchor in
-the content — it is an instruction **about** the document rather than a question
-whose answer sits in a passage. Measured on a 3-page handbook:
+_"summarise this document"_, because that request has no semantic anchor in the
+content. It is an instruction about the document, with no single passage that
+holds the answer. Measured on a 3-page handbook:
 
 | Question                                  | Best similarity | Outcome       |
 | ----------------------------------------- | --------------- | ------------- |
@@ -365,38 +362,38 @@ whose answer sits in a passage. Measured on a 3-page handbook:
 | "summarise rag-sample-handbook"           | 0.172           | _below floor_ |
 | "summarise this document"                 | **0.077**       | _below floor_ |
 
-Lowering `RAG_MIN_SIMILARITY` would not fix that — 0.077 is near noise, and a
+Lowering `RAG_MIN_SIMILARITY` would not fix that. 0.077 is near noise, and a
 floor low enough to admit it would admit junk on every other question. So
-`src/lib/rag/scope.ts` routes whole-document requests to retrieval **by
-document** instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
+`src/lib/rag/scope.ts` routes whole-document requests to retrieval by document
+instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
 
-Scoping is deliberately conservative: an ambiguous "summarise this" across
-several documents falls back to similarity search rather than guessing which
+Scoping is deliberately conservative. An ambiguous "summarise this" across
+several documents falls back to similarity search instead of guessing which
 document you meant.
 
-`src/lib/rag/scope.ts` itself knows nothing about knowledge bases, and needs no
-code to. It takes an opaque, pre-filtered document list, so KB-awareness is
-entirely a question of what the caller passes in. That matters more than it
-sounds: its "only one document" shortcut must mean _one document in the selected
-knowledge bases_, not one document in the whole account, or the shortcut
-silently stops firing for anyone with a second document anywhere.
+`src/lib/rag/scope.ts` itself knows nothing about knowledge bases and needs no
+code for them. It takes an opaque, pre-filtered document list, so KB-awareness
+depends entirely on what the caller passes in. This matters because its "only
+one document" shortcut must mean _one document in the selected knowledge
+bases_. If it meant one document in the whole account, the shortcut would
+silently stop firing for anyone with a second document anywhere.
 
-The other half of scoping — restricting the search to the conversation's
-knowledge bases — is the same idea applied to the `WHERE` clause, and the
-subtleties are in
+The other half of scoping, restricting the search to the conversation's
+knowledge bases, applies the same idea to the `WHERE` clause. The details are in
 [Scoping: which knowledge bases](#scoping-which-knowledge-bases) under the hood.
 
 ### Hybrid retrieval — dense and lexical, fused
 
-A content question is searched **two ways at once**, because each way fails
-where the other works.
+A content question is searched two ways at once, because each way fails where
+the other works.
 
-**Dense retrieval** is the embedding search described above: embed the question,
-find the nearest chunk vectors. It is good at meaning and bad at exact strings —
-an identifier like `POL-HR-014` means nothing in vector space. **Lexical
+**Dense retrieval** is the embedding search described above: embed the question
+and find the nearest chunk vectors. It handles meaning well and exact strings
+badly; an identifier like `POL-HR-014` means nothing in vector space. **Lexical
 retrieval** is classic keyword search, using Postgres's own full-text machinery
-(`tsvector` columns, a GIN index, `ts_rank_cd` for scoring). It is the mirror
-image: excellent on `POL-HR-014`, useless on _"where do we meet in a fire?"_.
+(`tsvector` columns, a GIN index, `ts_rank_cd` for scoring). It behaves the
+opposite way: excellent on `POL-HR-014`, useless on _"where do we meet in a
+fire?"_.
 
 **Hybrid search** runs both and merges the results:
 
@@ -411,77 +408,78 @@ flowchart LR
     G -->|yes| A["Answer"]
 ```
 
-Two searches in, one ranked list out, and a single gate on the way to an answer.
+Two searches go in, one ranked list comes out, and a single gate sits on the way
+to an answer.
 
 The merge is **Reciprocal Rank Fusion (RRF)**. Each channel returns a ranked
 list; every chunk scores `1 / (k + rank)` from each list it appears in, and the
-scores are summed. A chunk that both channels liked beats one that only appeared
-in a single list. `k` is `RAG_RRF_K` (60), a damping constant — a larger value
+scores are summed. A chunk that both channels liked beats one that appeared in
+only one list. `k` is `RAG_RRF_K` (60), a damping constant. A larger value
 flattens the advantage of being first, and at 60 the results are not sensitive
 to it.
 
-RRF combines **ranks**, not scores. Cosine similarity and `ts_rank_cd` are not
-on comparable scales, and normalising them against each other is the fragile
-part of naive hybrid search; RRF sidesteps it. Both channels filter on
-`owner_id` in their own `WHERE` clause — the tenant boundary is not something
-fusion is trusted to preserve.
+RRF combines ranks, not scores. Cosine similarity and `ts_rank_cd` are not on
+comparable scales, and normalising them against each other is the fragile part
+of naive hybrid search, which RRF avoids. Both channels filter on `owner_id` in
+their own `WHERE` clause, so fusion is never trusted to preserve the tenant
+boundary.
 
 Each channel fetches `RAG_HYBRID_CANDIDATES` (20) rows before fusion picks the
-winners. That pool matters: too small, and a good candidate is cut before it is
-ever compared.
+winners. If that pool is too small, a good candidate is cut before it is ever
+compared.
 
-**The lexical query ORs its terms.** `websearch_to_tsquery` — Postgres's helper
-for turning a phrase into a search query — ANDs them, which is wrong for
+**The lexical query ORs its terms.** `websearch_to_tsquery`, Postgres's helper
+for turning a phrase into a search query, ANDs them, which is wrong for
 question-shaped input: _"What does POL-HR-014 cover?"_ becomes
 `'pol-hr' <-> 'pol' <-> 'hr' <-> '014' & 'cover'`, and the passage holding the
 identifier is rejected because it does not also contain "cover". Questions are
 full of verbs and filler that never appear in the passage answering them.
 
-**The gate stays on cosine alone**, and that is a measured decision rather than
-a conservative default — see [Known gaps](#known-gaps).
+**The gate stays on cosine alone.** That was a measured decision, and the
+reasoning is in [Known gaps](#known-gaps).
 
 ### Parent–child assembly
 
 A section of a document is often several chunks: the cracked path and the
 text-layer path ([spec 0039](../specs/0039-structure-from-the-text-layer.md))
-make one chunk per paragraph. Ask a question the whole section answers — "what
-is the process for disposing of records?" — and every paragraph clears the
-floor on its own. The model is handed four adjacent slices of one section, in
-whatever order their scores put them, and four citations that all point at the
-same passage.
+make one chunk per paragraph. Ask a question the whole section answers ("what
+is the process for disposing of records?") and every paragraph clears the
+floor on its own. The model is then handed four adjacent slices of one section,
+in whatever order their scores put them, and four citations that all point at
+the same passage.
 
-Since spec 0033 (1c), retrieval hands over the **section** instead. After the
-similarity gate, when **two or more** admitted chunks sit in the same **section
-run** on one page, they are replaced by the whole run — the **parent** — at the
-position of the best-ranked one. `src/lib/rag/parents.ts` does it, and it is
-pure and unit-tested.
+Since spec 0033 (1c), retrieval hands over the section instead. After the
+similarity gate, when **two or more** admitted chunks sit in the same section
+run on one page, they are replaced by the whole run (the **parent**) at the
+position of the best-ranked one. `src/lib/rag/parents.ts` does this; it is pure
+and unit-tested.
 
-- **A section run** is the contiguous chunks on one page that share a heading
+- A **section run** is the contiguous chunks on one page that share a heading
   and the heading's position (`chunks.heading`, `chunks.heading_bbox`). The
   position separates two sections that share a title on one page. Figures are
-  skipped and never part of a run — their text is a search key, not evidence.
-  Tables and scanned text are members.
-- **Nothing is embedded or stored for a parent.** Children are the chunks
-  ingestion already writes, with the same vectors. The parent is assembled at
-  query time from the page's rows, by one extra owner- and KB-scoped query that
-  runs only when two admitted chunks share a page and heading.
-- **The gate still decides everything.** A parent appears only where two of its
-  own children would have appeared anyway, and its score is the best child's
-  real cosine. So an empty list stays empty — refusal cannot change — and the
-  0.35 floor keeps the meaning it was calibrated for. The cost of that choice:
-  a section where no two children clear the floor on their own is never
+  skipped and are never part of a run, because their text is a search key and
+  not evidence. Tables and scanned text are members.
+- Nothing is embedded or stored for a parent. Children are the chunks ingestion
+  already writes, with the same vectors. The parent is assembled at query time
+  from the page's rows, by one extra owner- and KB-scoped query that runs only
+  when two admitted chunks share a page and heading.
+- The gate still decides everything. A parent appears only where two of its own
+  children would have appeared anyway, and its score is the best child's real
+  cosine. So an empty list stays empty, refusal cannot change, and the 0.35
+  floor keeps the meaning it was calibrated for. The cost of that choice is
+  that a section where no two children clear the floor on their own is never
   returned as a parent.
-- **Runs never cross a page**, so a parent's citation is exact. Opening it
-  highlights every chunk of the run, as a list of regions, never their union.
-- **A parent is capped** at `3 × RAG_CHUNK_TOKENS`. A longer run stays as the
+- Runs never cross a page, so a parent's citation is exact. Opening it
+  highlights every chunk of the run as a list of regions, never their union.
+- A parent is capped at `3 × RAG_CHUNK_TOKENS`. A longer run stays as the
   separate chunks the gate admitted. The un-admitted siblings of a parent do
-  reach the prompt — that is the point — but only once two of their neighbours
-  have cleared the floor.
-- **Overlap is removed.** Consecutive chunks of one long paragraph share their
-  junction text; the parent says it once.
+  reach the prompt, which is the purpose of assembly, but only once two of their
+  neighbours have cleared the floor.
+- Overlap is removed. Consecutive chunks of one long paragraph share their
+  junction text, and the parent says it once.
 
-How good the grouping is depends on which path read the page — the same
-asymmetry as everything else structural:
+How good the grouping is depends on which path read the page, the same
+asymmetry that applies to everything else structural:
 
 | Path                                    | Where the section comes from            | Parent is              |
 | --------------------------------------- | --------------------------------------- | ---------------------- |
@@ -489,8 +487,8 @@ asymmetry as everything else structural:
 | Text layer with point sizes (0039)      | lines set larger than the body text     | the section            |
 | Text layer without sizes (`chunkPages`) | the page's first line (`detectHeading`) | the whole page, capped |
 
-A heading set in body type — ALL CAPS at the body's own point size, as in
-`eval/corpus`'s original three documents — is not detected, so each of those
+A heading set in body type (ALL CAPS at the body's own point size, as in
+`eval/corpus`'s original three documents) is not detected, so each of those
 pages is one chunk and assembly changes nothing there. **No re-ingest is
 needed**, and what existing rows get depends on how they were ingested:
 
@@ -502,32 +500,32 @@ needed**, and what existing rows get depends on how they were ingested:
 - text-layer rows from before 0039 have one heading line per page, so they
   group at page level, like the `chunkPages` row above.
 
-All three stay single-page and gated. Re-ingesting gives the second exact
-sections, and the third sections when the PDF reports point sizes.
+All three stay single-page and gated. Re-ingesting gives the second group exact
+sections, and the third group sections when the PDF reports point sizes.
 
-The agentic loop dedupes by the same rule: a parent absorbs any lone chunk of
-its run found by another search, and keeps the best score either was seen with,
+The agentic loop dedupes by the same rule. A parent absorbs any lone chunk of
+its run found by another search and keeps the best score either was seen with,
 so the attempt-scaled floor scores a parent exactly as it would its best child.
-That bounds the score, not the text: a parent kept on its best child carries its
-whole section, including paragraphs whose own score is under the raised floor.
-Refusal cannot move (the list is empty exactly when its best score is under the
-floor), but after several searches the floor filters less text than it did.
-Whole-document requests are untouched — they already return every chunk.
-`RAG_PARENT_ASSEMBLY=false` turns it off; `pnpm rag:eval --parents-ab` scores
-one retrieval both ways (see [Evaluation](#evaluation)).
+That bounds the score but not the text: a parent kept on its best child carries
+its whole section, including paragraphs whose own score is under the raised
+floor. Refusal cannot move (the list is empty exactly when its best score is
+under the floor), but after several searches the floor filters less text than
+it did. Whole-document requests are untouched, since they already return every
+chunk. `RAG_PARENT_ASSEMBLY=false` turns it off; `pnpm rag:eval --parents-ab`
+scores one retrieval both ways (see [Evaluation](#evaluation)).
 
 ### The floor, and the refusal gate
 
-Fusion gives you a ranked list. `RAG_TOP_K` (8) of them are kept — the **top-k**
-closest chunks are the only passages the model is ever allowed to see.
+Fusion gives you a ranked list. `RAG_TOP_K` (8) of them are kept, and these
+**top-k** closest chunks are the only passages the model is ever allowed to see.
 
-Closeness is scored with **cosine similarity**: a 0-to-1 number for how alike
+Closeness is scored with **cosine similarity**, a 0-to-1 number for how closely
 two embeddings point in the same direction, where 1 means near-identical
 meaning. Anything below `RAG_MIN_SIMILARITY` (0.35) is treated as unrelated and
 dropped.
 
 If nothing survives that floor, the **refusal gate** fires: the chat model is
-never called and a fixed reply is returned —
+never called and a fixed reply is returned,
 `"I couldn't find anything about that in your documents."` (verbatim, from
 `src/lib/rag/constants.ts`). This is guarantee 1, and it is ordinary control
 flow. There is no prompt instruction to disobey and no model call to hijack,
@@ -536,14 +534,14 @@ because there is no model call.
 ### Answering
 
 `src/lib/rag/prompt.ts` fences retrieved text in a delimited `CONTEXT` block and
-labels it as **data, never instructions** — an uploaded PDF is untrusted input
-that reaches the model, which is the indirect-injection surface. (Someone can
-put "ignore your instructions and…" in a PDF; fencing is what tells the model
-that block is material to read, not orders to follow.) That mitigates; it does
-not eliminate. The primary defence remains that the model is not called at all
-when nothing is retrieved.
+labels it as data, never instructions. An uploaded PDF is untrusted input that
+reaches the model, which makes it the indirect-injection surface. (Someone can
+put "ignore your instructions and…" in a PDF; the fence tells the model that
+block is material to read and not orders to follow.) Fencing mitigates the risk
+without eliminating it. The primary defence remains that the model is not called
+at all when nothing is retrieved.
 
-The route streams NDJSON — one JSON object per line, so the browser can act on
+The route streams NDJSON, one JSON object per line, so the browser can act on
 each frame the moment it arrives instead of waiting for the whole answer:
 
 ```
@@ -562,35 +560,35 @@ the sources it was actually answered from. The full frame list is in
 
 ## Setup
 
-You need a key for an **inference endpoint** — the HTTP service that runs the
+You need a key for an **inference endpoint**, the HTTP service that runs the
 models. Anything speaking the OpenAI request format works, including a local
-Ollama or llama.cpp. The default is **NVIDIA NIM**, NVIDIA's hosted endpoint.
+Ollama or llama.cpp. The default is NVIDIA NIM, NVIDIA's hosted endpoint.
 
-A free NVIDIA NIM key from [build.nvidia.com](https://build.nvidia.com) —
-rate-limited, not token-billed.
+Get a free NVIDIA NIM key from [build.nvidia.com](https://build.nvidia.com). It
+is rate-limited, not token-billed.
 
 ```bash
 NVIDIA_API_KEY=nvapi-...
 ```
 
 Without it the app still boots; `/chat` and `/documents` report themselves as
-unconfigured, and the RAG test suites self-skip.
+unconfigured, and the RAG test suites skip themselves.
 
 ### Ask your first question
 
-Assuming the quick start in [Usage](usage.md) has run — Postgres and MinIO up,
-`pnpm db:migrate`, `pnpm db:seed`, `pnpm dev` — the whole loop takes about two
+Assuming the quick start in [Usage](usage.md) has run (Postgres and MinIO up,
+`pnpm db:migrate`, `pnpm db:seed`, `pnpm dev`), the whole loop takes about two
 minutes:
 
 1. Sign in at `http://localhost:3000` (the seed creates
    `demo@example.com` / `Password123`).
 2. Go to **`/documents`** and create a knowledge base. It is a name and an
    optional description, nothing more.
-3. Upload a PDF into it. A real text PDF — a scanned one is rejected unless
+3. Upload a PDF into it. Use a real text PDF; a scanned one is rejected unless
    document cracking is on (see below). If you do not have one handy, this repo ships
    `eval/corpus/staff-handbook.pdf`: four pages, one section per page, with
    facts you can check against `eval/make-corpus.mjs`. Watch `status` go
-   `pending → extracting → embedding → ready`; a short document takes seconds, a
+   `pending → extracting → embedding → ready`. A short document takes seconds; a
    200-page one takes a few minutes of embedding calls.
 4. Go to **`/chat`** and ask something the document actually answers. The scope
    selector starts on **All knowledge bases**; narrow it to the one you just
@@ -598,15 +596,15 @@ minutes:
    of annual leave do I get?_ The reply streams in with a citation panel naming
    the document and page each part came from.
 5. Now ask something it does not cover. You get
-   _"I couldn't find anything about that in your documents."_ — that is the
+   _"I couldn't find anything about that in your documents."_ That is the
    refusal gate, and no chat model was called to produce it.
 
-Step 5 is the one worth doing deliberately. It is the difference between this
-and a chatbot with a document-shaped decoration.
+Do step 5 deliberately. It is what separates this from a chatbot with a
+document-shaped decoration.
 
 ### Running fully offline
 
-Any OpenAI-compatible endpoint works — a local Ollama or llama.cpp means nothing
+Any OpenAI-compatible endpoint works. With a local Ollama or llama.cpp, nothing
 leaves your machine.
 
 ```bash
@@ -615,16 +613,16 @@ RAG_CHAT_MODEL=gpt-oss
 RAG_PLANNER_MODEL=gpt-oss   # only matters with RAG_AGENTIC_ENABLED=true
 ```
 
-The planner needs a model that emits **native tool calls** reliably. On Ollama
+The planner needs a model that emits native tool calls reliably. On Ollama
 that is `gpt-oss`; coder GGUFs leak tool calls as text.
 
-The embedding side is the catch: a local model must produce **2048-dimension**
+The embedding side is harder: a local model must produce **2048-dimension**
 vectors to match the column, or you need a migration and a full re-ingest.
 
 ### Tuning
 
-Every value below has a working default. `RAG_MIN_SIMILARITY` is the one worth
-touching deliberately.
+Every value below has a working default. `RAG_MIN_SIMILARITY` is the one you
+might need to change deliberately.
 
 | Variable                                    | Default | Effect                                              |
 | ------------------------------------------- | ------- | --------------------------------------------------- |
@@ -641,13 +639,13 @@ touching deliberately.
 | `RAG_PARENT_ASSEMBLY`                       | true    | Return a whole section when 2+ of its chunks match  |
 
 On the corpus above, true positives scored **0.41–0.62** and an off-topic
-question **0.13**. The 0.35 default sits in that gap but nearer the true
-positives than is comfortable — raise it only with your own corpus in front of
+question **0.13**. The 0.35 default sits in that gap, but closer to the true
+positives than is comfortable. Raise it only with your own corpus in front of
 you.
 
 #### Agentic path
 
-These only matter with `RAG_AGENTIC_ENABLED=true`; see
+These only matter with `RAG_AGENTIC_ENABLED=true`. See
 [The agentic path](#the-agentic-path) for what the loop does and what it costs.
 
 | Variable                 | Default                                 | Effect                                                                                                          |
@@ -657,19 +655,19 @@ These only matter with `RAG_AGENTIC_ENABLED=true`; see
 | `RAG_MAX_SEARCHES`       | 3                                       | Hard cap on `search_documents` calls per question                                                               |
 | `RAG_MAX_LOOP_MS`        | 15000                                   | Wall-clock for the loop, excluding answer streaming. Raised to a 45s floor when `RAG_READ_FIGURE_ENABLED` is on |
 | `RAG_MAX_LOOP_TOKENS`    | 8000                                    | Prompt + completion across every planning call. Raised to a 30k floor when `RAG_READ_FIGURE_ENABLED` is on      |
-| `RAG_AGENTIC_FLOOR_STEP` | 0.04                                    | Similarity floor rises by this per **extra** search — see below                                                 |
+| `RAG_AGENTIC_FLOOR_STEP` | 0.04                                    | Similarity floor rises by this per extra search (see below)                                                     |
 
 Planning and prose are separate roles because they were measured separately.
-The probe scored structural reliability — did the model emit a valid tool
-call — not answer quality, so `RAG_CHAT_MODEL` still writes the prose. Collapse
+The probe scored structural reliability (did the model emit a valid tool
+call?), not answer quality, so `RAG_CHAT_MODEL` still writes the prose. Collapse
 them into one model if your own eval says they are interchangeable.
 
 ---
 
 ## Reference
 
-Where each piece of the code lives, what the chat endpoint sends over the wire,
-and what a free-tier rate limit costs you per question.
+This section covers where each piece of the code lives, what the chat endpoint
+sends over the wire, and what a free-tier rate limit costs you per question.
 
 ### Module map
 
@@ -693,89 +691,89 @@ The agentic path (spec 0029) adds:
 
 | Concern                                         | File                          |
 | ----------------------------------------------- | ----------------------------- |
-| Deterministic router — retrieve, or filler?     | `src/lib/rag/route-intent.ts` |
+| Deterministic router: retrieve, or filler?      | `src/lib/rag/route-intent.ts` |
 | `PlannerDecision`, tool schema, both adapters   | `src/lib/rag/planner.ts`      |
 | The bounded loop, budgets, attempt-scaled floor | `src/lib/rag/agentic.ts`      |
 | Wiring: scope, planner calls, search, verify    | `src/lib/rag/agentic-run.ts`  |
-| Citation verification — sentence stripping      | `src/lib/rag/verify.ts`       |
+| Citation verification: sentence stripping       | `src/lib/rag/verify.ts`       |
 | Conversation-turn type and context window size  | `src/lib/rag/rewrite.ts`      |
 
-`kb-scope.ts` is deliberately not inside `kb-actions.ts`: every export of a
+`kb-scope.ts` is deliberately kept out of `kb-actions.ts`. Every export of a
 `'use server'` module is a browser-reachable endpoint, and the resolver takes
-an owner id as an argument. Exported from there, anyone could enumerate another
-user's knowledge bases. `server-only` makes importing it from a client component
-a build error instead.
+an owner id as an argument. Exported from there, it would let anyone enumerate
+another user's knowledge bases. `server-only` makes importing it from a client
+component a build error instead.
 
-`rewrite.ts` is a stub on purpose — it once held a standalone rewrite call. See
+`rewrite.ts` is a stub on purpose; it once held a standalone rewrite call. See
 [Reference resolution](#reference-resolution-and-a-measurement-that-changed-the-design)
 under the agentic path for why that was removed.
 
 ### The stream protocol
 
-`POST /api/chat` answers with newline-delimited JSON. One object per line, so
+`POST /api/chat` answers with newline-delimited JSON, one object per line, so
 the client acts on each as it arrives.
 
-| Frame          | When                                                                                             | Payload                                   |
-| -------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| `conversation` | First, always                                                                                    | `conversationId`, `title`                 |
-| `step`         | Each phase change — `drafting` on both paths; `routing` / `searching` / `verifying` agentic only | `phase`, `iteration`                      |
-| `citations`    | Once evidence is gathered                                                                        | `citations[]`, before any prose           |
-| `token`        | Per streamed delta                                                                               | `value`                                   |
-| `revision`     | If verification stripped anything                                                                | `value` — the full corrected answer       |
-| `metrics`      | As soon as drafting ends — the answer is saved; the composer unlocks                             | tokens, tok/s, time to first token, model |
-| `error`        | Instead of an answer                                                                             | `message`                                 |
-| `done`         | Last, always                                                                                     | —                                         |
+| Frame          | When                                                                                            | Payload                                   |
+| -------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `conversation` | First, always                                                                                   | `conversationId`, `title`                 |
+| `step`         | Each phase change: `drafting` on both paths; `routing` / `searching` / `verifying` agentic only | `phase`, `iteration`                      |
+| `citations`    | Once evidence is gathered                                                                       | `citations[]`, before any prose           |
+| `token`        | Per streamed delta                                                                              | `value`                                   |
+| `revision`     | If verification stripped anything                                                               | `value`, the full corrected answer        |
+| `metrics`      | As soon as drafting ends; the answer is saved and the composer unlocks                          | tokens, tok/s, time to first token, model |
+| `error`        | Instead of an answer                                                                            | `message`                                 |
+| `done`         | Last, always                                                                                    | —                                         |
 
 Drafting is retried once if the model produces no prose. The upstream can also
-answer `200` and then send an error _as a frame_ —
-`{"error":{"message":"Service temporarily overloaded","code":503}}` — which is
-recognised (`src/lib/rag/sse.ts`), ends that attempt, and backs off 2s before
+answer `200` and then send an error _as a frame_,
+`{"error":{"message":"Service temporarily overloaded","code":503}}`. That frame
+is recognised (`src/lib/rag/sse.ts`), ends the attempt, and backs off 2s before
 the retry (1s after an empty stream). If the retry fails too, the `error`
-frame says the model is overloaded or failed, with its code, rather than that
+frame says the model is overloaded or failed, with its code, instead of saying
 it returned an empty answer (#43).
 
-The two numbers in `metrics` that decide whether an answer _feels_ fast are
-**TTFT** (time to first token — how long before any text appears) and **tok/s**
-(how quickly it arrives after that).
+Two numbers in `metrics` decide whether an answer _feels_ fast: **TTFT** (time
+to first token, or how long before any text appears) and **tok/s** (how quickly
+text arrives after that).
 
 `step` phases are `routing`, `searching` (with an iteration number),
 `drafting` and `verifying`. The client shows them as a label on the thinking
-indicator — _"Searching your documents (2)…"_ — because ten seconds of bare dots
-reads as "stuck" rather than "working".
+indicator, such as _"Searching your documents (2)…"_, because ten seconds of
+bare dots reads as "stuck" instead of "working".
 
 The `conversation` frame is sent **before** retrieval runs, so the thread's
-URL and sidebar entry appear at ~400ms rather than after the answer. That
-ordering is what makes the first-chat transition feel instant despite an
-8–20s answer.
+URL and sidebar entry appear at ~400ms instead of after the answer. That
+ordering makes the first-chat transition feel instant despite an 8–20s answer.
 
 ### Rate limits, and what they cost you
 
-A free NIM key allows roughly **40 requests a minute**. That number is worth
-translating into questions, because the two paths spend it very differently.
+A free NIM key allows roughly **40 requests a minute**. It helps to translate
+that into questions, because the two paths spend it very differently.
 
 | Path    | Upstream calls per question                                    | Questions per minute, roughly |
 | ------- | -------------------------------------------------------------- | ----------------------------- |
 | Fixed   | 1 embedding + 1 chat stream                                    | ~20                           |
 | Agentic | 1–3 planner calls + 1 embedding per search + 1 chat + 1 verify | **~5–8**                      |
 
-Two consequences follow. Running the E2E suite with the agentic path on
-**must** use `--workers=1`; parallel workers blow straight through the ceiling,
-and what you then measure is contention, not the product. And the retry wrapper
-amplifies a throttled request rather than shortening it — four attempts with
-0.5s, 1s and 2s back-offs — so a single planner call under a 429 can stretch to
-30s or more. That is the correct behaviour (a 429 means "wait", not "stop"),
-but it is why a slow answer under load is not the same thing as a hung one.
+This has two consequences. Running the E2E suite with the agentic path on
+**must** use `--workers=1`, because parallel workers blow straight through the
+ceiling, and what you then measure is contention instead of the product. Also,
+the retry wrapper amplifies a throttled request instead of shortening it (four
+attempts with 0.5s, 1s and 2s back-offs), so a single planner call under a 429
+can stretch to 30s or more. That is the correct behaviour, since a 429 means
+"wait" and not "stop", but it is why a slow answer under load is not the same
+thing as a hung one.
 
 ---
 
 ## Under the hood
 
-Everything from here is design rationale and measurement. You can use the
+Everything from here on is design rationale and measurement. You can use the
 feature without reading any of it.
 
 ### Where the code lives
 
-The pipeline diagram shows _what happens_; this shows _where it lives_. Each
+The pipeline diagram shows _what happens_; this one shows _where it lives_. Each
 box is a module, and the boundaries are deliberate: everything in the pure
 column can be unit-tested without a database, a network or a PDF.
 
@@ -817,17 +815,17 @@ flowchart TB
     EXT --> OBJ
 ```
 
-Read it as three layers: entry points at the top take the request, the pure
-column holds every decision that can be reasoned about in a unit test, and the
-I/O column is the only place that touches the database, the object store or the
-network.
+The diagram has three layers. Entry points at the top take the request, the
+pure column holds every decision that can be reasoned about in a unit test, and
+the I/O column is the only place that touches the database, the object store or
+the network.
 
 ### Why `halfvec(2048)` and not `vector(2048)`
 
-The vectors live in Postgres, using **pgvector** — the extension that adds
-vector columns and vector indexes, so the whole search runs in the database you
-already operate rather than a separate service. What is not obvious is why the
-column type is `halfvec` rather than the ordinary `vector`.
+The vectors live in Postgres, using **pgvector**, the extension that adds vector
+columns and vector indexes, so the whole search runs in the database you already
+operate instead of a separate service. Less obvious is why the column type is
+`halfvec` and not the ordinary `vector`.
 
 Three measured facts, in order, force the column type:
 
@@ -836,16 +834,16 @@ Three measured facts, in order, force the column type:
    `nvidia/llama-3.2-nv-embedqa-1b-v1` and `nvidia/nv-embedqa-mistral-7b-v2` all
    return `404 Not found for account`.
 2. **Its output is fixed at 2048 dimensions.** Requesting `dimensions: 1024`
-   returns `dimensions must be one of 2048` — there is no Matryoshka
+   returns `dimensions must be one of 2048`, and there is no Matryoshka
    truncation to fall back on.
 3. **pgvector cannot index a `vector` above 2000 dimensions.** HNSW and IVFFlat
    both cap there.
 
 `vector(2048)` would therefore store perfectly well and then **silently
-sequential-scan every query** — the worst kind of failure, because nothing
-errors. `halfvec` stores each number at half precision and indexes up to 4000
-dimensions, and the fp16 recall cost is negligible next to losing the index
-entirely.
+sequential-scan every query**. Nothing errors, which makes it the hardest kind
+of failure to notice. `halfvec` stores each number at half precision and
+indexes up to 4000 dimensions, and the fp16 recall cost is negligible next to
+losing the index entirely.
 
 The index itself is **HNSW**, a navigable-graph structure that finds the nearest
 vectors in roughly logarithmic time instead of comparing the question against
@@ -859,7 +857,7 @@ CREATE INDEX chunks_embedding_idx
   ON chunks USING hnsw (embedding halfvec_cosine_ops);
 ```
 
-Verified with `EXPLAIN ANALYZE` on 800 rows — the planner uses
+This was verified with `EXPLAIN ANALYZE` on 800 rows: the planner uses
 `Index Scan using chunks_embedding_idx`, not a sequential scan.
 
 The `db` service image is **`pgvector/pgvector:pg17`**, not stock `postgres`,
@@ -914,12 +912,12 @@ erDiagram
     }
 ```
 
-Note that `chunks` carries `owner_id` and `knowledge_base_id` even though both
-are reachable through `documents`. That duplication is the point.
+`chunks` carries `owner_id` and `knowledge_base_id` even though both are
+reachable through `documents`. The duplication is intentional.
 
-`chunks.owner_id` duplicates `documents.owner_id` on purpose — see guarantee 2.
-`chunks.knowledge_base_id` duplicates `documents.knowledge_base_id` for the same
-kind of reason.
+`chunks.owner_id` duplicates `documents.owner_id` on purpose (see guarantee 2).
+`chunks.knowledge_base_id` duplicates `documents.knowledge_base_id` for a
+similar reason.
 
 Both channels query `chunks` directly, so reaching the knowledge base through a
 join to `documents` would put a per-candidate lookup on the hot path and
@@ -934,25 +932,25 @@ The same tables appear in the wider schema diagram in
 
 A conversation carries a set of knowledge bases, fixed when it is created, and
 retrieval cannot see outside it. The predicate sits beside `owner_id` in the
-same `WHERE` clause, in **all five** places that clause appears — the dense CTE,
+same `WHERE` clause, in **all five** places that clause appears: the dense CTE,
 the lexical CTE, the final `SELECT`, `listReadyDocuments`, and
 `retrieveDocumentChunks`.
 
-Adding it only to the final `SELECT` would be correct and still wrong: the CTEs'
-`LIMIT` candidate pool would be consumed by out-of-scope chunks, starving real
-candidates before fusion ever ran.
+Adding it only to the final `SELECT` would return correct results and still be
+wrong, because out-of-scope chunks would use up the CTEs' `LIMIT` candidate
+pool and starve real candidates before fusion ever ran.
 
-`retrieveDocumentChunks` is the one to watch. It fetches a whole document by id
-and gates on owner alone, which is sufficient only while owner is the only
-boundary that exists. With knowledge bases, a conversation scoped to KB A that
-resolves a document title belonging to the same user's KB B would retrieve it —
-`owner_id` never fires, because it is the same person. That failure does not
-look like a leak in testing; it looks like retrieval being slightly generous.
+`retrieveDocumentChunks` needs the most care. It fetches a whole document by id
+and gates on owner alone, which is enough only while owner is the only boundary
+that exists. With knowledge bases, a conversation scoped to KB A that resolves a
+document title belonging to the same user's KB B would retrieve it. `owner_id`
+never fires, because it is the same person. In testing, that failure does not
+look like a leak; it looks like retrieval being slightly generous.
 
 An **empty** selection returns nothing without calling the embedding API at all.
-It must never widen into "no filter" — that is the single silent-failure mode
-this design is built around, and it is asserted in the unit tests rather than
-left to reading.
+It must never widen into "no filter". That is the one silent-failure mode this
+design is built around, and the unit tests assert it instead of leaving it to
+code review.
 
 Because the dense channel's filter is applied after the ANN scan, a second
 narrowing predicate thins the candidate pool further. `RAG_HYBRID_CANDIDATES`
@@ -970,30 +968,31 @@ ORDER BY c.embedding <=> $query::halfvec
 LIMIT $top_k
 ```
 
-(The dense channel, shown alone for clarity; the live query fuses it with the
-lexical one as above.)
+(This is the dense channel, shown alone for clarity; the live query fuses it
+with the lexical one as described above.)
 
-`<=>` is pgvector's **cosine distance** operator under `halfvec_cosine_ops` — how
-far apart two vectors point. Similarity is simply `1 - distance`, which is where
-the `similarity` column comes from.
+`<=>` is pgvector's **cosine distance** operator under `halfvec_cosine_ops`, a
+measure of how far apart two vectors point. Similarity is `1 - distance`, which
+is where the `similarity` column comes from.
 
-Three details that are not incidental:
+Three details here are deliberate:
 
-- **The question is embedded with `input_type: "query"`**, never `passage`.
-- **`ORDER BY` uses the raw distance operator**, not the derived `1 - distance`
-  similarity. Ordering by the derived value would not use the HNSW index.
-- **Results below `RAG_MIN_SIMILARITY` (0.35) are dropped**, and if none
-  survive, the model is never called.
+- The question is embedded with `input_type: "query"`, never `passage`.
+- `ORDER BY` uses the raw distance operator instead of the derived
+  `1 - distance` similarity. Ordering by the derived value would not use the
+  HNSW index.
+- Results below `RAG_MIN_SIMILARITY` (0.35) are dropped, and if none survive,
+  the model is never called.
 
 > **Filtered ANN caveat.** pgvector applies the `owner_id` filter _after_ the
 > index scan, so at large scale a tenant holding a small share of all chunks can
-> get fewer than `top_k` results. Not observed at demo scale, and pgvector 0.8's
-> `hnsw.iterative_scan` is the lever if it ever bites.
+> get fewer than `top_k` results. This has not been observed at demo scale, and
+> pgvector 0.8's `hnsw.iterative_scan` is the fix to reach for if it happens.
 
 ### A question, end to end
 
-The same flow again, this time as a sequence — watch where the database writes
-sit relative to the model call.
+This is the same flow again as a sequence. Note where the database writes sit
+relative to the model call.
 
 ```mermaid
 sequenceDiagram
@@ -1033,17 +1032,16 @@ sequenceDiagram
     end
 ```
 
-Note step ordering: the answer is committed **before** the final frames are
-sent, and the same commit runs if the client disconnects mid-stream — a
-conversation showing a question with no answer is a worse failure than a
-truncated one.
+The answer is committed **before** the final frames are sent, and the same
+commit runs if the client disconnects mid-stream. A conversation showing a
+question with no answer is a worse failure than a truncated one.
 
 ### Upgrading an existing knowledge base
 
 Chunks embedded before contextual headers existed were embedded from their raw
 content, so they sit slightly differently in vector space from chunks embedded
-after. Retrieval still works — it degrades rather than breaks — but a mixed
-corpus is not measurable against the harness.
+after. Retrieval still works, only somewhat worse, but a mixed corpus cannot be
+measured against the harness.
 
 **Re-ingest existing documents** to get the full benefit: delete and re-upload,
 or set `status = 'failed'` and use Retry, which re-runs extraction and embedding
@@ -1054,16 +1052,16 @@ and replaces the chunks in one transaction.
 ## Evaluation
 
 "Retrieval got better" is an opinion until it is a number. The **evaluation
-harness** makes it a number: a fixed set of documents, a fixed list of
-questions, and the passage each question is supposed to find — a ground-truth
-corpus you can score a change against instead of arguing about it.
+harness** turns it into one. It uses a fixed set of documents, a fixed list of
+questions, and the passage each question is supposed to find, giving you a
+ground-truth corpus to score a change against.
 
 `pnpm rag:eval` ingests `eval/corpus/` for a dedicated evaluation user and runs
 `eval/questions.json` through the same retrieval path the app uses, reporting
 whether the right passage came back.
 
-It measures **retrieval, not generation**. Everything downstream is capped by
-recall, and unlike answer quality this needs no model to score.
+It measures retrieval and not generation. Everything downstream is capped by
+recall, and unlike answer quality, recall needs no model to score.
 
 ```bash
 pnpm rag:corpus                 # regenerate the corpus PDFs
@@ -1074,30 +1072,29 @@ pnpm rag:eval --parents-ab --label 1c  # one retrieval, scored flat and assemble
 ```
 
 `--parents-ab` (spec 0033 1c) retrieves each question once with parent
-assembly off, scores that list as **flat**, then assembles parents from the
-same list and scores it as **1c** — no second embedding call, so the columns
-differ only by assembly. It saves `eval/results/<label>-flat.json` and
+assembly off and scores that list as **flat**. It then assembles parents from
+the same list and scores it as **1c**. There is no second embedding call, so the
+columns differ only by assembly. It saves `eval/results/<label>-flat.json` and
 `<label>.json` and fails unless single-hop refusal accuracy is 1.000 in both
 columns and every unanswerable question, of every type, gets the same outcome
 in both. (Some unanswerable multi-hop and layout questions already admit a
 chunk before assembly; the gate checks that assembly does not change them.) It refuses to run with reranking on, where the
-wider pool would make the two columns different retrievals. The **section**
-slice (`type: "section"`) is what it exists for: a section question passes
-only when the first right-page result is a parent holding every
-`sectionMustContain` phrase, drawn from different paragraphs of the section.
-Its questions run against `records-policy`, the one corpus document with
-real headings.
+wider pool would make the two columns different retrievals. It exists for the
+section slice (`type: "section"`): a section question passes only when the
+first right-page result is a parent holding every `sectionMustContain` phrase,
+drawn from different paragraphs of the section. Its questions run against
+`records-policy`, the one corpus document with real headings.
 
-The corpus is three documents that deliberately overlap: the handbook's fire
+The corpus is three documents that deliberately overlap. The handbook's fire
 assembly point and the facilities guide's staff parking are both on Wellington
-Street, and both the handbook and the contract discuss notice. Those
-near-misses are **distractors** — passages that look right and are not. A corpus
-without distractors measures nothing, because every question has only one
-plausible answer in it.
+Street, and both the handbook and the contract discuss notice. Those near-misses
+are **distractors**, passages that look right and are not. A corpus without
+distractors measures nothing, because every question has only one plausible
+answer in it.
 
-Three numbers come out. **hit@k** is the fraction of questions whose correct
-passage appears anywhere in the top k results, so hit@1 is "was it the very
-first hit". **MRR** (mean reciprocal rank) averages `1 / (position of the first
+The harness reports three numbers. **hit@k** is the fraction of questions whose
+correct passage appears anywhere in the top k results, so hit@1 asks whether it
+was the very first hit. **MRR** (mean reciprocal rank) averages `1 / (position of the first
 correct result)`, so rank 1 scores 1.0, rank 2 scores 0.5, and a near-miss still
 earns partial credit. **Refusal accuracy** is the share of unanswerable
 questions the system correctly declines.
@@ -1114,27 +1111,27 @@ implementation:
 | MRR              | 0.853      | **0.941**        | +0.088        |
 | Refusal accuracy | 1.000      | **1.000**        | no regression |
 
-Introducing knowledge bases held every one of those numbers exactly — the
-boundary narrows _what_ is searched, not how well.
+Introducing knowledge bases held every one of those numbers exactly. The
+boundary narrows _what_ is searched without changing how well.
 
 ### Cross-knowledge-base leakage
 
 **Leakage** is any chunk returned from a knowledge base the conversation was not
-scoped to. The correct count is zero, and the harness checks it rather than
+scoped to. The correct count is zero, and the harness checks it instead of
 trusting the `WHERE` clause.
 
-The harness splits the corpus across two knowledge bases — `HR & Employment`
+The harness splits the corpus across two knowledge bases, `HR & Employment`
 (staff handbook, employment contract) and `Facilities & Operations` (facilities
-guide) — deliberately putting the engineered overlap **across** the boundary:
+guide), and deliberately puts the engineered overlap **across** the boundary:
 the handbook's fire assembly point and the guide's staff parking are both on
 Wellington Street. Splitting the other way would make the check pass for the
 wrong reason, because there would be nothing to leak.
 
 Every answerable question then runs twice more:
 
-- scoped to only the knowledge base that does **not** hold its answer — any
-  chunk returned from an unselected KB is a leak, and the correct count is **0**
-- scoped to only the knowledge base that **does** hold it — because a filter
+- scoped to only the knowledge base that does **not** hold its answer, where any
+  chunk returned from an unselected KB is a leak and the correct count is **0**
+- scoped to only the knowledge base that **does** hold it, because a filter
   returning nothing at all would otherwise pass the leakage check trivially
   while breaking retrieval entirely
 
@@ -1151,10 +1148,10 @@ A **baseline** is a saved run kept for comparison. `--label` writes one;
 `pnpm rag:eval --label <name> --baseline <name>` fails the run outright if
 refusal accuracy is below the baseline's, whatever every other metric does.
 
-This is not hypothetical. A change once took MRR to 0.971 while silently taking
-refusal accuracy from 1.000 to **0.000** — every headline number improved while
-the property the system exists to provide disappeared. Measuring it was not
-enough; the gate is what stops it shipping by accident.
+This has happened. A change once took MRR to 0.971 while silently taking
+refusal accuracy from 1.000 to **0.000**, so every headline number improved
+while the system lost the property it exists to provide. Measuring it was not
+enough; the gate is what stops such a change shipping by accident.
 
 ---
 
@@ -1162,23 +1159,23 @@ enough; the gate is what stops it shipping by accident.
 
 Everything above describes the **fixed pipeline**: a regular expression picks
 the strategy, one hybrid search runs, and the model only writes prose. Spec 0029
-adds a second path where the model directs retrieval instead — it decides what
+adds a second path where the model directs retrieval instead. It decides what
 to search for, looks at what came back, and searches again if the first attempt
 was thin.
 
-The model doing that deciding is the **planner**: a separate, cheaper model
-whose only job is to emit the next search query as a **tool call** — a
-structured function call with typed arguments, rather than free text it hopes
-you can parse. The planner never writes the prose the user reads.
+The model doing that deciding is the **planner**, a separate, cheaper model
+whose only job is to emit the next search query as a tool call (a structured
+function call with typed arguments, instead of free text you would have to
+parse). The planner never writes the prose the user reads.
 
 It is behind `RAG_AGENTIC_ENABLED` and **off by default**. With the flag off the
-fixed pipeline runs unchanged. It is roughly **ten times slower** and much
-better on follow-up and multi-hop questions; the measured trade is
+fixed pipeline runs unchanged. The agentic path is roughly ten times slower and
+much better on follow-up and multi-hop questions; the measured trade is
 [below](#measured-agentic-vs-the-fixed-pipeline).
 
 The picture below has three bands: the router at the top, the bounded loop in
-the middle, and the floor-plus-refusal gate underneath it. Read the middle band
-as the only part the model controls.
+the middle, and the floor-plus-refusal gate underneath it. The middle band is
+the only part the model controls.
 
 ```mermaid
 flowchart TB
@@ -1210,22 +1207,22 @@ flowchart TB
     STRIP --> DONE
 ```
 
-The loop is the box in the middle, and everything that makes it safe is outside
-it: the search function it calls is pre-bound, the floor is applied after it
-exits, and the refusal decision is the caller's.
+The loop is the box in the middle, and everything that makes it safe sits
+outside it: the search function it calls is pre-bound, the floor is applied
+after it exits, and the caller makes the refusal decision.
 
 ### The four guardrails
 
 Letting a model drive retrieval reopens every question the fixed pipeline had
-already settled. Four things keep it bounded, each covered below.
+already settled. Four guardrails keep it bounded, and each is covered below.
 
-1. **Scope is server-bound** — the planner has no parameter through which it
-   could widen what it searches.
-2. **Refusal lives outside the loop** — the loop gathers evidence and never
-   decides to answer.
-3. **Budgets are hard, and checked before each call** — searches, seconds and
-   tokens.
-4. **The floor rises with each extra attempt** — more tries must not mean more
+1. Scope is server-bound. The planner has no parameter through which it could
+   widen what it searches.
+2. Refusal lives outside the loop. The loop gathers evidence and never decides
+   to answer.
+3. Budgets for searches, seconds and tokens are hard, and they are checked
+   before each call.
+4. The floor rises with each extra attempt, so more tries do not mean more
    chances to get past the threshold by luck.
 
 ### Where the boundary lives
@@ -1233,13 +1230,13 @@ already settled. Four things keep it bounded, each covered below.
 `userId` and the permitted knowledge bases are bound **once per question**, from
 the session and the conversation, and closed over by the search function. The
 planner supplies a query and at most a `documentId` hint. It cannot widen scope
-because there is no parameter through which to do so — an out-of-scope
-`documentId` reaches `retrieveDocumentChunks`, which filters on the same
-permitted set and returns nothing, indistinguishable from a document that does
-not exist.
+because it has no parameter to do so with. An out-of-scope `documentId` reaches
+`retrieveDocumentChunks`, which filters on the same permitted set and returns
+nothing, which looks the same as a document that does not exist.
 
-Resolved once per question rather than per tool call, so a multi-search question
-cannot end up with citations spanning two different notions of what was allowed.
+Scope is resolved once per question instead of per tool call, so a multi-search
+question cannot end up with citations spanning two different notions of what was
+allowed.
 
 ### Refusal is outside the loop
 
@@ -1247,7 +1244,7 @@ The loop gathers evidence and reports why it stopped. It never composes prose
 and never decides to refuse. The caller short-circuits to the fixed refusal when
 nothing clears the floor.
 
-That placement is the whole guarantee: a model talked into ignoring its
+The guarantee depends on that placement. A model talked into ignoring its
 instructions still cannot produce an ungrounded answer, because with no
 retrieved context there is no drafting call to hijack.
 
@@ -1255,108 +1252,108 @@ retrieved context there is no drafting call to hijack.
 
 Every exit is named in the trace, never swallowed:
 
-| Termination           | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `planner-answered`    | The planner judged the evidence sufficient                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `planner-refused`     | The planner said the corpus cannot answer this                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `search-budget`       | `RAG_MAX_SEARCHES` reached — answer from what was found, or refuse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `time-budget`         | `RAG_MAX_LOOP_MS` reached — never a partial ungrounded answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `token-budget`        | `RAG_MAX_LOOP_TOKENS` reached                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `planner-unavailable` | The planning call threw or returned nothing usable; the loop stops rather than retries, because retrying a planner that just emitted nothing is how a bounded loop becomes unbounded. If that happens before the first search, the question is searched first — the fixed path's retrieval — so a planner outage degrades to the fixed pipeline instead of refusing everything. With an earlier user turn, a second search prefixes it to the question, so a follow-up ("what about Sweden Central?") still finds its passage; a chunk found only that way is kept only if it scores higher than it does for the previous question alone, so the answer to the previous question is never passed off as the answer to this one. Measured with the planner forced down: follow-up hit@1 0 → 0.563, unanswerable follow-ups still 4/4 refused |
-| `whole-document`      | `resolveScope` fired; the loop was skipped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `no-scope`            | The conversation has no permitted knowledge bases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Termination           | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `planner-answered`    | The planner judged the evidence sufficient                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `planner-refused`     | The planner said the corpus cannot answer this                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `search-budget`       | `RAG_MAX_SEARCHES` reached; answer from what was found, or refuse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `time-budget`         | `RAG_MAX_LOOP_MS` reached; never a partial ungrounded answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `token-budget`        | `RAG_MAX_LOOP_TOKENS` reached                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `planner-unavailable` | The planning call threw or returned nothing usable. The loop stops instead of retrying, because retrying a planner that just emitted nothing is how a bounded loop becomes unbounded. If that happens before the first search, the question is searched first (the fixed path's retrieval), so a planner outage degrades to the fixed pipeline instead of refusing everything. With an earlier user turn, a second search prefixes it to the question, so a follow-up ("what about Sweden Central?") still finds its passage. A chunk found only that way is kept only if it scores higher than it does for the previous question alone, so the answer to the previous question is never passed off as the answer to this one. Measured with the planner forced down: follow-up hit@1 0 → 0.563, unanswerable follow-ups still 4/4 refused |
+| `whole-document`      | `resolveScope` fired; the loop was skipped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `no-scope`            | The conversation has no permitted knowledge bases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
-Budgets are checked **before** each expensive call, never after — checking
-afterwards lets each bound be exceeded by exactly one call. Each call also
-carries a signal composed from the time the loop has left, so `RAG_MAX_LOOP_MS`
-bounds work already in flight rather than only deciding whether to start more.
-Underneath that, every inference request has a **60-second per-attempt
-deadline**: `fetch` has no timeout of its own, and without one a stalled
-endpoint hung a request indefinitely while the loop budget looked on
+Budgets are checked **before** each expensive call, never after, because
+checking afterwards lets each bound be exceeded by exactly one call. Each call
+also carries a signal composed from the time the loop has left, so
+`RAG_MAX_LOOP_MS` bounds work already in flight instead of only deciding whether
+to start more. Underneath that, every inference request has a **60-second
+per-attempt deadline**. `fetch` has no timeout of its own, and without one a
+stalled endpoint hung a request indefinitely while the loop budget did nothing
 (measured: one planner call at 86s where it normally takes 3–6).
 
 ### The first pass always searches
 
-Observed live: `planner-answered` with zero searches and zero chunks, which the
-caller can only turn into a refusal. The router has already decided this turn
-needs retrieval, and that decision is deliberately biased towards searching. A
-planner that then answers from nothing re-opens the ungrounded-answer hole one
-layer down. So an "answer" decision with no evidence is overridden into a search
-using the original question; the planner may decide it has enough from the
-second call onwards, when there is evidence to judge.
+This was observed live: `planner-answered` with zero searches and zero chunks,
+which the caller can only turn into a refusal. The router has already decided
+this turn needs retrieval, and that decision is deliberately biased towards
+searching. A planner that then answers from nothing reopens the
+ungrounded-answer hole one layer down. So an "answer" decision with no evidence
+is overridden into a search using the original question. From the second call
+onwards, when there is evidence to judge, the planner may decide it has enough.
 
 ### Reference resolution, and a measurement that changed the design
 
 **Reference resolution** is working out what "it" refers to in a follow-up. A
-question like _"what about carrying it over?"_ has no subject, so embedded
-literally it retrieves badly. Both 0027 and the first draft of 0029 specified a
-**separate rewrite call** before retrieval. It was built, then measured:
+question like _"what about carrying it over?"_ has no subject, so embedding it
+literally retrieves badly. Both 0027 and the first draft of 0029 specified a
+separate rewrite call before retrieval. It was built, then measured:
 
-| Attempt                        | Result                                                           |
-| ------------------------------ | ---------------------------------------------------------------- |
-| Plain text, `max_tokens: 200`  | `finish_reason: length` — reasoning preamble truncated, no query |
-| Plain text, `max_tokens: 1500` | **53s**, still truncated, still no query                         |
-| Tool call, `max_tokens: 400`   | `finish_reason: length`, no tool call                            |
-| Tool call, `max_tokens: 1200`  | Correct — `{"query":"carrying over annual leave"}` — but **15s** |
+| Attempt                        | Result                                                          |
+| ------------------------------ | --------------------------------------------------------------- |
+| Plain text, `max_tokens: 200`  | `finish_reason: length`; reasoning preamble truncated, no query |
+| Plain text, `max_tokens: 1500` | **53s**, still truncated, still no query                        |
+| Tool call, `max_tokens: 400`   | `finish_reason: length`, no tool call                           |
+| Tool call, `max_tokens: 1200`  | Correct (`{"query":"carrying over annual leave"}`) but **15s**  |
 
 15s is the entire loop budget, spent before the first search. So the separate
-call was deleted and the **planner** now receives the recent turns and resolves
-the reference itself, inside a tool call that was going to happen anyway.
-Measured after the change: _"what about carrying it over?"_ →
+call was deleted, and the planner now receives the recent turns and resolves the
+reference itself, inside a tool call that was going to happen anyway. Measured
+after the change: _"what about carrying it over?"_ →
 `"carrying over annual leave"` → staff-handbook p1 at 0.479, one search, **8.1s**.
 
-Two lessons worth keeping, because both were invisible until measured:
+The measurement taught two things that were invisible until then.
 
 **A timeout shorter than the thing it times is an off switch.** The rewrite had
 a 3s cap against a call with a 2.6–4.4s median. It fired on essentially every
 request. The fallback worked perfectly and hid the fact that the feature never
 ran once.
 
-**These are reasoning models.** With no `tools` array present the
+**These are reasoning models.** With no `tools` array present, the
 chain-of-thought streams into `content` and swamps the answer at any sane token
 budget. With `tools` present it is split into `reasoning_content` and the
 arguments come back clean. Native tool calling is therefore both the more
-reliable mechanism and the more token-budget-robust one — the reverse of what
-0027 assumed.
+reliable mechanism and the one that holds up better under a token budget, the
+reverse of what 0027 assumed.
 
 ### The risk it creates
 
-More attempts means more chances to clear a threshold by luck. Asked _"How much
-parental leave am I entitled to?"_ — which the corpus cannot answer — the loop
+More attempts mean more chances to clear a threshold by luck. Asked _"How much
+parental leave am I entitled to?"_, which the corpus cannot answer, the loop
 tried three phrasings and surfaced a chunk at **0.358**, just above the 0.35
 floor. The fixed pipeline refuses that question outright.
 
-This is why **citation verification** exists — a second model pass over the
-finished answer, asking whether the cited sources actually support each
-sentence, with unsupported sentences stripped and a corrected version sent as a
-`revision` frame. And it is why refusal accuracy is a hard gate rather than a
+That is why **citation verification** exists. It is a second model pass over
+the finished answer that asks whether the cited sources actually support each
+sentence, strips unsupported sentences, and sends a corrected version as a
+`revision` frame. It is also why refusal accuracy is a hard gate instead of a
 number on a report.
 
-**It fired.** The first A/B put agentic refusal accuracy at **0.667** against a
-baseline of 1.000 — every other metric improved while the property the system
-exists to provide quietly degraded. Exactly the shape of regression this project
-has been bitten by before.
+**The gate fired.** The first A/B put agentic refusal accuracy at **0.667**
+against a baseline of 1.000. Every other metric improved while the property the
+system exists to provide quietly degraded, which is the same shape of regression
+this project had hit before.
 
 Raising the flat floor would not fix it: true positives on this corpus score
 0.41–0.62, so any floor above the offending 0.421 discards real answers. The
-problem is not the threshold, it is that **N attempts get N chances at it**. So
+threshold is fine; the trouble is that **N attempts get N chances at it**. So
 the floor rises with the number of searches (`RAG_AGENTIC_FLOOR_STEP`, 0.04 per
-extra attempt) and evidence found on the first search is judged exactly as the
+extra attempt), and evidence found on the first search is judged exactly as the
 fixed pipeline judges it.
 
 ### Measured: agentic vs the fixed pipeline
 
-`pnpm rag:eval --compare`, one uncontended run. A **multi-hop** question is one
-needing facts from two different places joined together — the case a single
-search cannot satisfy.
+These numbers come from `pnpm rag:eval --compare`, one uncontended run. A
+**multi-hop** question needs facts from two different places joined together,
+which a single search cannot satisfy.
 
-> **Historical — recorded 2026-09-07, superseded 2026-09-11.** Kept because it
-> is the run the loop was designed against, and because its follow-up and
+> **Historical: recorded 2026-09-07, superseded 2026-09-11.** It is kept because
+> it is the run the loop was designed against, and because its follow-up and
 > multi-hop slices (n=3, n=2) are the reason a bigger corpus was built. The
 > current default and the numbers behind it are in
 > _[Which path answers](#which-path-answers)_. The baseline cost cell read
-> "~1 search, ~1s" until the harness was taught to time the fixed pass at all —
-> that figure was prose, and a median printed under a "mean" heading.
+> "~1 search, ~1s" until the harness was taught to time the fixed pass at all.
+> That figure was prose, and a median printed under a "mean" heading.
 
 | Metric                                   | Baseline     | Agentic                               | Δ          |
 | ---------------------------------------- | ------------ | ------------------------------------- | ---------- |
@@ -1368,43 +1365,44 @@ search cannot satisfy.
 | Multi-hop fact recall                    | 0.500        | 1.000                                 | **+0.500** |
 | Cost per question                        | not measured | 1.44 searches, **11.1s**, 1617 tokens | —          |
 
-**The flag defaulted OFF on the strength of this run**, and was flipped on in
+**The flag defaulted OFF on the strength of this run.** It was flipped on in
 2026-09-11 once the follow-up slice grew from 3 questions to 16 and the gap held
 (0.062 against 0.938). The reasoning below was right about the trade and wrong
-only about how confident three questions let you be: agentic retrieval is dramatically better at what it was built for —
-follow-ups and multi-hop questions — slightly worse on single-hop, and about
-**ten times slower**. Most questions in this corpus are single-hop, so the
-default favours the cheap path. Turn it on for conversational use where
-follow-ups dominate, and re-run the comparison on your own corpus first.
+only about how confident three questions let you be. Agentic retrieval is much
+better at what it was built for (follow-ups and multi-hop questions), slightly
+worse on single-hop, and about ten times slower. Most questions in this corpus
+are single-hop, so the default favoured the cheap path. Turn it on for
+conversational use where follow-ups dominate, and re-run the comparison on your
+own corpus first.
 
-Two caveats worth stating plainly. The follow-up and multi-hop slices are n=3
-and n=2; at that size one question moves a metric by a third or a half, so treat
-the direction as real and the magnitude as provisional. And two concurrent
-`--compare` runs against the same rate-limited key produced materially different
-numbers — run it alone, or you are measuring contention.
+Two caveats apply. The follow-up and multi-hop slices are n=3 and n=2; at that
+size one question moves a metric by a third or a half, so treat the direction as
+real and the magnitude as provisional. Also, two concurrent `--compare` runs
+against the same rate-limited key produced materially different numbers. Run it
+alone, or you are measuring contention.
 
 ### Streaming under a loop
 
 The loop is silent for seconds before any prose exists, so the stream carries
-`step` frames — `routing`, `searching` with an iteration number, `drafting`,
-`verifying` — and the client shows a phase label instead of bare dots. Bare dots
-for eight seconds read as "stuck" rather than "working".
+`step` frames (`routing`, `searching` with an iteration number, `drafting`,
+`verifying`) and the client shows a phase label instead of bare dots. Bare dots
+for eight seconds read as "stuck" instead of "working".
 
 Verification runs **after** streaming and emits a `revision` frame if it strips
 anything. Verifying first would mean buffering the whole answer, which kills
-token streaming and makes time-to-first-token meaningless on every answer — a
-permanent regression to avoid a brief exposure the revision then removes. The
-persisted record is always the verified text.
+token streaming and makes time-to-first-token meaningless on every answer. That
+would be a permanent regression to avoid a brief exposure the revision then
+removes. The persisted record is always the verified text.
 
 The answer is **saved and its `metrics` frame sent the moment drafting ends**,
 and `metrics` is the client's signal to unlock the composer (#48). Verification
-then runs while the stream stays open; if it strips a claim, it updates the
+then runs while the stream stays open. If it strips a claim, it updates the
 saved row and sends `revision`, which the client applies to that answer by id
-(a next question may already be streaming). It gets **one attempt with a
-12-second deadline** (`VERIFY_TIMEOUT_MS`) rather than the client default of
-60s × 4, and fails open: a timeout strips nothing (#42). The answer's metrics
-(total time, tokens/sec) cover drafting only. The saved draft can be seen
-unverified for those few seconds if the thread is reopened mid-check; once
+(a next question may already be streaming). Verification gets **one attempt
+with a 12-second deadline** (`VERIFY_TIMEOUT_MS`) instead of the client default
+of 60s × 4, and fails open: a timeout strips nothing (#42). The answer's metrics
+(total time, tokens/sec) cover drafting only. If the thread is reopened
+mid-check, the saved draft can be seen unverified for those few seconds; once
 verification returns, the saved record is the verified text.
 
 ---
@@ -1414,8 +1412,8 @@ verification returns, the saved record is the verified text.
 **Off by default.** With `RAG_CRACK_ENABLED` unset, everything above describes
 the whole pipeline and nothing here costs anything.
 
-Turned on, ingestion stops treating every page the same way. Each page is
-triaged locally — for free — and only the ones that need help are sent to
+When it is on, ingestion stops treating every page the same way. Each page is
+triaged locally at no cost, and only the pages that need help are sent to
 `nvidia/nemotron-parse`, which returns typed, boxed elements instead of a flat
 string:
 
@@ -1426,22 +1424,22 @@ string:
 | carries images or vector drawing | `image-heavy` | 1 parse call |
 | no text layer at all (a scan)    | `no-text`     | 1 parse call |
 
-On the evaluation corpus that is 4 parse calls across 6 documents; three
+On the evaluation corpus that comes to 4 parse calls across 6 documents; three
 documents spend nothing. A document whose pages are all clean text costs exactly
-what it costs today, which is the property that makes this affordable on a
-rate-limited free tier.
+what it costs today, which is what makes this affordable on a rate-limited free
+tier.
 
 ### What it changes
 
-- **Scanned pages are read** instead of dropping the document or, worse,
+- Scanned pages are read, instead of the document being dropped or, worse,
   silently contributing nothing.
-- **Figures become findable.** A figure is indexed by its caption where it has
-  one — free, and in the document's own words — and by a one-sentence generated
-  label where it does not.
-- **Tables keep their structure**, including merged headers, which Markdown
-  cannot express and this deliberately does not flatten to.
-- **Chunks gain `kind` and `bbox`**, which is what a future span-level citation
-  highlight needs.
+- Figures become findable. A figure is indexed by its caption where it has one
+  (free, and in the document's own words) and by a one-sentence generated label
+  where it does not.
+- Tables keep their structure, including merged headers, which Markdown cannot
+  express. The parser deliberately does not flatten them to Markdown.
+- Chunks gain `kind` and `bbox`, which a future span-level citation highlight
+  needs.
 
 ### Figures are a search key, never evidence
 
@@ -1454,10 +1452,10 @@ Reading what a figure actually shows happens at **answer time**, through the
 a search returned, asks a specific question about it, and gets a cropped image
 back.
 
-That split is measured, not stylistic. Asked to transcribe a bar chart blind at
+The split comes from measurement. Asked to transcribe a bar chart blind at
 ingestion, the vision model returned five values, every one wrong by 15–30%, in
-40s. Asked a specific question about a cropped region at answer time it was
-correct in 4s — about relationships. It is still unreliable about **unlabelled
+40s. Asked a specific question about a cropped region at answer time, it was
+correct about relationships in 4s. It is still unreliable about **unlabelled
 quantities**: on a chart with no axis values it answered "approximately 90"
 against a true 363, and did so under three different instructions not to. So a
 deterministic guard removes any number the figure does not print:
@@ -1468,22 +1466,22 @@ deterministic guard removes any number the figure does not print:
 `read_figure` makes a figure's structure readable. It does not make an
 unlabelled chart quantitative.
 
-**It is expensive in both currencies.** One call measured **~13.5s and ~6,600
-tokens**, against loop budgets sized for text searches at 2.6–4.4s and a few
-hundred tokens. Left alone, the first look at a picture exhausted the loop and
-it stopped holding a reading it never used — so with the tool on, both budgets
-are raised to floors (45s, 30k). They raise a configured value and never lower
-one, so a deployment that tuned them earlier still works.
+**It is expensive in both time and tokens.** One call measured **~13.5s and
+~6,600 tokens**, against loop budgets sized for text searches at 2.6–4.4s and a
+few hundred tokens. Left alone, the first look at a picture exhausted the loop,
+which then stopped holding a reading it never used. So with the tool on, both
+budgets are raised to floors (45s, 30k). The floors raise a configured value and
+never lower one, so a deployment that tuned them earlier still works.
 
 Expect a figure question to take **20–60s** end to end. The bound stops it
-running away; it does not make it fast. If that is too slow, `RAG_MAX_SEARCHES`
-is the lever — at 2 the loop cannot plan a third round after a figure read.
+running away but does not make it fast. If that is too slow, lower
+`RAG_MAX_SEARCHES`: at 2 the loop cannot plan a third round after a figure read.
 
 ### Budgets, and degrading rather than failing
 
 `RAG_CRACK_MAX_PAGES` (25) caps parse calls per document and
 `RAG_DESCRIBE_MAX_FIGURES` (8) caps vision calls. Past either, the remaining
-pages take the text-layer path and the document still reaches `ready` — with
+pages take the text-layer path and the document still reaches `ready`, with
 `documents.extraction` recording, per page, which route it took and why. A page
 that fails to parse falls back to its text layer; a page that fails with no text
 layer is recorded as unindexed. Nothing here fails a document.
@@ -1491,84 +1489,83 @@ layer is recorded as unindexed. Nothing here fails a document.
 ### What you are sending
 
 Cracking renders pages as images and sends them to the configured endpoint.
-Document _text_ already goes there, but a page image is a larger disclosure per
-call and includes anything on the page — signatures, letterheads, photographs.
-Worth knowing before turning it on for a corpus you would not paste into a
+Document _text_ already goes there, but a page image discloses more per call and
+includes anything on the page, such as signatures, letterheads and photographs.
+Keep that in mind before turning it on for a corpus you would not paste into a
 chat box.
 
 Parser and vision output is also model-generated text that lands in the index
-and later reaches the answering model, so text rendered _inside an image_ — which
-no text-layer check sees and nobody skims — now has a path into a prompt. The
-owner and knowledge-base filters bound the blast radius; nothing else does.
+and later reaches the answering model. Text rendered _inside an image_, which no
+text-layer check sees and nobody skims, now has a path into a prompt. The owner
+and knowledge-base filters bound the blast radius; nothing else does.
 
 ## Inspecting what was indexed
 
 A document's row says `Ready · 8 pages · 21 chunks` and, until spec 0037,
-stopped there. Everything else the system knew about that document — which
-pages it parsed, which it read the cheap way, which it gave up on and why, what
-text it actually stored, and where on the page each chunk came from — was
-recorded in `documents.extraction` and shown to nobody.
+stopped there. Everything else the system knew about that document was recorded
+in `documents.extraction` and shown to nobody: which pages it parsed, which it
+read the cheap way, which it gave up on and why, what text it actually stored,
+and where on the page each chunk came from.
 
-Clicking a document's title opens `/documents/[kbId]/[documentId]`: every page
-of the document, what happened to it in plain language, the page image with the
-indexed regions drawn on it, and the stored text of each chunk.
+Clicking a document's title opens `/documents/[kbId]/[documentId]`. It shows
+every page of the document, what happened to it in plain language, the page
+image with the indexed regions drawn on it, and the stored text of each chunk.
 
 ### What "partly indexed" means
 
 The documents list shows a **Partly indexed** badge beside `Ready` when any of
 three things is true:
 
-- **the page budget ran out** (`budgetExhausted`) — `RAG_CRACK_MAX_PAGES` was
+- The page budget ran out (`budgetExhausted`). `RAG_CRACK_MAX_PAGES` was
   reached, so the remaining pages were read from the text layer only. This is
   deliberate: [cracking degrades rather than fails](#budgets-and-degrading-rather-than-failing).
-- **a page failed** — its `outcome` is `failed`, and nothing from it is in the
+- A page failed. Its `outcome` is `failed`, and nothing from it is in the
   index.
-- **a recorded page produced no chunks** — the page was read successfully and
-  yielded nothing searchable. This is the one that used to be invisible, and it
-  is the shape of the silent failure document cracking was written to fix: a
+- A recorded page produced no chunks. The page was read successfully and
+  yielded nothing searchable. This case used to be invisible, and it has the
+  same shape as the silent failure document cracking was written to fix: a
   scanned appendix that ingested, reported success, and was not in the index.
 
-The badge is derived from the recorded outcomes on every read, never stored. A
-second copy of this answer would drift from the one written at ingestion, which
-is the only moment that knows it.
+The badge is derived from the recorded outcomes on every read and never stored.
+A second copy of this answer would drift from the one written at ingestion,
+which is the only moment that knows it.
 
 Ready and Partly indexed are shown **together**, not as alternatives. The
-document really is searchable, and part of it really is missing; collapsing
+document really is searchable, and part of it really is missing. Collapsing
 those into a single badge is how `Ready` came to mean both.
 
 ### Reading the detail view
 
-Each page states its route and outcome in words rather than the stored enum —
+Each page states its route and outcome in words instead of the stored enum:
 "read from the page's own text", "read page by page — it has columns or a
-table", "scanned page, read with OCR", "not indexed" plus the recorded reason.
-The vocabulary in the database is internal, and its meaning is the entire thing
-being communicated.
+table", "scanned page, read with OCR", or "not indexed" plus the recorded
+reason. The database vocabulary is internal, and the view exists to communicate
+what it means.
 
-A heading — a document title or a section header — is **not** a chunk and has
-no region on the page, because `normalizePage` consumes heading elements and
+A heading (a document title or a section header) is **not** a chunk and has no
+region on the page, because `normalizePage` consumes heading elements and
 attaches them to the chunks beneath them. It is still indexed:
 `buildEmbeddingText` prepends the document title and the heading before
 embedding, so a question naming a section matches through it. The detail view
-says which heading a chunk sits under for exactly this reason — without it, a
-title with no box on the page reads as a title that was never indexed.
+says which heading a chunk sits under for this reason. Without it, a title with
+no box on the page would look like a title that was never indexed.
 
-Spec 0038 closed the asymmetry this used to create: `chunks.content_tsv` is
-generated from heading, caption and content together, so a keyword-only match
-on a section title fires like any other. Existing rows picked this up when the
-generated column was rebuilt — no re-ingest needed for headings, though a
-caption needs one.
+Spec 0038 closed the gap this used to leave: `chunks.content_tsv` is generated
+from heading, caption and content together, so a keyword-only match on a section
+title fires like any other. Existing rows picked this up when the generated
+column was rebuilt. Headings needed no re-ingest, though a caption does.
 
 Chunk text is shown **as stored**, because that is what retrieval matches
 against. An `ocr` chunk is labelled as recovered from an image, so it does not
 read as a clean quotation.
 
-A `figure` chunk needs more care than a label. Its stored `content` is the text
-the parser read _inside_ the figure — axis labels, the words in a flow
+A `figure` chunk needs more than a label. Its stored `content` is the text the
+parser read _inside_ the figure, such as axis labels or the words in a flow
 diagram's boxes. What makes the figure findable is its caption, or the
 one-sentence label a vision model writes for a caption-less figure. Since
-[spec 0038](../specs/0038-store-the-search-key.md) that is stored in
+[spec 0038](../specs/0038-store-the-search-key.md) that text is stored in
 `chunks.caption`, shown beside the content as **Found by**, and included in the
-lexical index — before it, it reached one vector and nothing else.
+lexical index. Before that, it reached one vector and nothing else.
 
 What is stored is not a reading of the figure either. A flow diagram's arrows
 are nowhere in the index; `read_figure` reads them at answer time with a
@@ -1582,136 +1579,135 @@ sets out.
 | ------------------- | ------------------------------------------------- |
 | solid amber ring    | indexed as a passage retrieval can return         |
 | thin blue outline   | a heading, searched with the chunks beneath it    |
-| dashed teal outline | a caption — what makes a figure or table findable |
+| dashed teal outline | a caption, which makes a figure or table findable |
 
 Headings and captions are never chunks of their own: `normalizePage` consumes
 them and attaches them to the elements they own. Until their boxes were stored,
-a document's title sat unmarked on the page and read as text that had been
+a document's title sat unmarked on the page and looked like text that had been
 skipped.
 
 ### Raw chunk
 
-Each chunk has a **Raw chunk** disclosure showing the stored record verbatim —
-kind, token count, heading, caption, every region — plus the text
+Each chunk has a **Raw chunk** disclosure showing the stored record verbatim
+(kind, token count, heading, caption, every region) plus the text
 `buildEmbeddingText` composes for the embedding. That composed string is
-**recomputed for display, not read back from the vector**: renaming a document
-after ingestion makes the two disagree, and the view says so rather than
+**recomputed for display, not read back from the vector**. Renaming a document
+after ingestion makes the two disagree, and the view says so instead of
 presenting a recomposition as a record.
 
 A document ingested before `documents.extraction` existed, or with cracking
 off, says the routing detail was not recorded and lists the chunks it has. It
-does not invent a per-page story, and it is not marked partly indexed — with no
-record there is nothing to compare against.
+does not invent a per-page story, and it is not marked partly indexed, because
+with no record there is nothing to compare against.
 
 ### Why it exists
 
 When the system says _"I couldn't find anything about that in your
-documents"_, the user has no way to tell that from _"that page never got
+documents"_, the user has no way to tell that apart from _"that page never got
 indexed"_. Refusal accuracy is this project's strongest guarantee and the one a
-user is least able to check. This view is what makes a refusal verifiable
-rather than something to take on trust.
+user is least able to check. This view lets a user verify a refusal instead of
+taking it on trust.
 
-Read-only throughout: no route added for it mutates a document, a chunk or an
-extraction record, and nothing on the ingestion or retrieval path changed. Only
-the page you are looking at is fetched as an image, so a 200-page document
-costs one render, not two hundred.
+The view is read-only throughout. No route added for it mutates a document, a
+chunk or an extraction record, and nothing on the ingestion or retrieval path
+changed. Only the page you are looking at is fetched as an image, so a 200-page
+document costs one render, not two hundred.
 
 ## When things go wrong
 
-Every failure below was observed on a live endpoint, not imagined. Each is
-handled at the narrowest point that fixes it.
+Every failure below was observed on a live endpoint. Each is handled at the
+narrowest point that fixes it.
 
-**A 429 or 5xx from the endpoint.** Retried up to four times with back-off, in
-`client.ts`. A 429 on a free tier means "wait", and the retry set is
-deliberately small — a 400 or 401 is a bug in our request and must fail fast.
+**A 429 or 5xx from the endpoint.** `client.ts` retries up to four times with
+back-off. A 429 on a free tier means "wait", and the retry set is deliberately
+small, because a 400 or 401 is a bug in our request and must fail fast.
 
-**A 404 with an empty body.** Observed once: `HTTP 404`, no body, and the
-byte-identical request succeeded moments later. A genuine not-found explains
+**A 404 with an empty body.** This was observed once: `HTTP 404`, no body, and
+the byte-identical request succeeded moments later. A genuine not-found explains
 itself in JSON; a blank one is an infrastructure blip. So a bodiless 404 is
-retried and a bodied one is not — a misconfigured `RAG_CHAT_MODEL` still fails
-immediately rather than hiding behind four slow retries.
+retried and a bodied one is not, which means a misconfigured `RAG_CHAT_MODEL`
+still fails immediately instead of hiding behind four slow retries.
 
 **A draft that streams nothing.** The endpoint occasionally returns a 200 SSE
-body with no frames at all — no content, no reasoning, not even a
-`finish_reason` — in ~200ms, while the same request by hand succeeds 5 of 5.
+body with no frames at all (no content, no reasoning, not even a
+`finish_reason`) in ~200ms, while the same request by hand succeeds 5 of 5.
 Drafting retries once. If it is still empty, the user sees an explicit error
-rather than a blank bubble, and the log carries the first 600 bytes off the
-wire so it can be diagnosed rather than inferred.
+instead of a blank bubble, and the log carries the first 600 bytes off the wire
+so the problem can be diagnosed instead of guessed at.
 
 **Reasoning that swamps the answer.** These are reasoning models. With no
 `tools` array present the chain-of-thought streams into `content`; with one
 present it is split into `reasoning_content` and `content` stays clean. The
-stream parser reads both — reasoning is never rendered, but seeing it is what
-distinguishes "the model was thinking" from "the model said nothing".
+stream parser reads both. Reasoning is never rendered, but reading it is how the
+parser tells "the model was thinking" apart from "the model said nothing".
 
 **The user navigates away mid-answer.** The stream's `cancel()` persists
 whatever was generated, because a thread showing a question with no answer is
 worse than a truncated one. The persistence latch is checked _after_ the empty
-test, not before — set first, an early cancel during retrieval (when the answer
-is still `''`) burned the latch and silently discarded the real save moments
-later. That one was found by turning the agentic path on: it widened the window
-from ~1s to 10–20s, and the answer vanished on most requests.
+test, not before. When it was set first, an early cancel during retrieval (when
+the answer is still `''`) used up the latch and silently discarded the real
+save moments later. Turning the agentic path on exposed this bug: it widened
+the window from ~1s to 10–20s, and the answer vanished on most requests.
 
 **A refresh that aborts the next request.** The client refreshes Recents when
-an answer completes. Fire that while a _newer_ request is streaming and the
+an answer completes. If that fires while a _newer_ request is streaming, the
 server sees `ResponseAborted` mid-planner. The refresh is deferred and
 re-checked against a monotonic request id, and a new request cancels a pending
 one. Refreshing _immediately_ on thread creation was tried and measured worse
-— E2E 11 passed to 8 — so it stays deferred, and the sidebar can lag a readable
-answer by the length of citation verification. That trade is recorded rather
-than hidden.
+(E2E 11 passed to 8), so it stays deferred, and the sidebar can lag a readable
+answer by the length of citation verification. That trade is recorded here.
 
 ---
 
 ### Which path answers
 
 Two retrieval paths exist and `RAG_AGENTIC_ENABLED` chooses between them. Since
-2026-09-11 it defaults to **on**, and the reason is one slice:
+2026-09-11 it defaults to **on**, because of one slice:
 
-| slice               | n             | fixed pipeline | agentic loop |
-| ------------------- | ------------- | -------------- | ------------ |
-| **follow-up** hit@1 | 16 answerable | **0.062**      | **0.938**    |
-| single-hop hit@1    | 17 answerable | 0.882          | 0.824        |
-| refusal accuracy    | both          | 1.000          | 1.000        |
+| slice            | n             | fixed pipeline | agentic loop |
+| ---------------- | ------------- | -------------- | ------------ |
+| follow-up hit@1  | 16 answerable | **0.062**      | **0.938**    |
+| single-hop hit@1 | 17 answerable | 0.882          | 0.824        |
+| refusal accuracy | both          | 1.000          | 1.000        |
 
-One of sixteen against fifteen of sixteen. The fixed pipeline embeds your
-question literally, so "what about carrying it over?" searches for those words
-rather than for annual leave — it is not worse at follow-ups, it cannot do them.
+That is one of sixteen against fifteen of sixteen. The fixed pipeline embeds
+your question literally, so "what about carrying it over?" searches for those
+words instead of for annual leave. The fixed pipeline cannot handle follow-ups
+at all.
 
-What it costs: single-hop drops by one question of seventeen, and a question
+The cost is that single-hop drops by one question of seventeen, and a question
 takes ~11s instead of ~0.15s. **If your users only ever ask standalone
-questions, set `RAG_AGENTIC_ENABLED=false`** — you lose nothing and get the
+questions, set `RAG_AGENTIC_ENABLED=false`.** You lose nothing and get the
 latency back.
 
-Refusal accuracy is 1.000 either way, which is what makes the trade safe to
-take: the loop searching more never became the loop answering when it should
-not.
+Refusal accuracy is 1.000 either way, which makes the trade safe to take: more
+searching by the loop never turned into answering when it should not.
 
 > Measured with `RAG_CRACK_ENABLED=true`. The equivalent cracking-off reference
 > has not been recorded, and the multi-hop slice is unmeasured at its current
-> size — see [`specs/0032`](../specs/0032-settle-the-agentic-trade.md).
+> size. See [`specs/0032`](../specs/0032-settle-the-agentic-trade.md).
 
 ## Known gaps
 
-Named rather than hidden.
+This section lists what the system does not do yet.
 
-- **The agentic path is far slower**, and it is now the default. Roughly 11s
-  per question against ~0.15s for the fixed pipeline, because every planner
-  call is a round trip to a reasoning model. A question that reads a figure is
-  slower again — 20–60s — since a vision call over a cropped page image is the
-  single most expensive thing this system does. Set `RAG_AGENTIC_ENABLED=false`
+- **The agentic path is far slower**, and it is now the default. It takes
+  roughly 11s per question against ~0.15s for the fixed pipeline, because every
+  planner call is a round trip to a reasoning model. A question that reads a
+  figure is slower again (20–60s), since a vision call over a cropped page image
+  is the single most expensive thing this system does. Set `RAG_AGENTIC_ENABLED=false`
   if your users only ever ask standalone questions; see _Which path answers_. The label on
-  the thinking indicator is what stops that reading as a hang.
+  the thinking indicator keeps the wait from looking like a hang.
 - **The sidebar can lag a readable answer** by the length of citation
   verification, because refreshing Recents under a live stream aborts it. See
   _When things go wrong_.
 - **The multi-hop evaluation slice is unmeasured at its new size.** It holds 15
   questions; the comparison that produced the current default was stopped after
   4 of them had been scored on the agentic side, so no multi-hop number is
-  quoted anywhere. The follow-up slice IS measured, at n=16 answerable.
+  quoted anywhere. The follow-up slice is measured, at n=16 answerable.
 - **No OCR by default.** With `RAG_CRACK_ENABLED` unset, scanned PDFs are
-  rejected rather than half-ingested. Turning it on adds OCR and figures — see
-  _Document cracking_.
+  rejected instead of half-ingested. Turning it on adds OCR and figures (see
+  _Document cracking_).
 - **Tables and multi-column layout are not a demonstrated gap.** Flattened text
   loses a table's column association and interleaves a two-column page, and it
   is natural to assume that costs answers. Measured across two deliberately
@@ -1721,32 +1717,32 @@ Named rather than hidden.
 - **Reranking is measured, helps, and is off by default.** A reranker is a
   second model that re-scores retrieved candidates by reading question and
   passage together. It sits between fusion and the similarity gate, behind
-  `RAG_RERANK_ENABLED` (default off), and is failure-open: a backend that
-  throws, times out or is disabled leaves the fusion order exactly as it was.
-  Two backends, chosen by `RAG_RERANK_BACKEND`:
+  `RAG_RERANK_ENABLED` (default off), and fails open: a backend that throws,
+  times out or is disabled leaves the fusion order exactly as it was. There are
+  two backends, chosen by `RAG_RERANK_BACKEND`:
 
-  - **`local`** (the default backend) — `Xenova/ms-marco-MiniLM-L-6-v2`, a 23 MB
-    cross-encoder run in-process as WebAssembly. No account, no rate limit,
-    nothing sent anywhere; the model downloads once into
+  - `local` (the default backend) uses `Xenova/ms-marco-MiniLM-L-6-v2`, a 23 MB
+    cross-encoder run in-process as WebAssembly. It needs no account, has no
+    rate limit and sends nothing anywhere; the model downloads once into
     `RAG_RERANK_MODEL_DIR`. Measured 2026-09-25 on the fixed pipeline: hit@1
     and MRR **0.882 → 0.941**, refusal accuracy **1.000** unchanged, leakage 0.
-    The cost is latency: retrieval went from ~0.55s to ~2.05s per question,
-    because WebAssembly runs the model far slower than a native runtime would
-    — and the native runtime does not load on the Alpine image.
-  - **`llm`** — asks `RAG_PLANNER_MODEL` to score the candidates in one
-    completion, over the same NIM account the answer uses. A hand probe put
-    one call at a median of **8.4s** with a tail past 30s; it has not been run
-    through the eval.
+    The cost is latency. Retrieval went from ~0.55s to ~2.05s per question,
+    because WebAssembly runs the model far slower than a native runtime would,
+    and the native runtime does not load on the Alpine image.
+  - `llm` asks `RAG_PLANNER_MODEL` to score the candidates in one completion,
+    over the same NIM account the answer uses. A hand probe put one call at a
+    median of **8.4s** with a tail past 30s; it has not been run through the
+    eval.
 
-  So turning reranking on is now a measured trade — about 1.5s of retrieval
-  latency for one more question at rank 1 on this corpus, with refusal held —
-  rather than an experiment.
+  Turning reranking on is therefore a measured trade instead of an experiment:
+  about 1.5s of retrieval latency for one more question at rank 1 on this
+  corpus, with refusal held.
 
 - **An exact identifier below the similarity floor still refuses.** A lexical
   hit is not allowed to admit a chunk on its own, because on the evaluation
-  corpus **no lexical-rank threshold separates true from false positives**:
-  _"How much parental leave am I entitled to?"_ — which the corpus cannot
-  answer — scores **0.60** on `leave`, higher than every genuine identifier
+  corpus **no lexical-rank threshold separates true from false positives**.
+  _"How much parental leave am I entitled to?"_, which the corpus cannot
+  answer, scores **0.60** on `leave`, higher than every genuine identifier
   query at **0.30**. Enabling that bypass took refusal accuracy from 1.0 to
   **0.0**. The principled fixes are reranking or IDF-aware gating validated on
   a corpus larger than a dozen chunks; a tuned threshold here would be
@@ -1754,41 +1750,41 @@ Named rather than hidden.
 - **The fixed pipeline has no multi-turn context.** With
   `RAG_AGENTIC_ENABLED=false` each question is retrieved and answered
   independently: conversation history is stored, but nothing is fed back into
-  retrieval. The agentic path is what closes this — the planner sees the last
-  four turns (`PLANNER_CONTEXT_TURNS`) and resolves the reference inside its
-  tool call. That is why follow-up hit@1 moves from 0.000 to 0.667 in the A/B
+  retrieval. The agentic path closes this gap. The planner sees the last four
+  turns (`PLANNER_CONTEXT_TURNS`) and resolves the reference inside its tool
+  call, which is why follow-up hit@1 moves from 0.000 to 0.667 in the A/B
   above.
 - **A cited passage spanning two columns gets no highlight.** Citations do now
   resolve below the page: the panel renders the page as an image and draws the
   cited region on it. But the chunker computes a **list** of rectangles while
-  `chunks.bbox` stores **one**, and rather than union rectangles from two
-  columns — which would cover the gutter and the wrong column — the code stores
-  nothing. So a multi-column passage silently falls back to page-level
+  `chunks.bbox` stores **one**. Instead of taking the union of rectangles from
+  two columns, which would cover the gutter and the wrong column, the code
+  stores nothing, so a multi-column passage silently falls back to page-level
   behaviour. That is the safe failure, since a confidently misplaced box is
-  worse than no box, but it is a fallback rather than the feature. Closing it
-  needs a `boxes` column.
+  worse than no box, but it is still only a fallback. Closing it needs a `boxes`
+  column.
 - **A cited page is a picture.** Because the highlight needs somewhere to be
-  drawn, the panel shows a server-rendered PNG rather than the framed PDF
+  drawn, the panel shows a server-rendered PNG instead of the framed PDF
   viewer, so text in it cannot be selected, searched or copied. "Open in new
   tab" still serves the real document to the browser's own viewer. This was a
-  deliberate security trade, not an oversight — rendering server-side keeps an
-  untrusted PDF out of the authenticated origin's JavaScript context, and the
-  server already opens every one of these files with pdf.js at ingestion, so it
-  adds no exposure that did not already exist.
+  deliberate security trade. Rendering server-side keeps an untrusted PDF out of
+  the authenticated origin's JavaScript context, and the server already opens
+  every one of these files with pdf.js at ingestion, so it adds no exposure that
+  did not already exist.
 - **Documents ingested before span-level citations have no boxes**, so their
   citations stay page-level until they are re-ingested. Nothing breaks; the
-  highlight is simply absent.
+  highlight is absent.
 - **Ingestion recovery has not been exercised against a real restart.** A
   process restart mid-ingestion no longer strands a document: a claim expires,
   a sweep on boot and every 60 seconds picks the document up, and it resumes
   from the parse cache instead of re-paying for pages already cracked. The unit
   suite covers the claim protocol, the fencing, the attempt cap and the
-  concurrency limit — but it mocks the database driver, so what is proven is
-  that the SQL is shaped correctly, **not** that Postgres serialises two racing
-  claims as intended. The kill-the-container-and-restart check has not been run.
+  concurrency limit. It mocks the database driver, though, so it proves that the
+  SQL is shaped correctly and **not** that Postgres serialises two racing claims
+  as intended. The kill-the-container-and-restart check has not been run.
 
 ---
 
-**Next:** [Database](database.md) for the full schema these tables live in and
+Next, read [Database](database.md) for the full schema these tables live in and
 the migration workflow, then [Architecture](architecture.md) for the request
 flow and security model around them.

@@ -2,28 +2,28 @@
 
 [← Back to README](../README.md)
 
-**What this covers:** the whole project on one page — what it is, what it is
-built from, and what already works — with links to the page that explains each
-part properly.
+**What this covers:** the whole project on one page. It describes what the
+project is, what it is built from and what already works, and links to the page
+that explains each part properly.
 
-A production-ready Next.js 16 template for **grounded document chat**. Users
-register, upload PDFs into private knowledge bases they own, and hold
+This is a production-ready Next.js 16 template for grounded document chat.
+Users register, upload PDFs into private knowledge bases they own, and hold
 conversations answered only from those documents, with a page-level citation
 for every claim. Authentication, PostgreSQL + pgvector, object storage, a PWA,
 Docker and a retrieval evaluation harness are already wired together and
-tested, so day one is spent on your features rather than on plumbing.
+tested, so you can spend day one on your own features.
 
 If you have never built a retrieval-augmented generation system, start with the
-**[Tutorial](tutorial.md)**, which builds one with this repo in front of you.
-**[RAG — how it works](rag.md)** is the reference behind it, and defines every
-term from scratch.
+[Tutorial](tutorial.md), which builds one with this repo in front of you.
+[RAG — how it works](rag.md) is the reference behind it and defines every term
+from scratch.
 
 ## Quick stats
 
-- **Version:** 0.22.0
-- **License:** MIT
-- **Type:** Full-stack Next.js 16 application template (not a library)
-- **Target:** Single-box production (Docker + Cloudflare Tunnel)
+- Version: 0.22.0
+- License: MIT
+- Type: full-stack Next.js 16 application template (not a library)
+- Target: single-box production (Docker + Cloudflare Tunnel)
 
 ## Core Tech Stack
 
@@ -43,63 +43,64 @@ term from scratch.
 | PWA              | Service Worker    | Hand-rolled           |
 
 Turbopack builds both `dev` and `build`, which is why the service worker is
-hand-rolled rather than generated. Architectural detail:
-**[Architecture](architecture.md)**.
+hand-rolled instead of generated. For architectural detail, see
+[Architecture](architecture.md).
 
 ## What ships out of the box
 
-Each line links to the page that explains it. The full inventory is in
-**[Features](features.md)**.
+Each paragraph links to the page that explains it. The full inventory is in
+[Features](features.md).
 
-**Document chat (RAG)** — multiple independent knowledge bases per user, PDF
-upload and ingestion, hybrid retrieval (dense `pgvector` HNSW + lexical
-`tsvector` GIN, fused with Reciprocal Rank Fusion), page-level citations,
-grounded-or-refuse answering, an optional agentic retrieval loop
-(`RAG_AGENTIC_ENABLED`, off by default), and an evaluation harness
-(`pnpm rag:eval`) reporting hit@k, MRR, refusal accuracy and
-cross-knowledge-base leakage. → **[RAG](rag.md)**
+Document chat (RAG) supports multiple independent knowledge bases per user, PDF
+upload and ingestion, and hybrid retrieval: dense `pgvector` HNSW and lexical
+`tsvector` GIN, fused with Reciprocal Rank Fusion. Answers carry page-level
+citations and are either grounded or refused. There is an optional agentic
+retrieval loop (`RAG_AGENTIC_ENABLED`, off by default) and an evaluation
+harness (`pnpm rag:eval`) that reports hit@k, MRR, refusal accuracy and
+cross-knowledge-base leakage. See [RAG](rag.md).
 
-**Authentication** — email + password with Argon2id, stateless JWT sessions,
-GitHub and Google OAuth (opt-in), RBAC with `admin` / `member` / `viewer`
-roles, invite-based passwordless account claim, password reset and email
-verification (opt-in). → **[Features](features.md)** ·
-**[OAuth](oauth.md)** · **[Email](email.md)**
+Authentication covers email + password with Argon2id, stateless JWT sessions,
+opt-in GitHub and Google OAuth, and RBAC with `admin` / `member` / `viewer`
+roles. It also has invite-based passwordless account claim, plus opt-in
+password reset and email verification. See [Features](features.md),
+[OAuth](oauth.md) and [Email](email.md).
 
-**Security** — rate limiting on auth endpoints (per-account plus a global
-per-IP login cap), a per-request CSP nonce, HSTS and security headers,
-edge-protected routes re-checked server-side, user-enumeration resistance, and
-environment validation that fails fast at boot. →
-**[Architecture → Security model](architecture.md#security-model)**
+For security, auth endpoints are rate limited (per account, plus a global
+per-IP login cap). Each request gets its own CSP nonce, HSTS and security
+headers are set, and edge-protected routes are re-checked server-side. The app
+resists user enumeration, and environment validation fails fast at boot. See
+[Architecture → Security model](architecture.md#security-model).
 
-**Database** — PostgreSQL 17 with Drizzle ORM, a type-safe schema with
+The database is PostgreSQL 17 with Drizzle ORM: a type-safe schema with
 generated migrations, dedicated tables for auth, files, push, roles, documents
-and conversations, and an idempotent seed script. →
-**[Database](database.md)**
+and conversations, and an idempotent seed script. See
+[Database](database.md).
 
-**File storage** — MinIO or any S3-compatible store, per-user quotas,
-ownership-checked downloads, MIME-type and size validation, profile photos. →
-**[Features → File uploads](features.md#file-uploads)**
+File storage uses MinIO or any S3-compatible store, with per-user quotas,
+ownership-checked downloads, MIME-type and size validation, and profile photos.
+See [Features → File uploads](features.md#file-uploads).
 
-**Progressive Web App** — installable, hand-rolled service worker, offline
-fallback page, responsive app shell, light/dark theme, and Web Push via VAPID.
-→ **[PWA & App Shell](pwa.md)** · **[Web Push](push.md)**
+The app is an installable Progressive Web App with a hand-rolled service
+worker, an offline fallback page, a responsive app shell, a light/dark theme,
+and Web Push via VAPID. See [PWA & App Shell](pwa.md) and
+[Web Push](push.md).
 
-**Developer experience** — strict TypeScript, ESLint + Prettier + Husky hooks,
-Vitest unit tests and Playwright E2E, Docker for local Postgres, MinIO and
-Mailpit. → **[Usage & Development](usage.md)**
+For developers there is strict TypeScript, ESLint + Prettier + Husky hooks,
+Vitest unit tests and Playwright E2E, and Docker for local Postgres, MinIO and
+Mailpit. See [Usage & Development](usage.md).
 
-**Deployment** — a one-command self-hosting wizard (`make setup`), Cloudflare
-Tunnel so there are no open ports and no certificates, a multi-stage Dockerfile
-with a non-root runtime, pull-based continuous deployment from a published
-image (`make deploy`), macOS boot persistence for an always-on Mac mini
-(`make autostart`), and automated Postgres + MinIO backups. →
-**[Self-hosting](self-hosting.md)** · **[Deployment](deployment.md)** ·
-**[Backups](backups.md)**
+Deployment starts with a one-command self-hosting wizard (`make setup`). A
+Cloudflare Tunnel means no open ports and no certificates. The multi-stage
+Dockerfile has a non-root runtime, continuous deployment is pull-based from a
+published image (`make deploy`), and macOS boot persistence keeps an always-on
+Mac mini running (`make autostart`). Postgres + MinIO backups are automated.
+See [Self-hosting](self-hosting.md), [Deployment](deployment.md) and
+[Backups](backups.md).
 
-> **CI.** GitHub Actions runs format, lint, typecheck, unit tests, `specs:check`
-> and the Playwright suite on every PR, publishes the app and migrate images to
-> GHCR from `main`, and turns a `v*` tag into a release. See
-> **[CI/CD](ci-cd.md)**.
+> GitHub Actions CI runs format, lint, typecheck, unit tests, `specs:check`
+> and the Playwright suite on every PR. It publishes the app and migrate images
+> to GHCR from `main`, and turns a `v*` tag into a release. See
+> [CI/CD](ci-cd.md).
 
 ## Where to start
 
@@ -113,5 +114,5 @@ image (`make deploy`), macOS boot persistence for an always-on Mac mini
 | Put it on the internet                     | [Self-hosting](self-hosting.md) |
 
 **Next:** [Tutorial](tutorial.md) if RAG is new to you, otherwise
-[Usage & Development](usage.md) — the scripts, the environment variables and the
-local Docker workflow.
+[Usage & Development](usage.md), which covers the scripts, the environment
+variables and the local Docker workflow.
