@@ -104,6 +104,8 @@ other — one isn't a substitute for the other.
 | [0037](0037-inspect-what-was-indexed.md)              | Let a user inspect what was actually indexed                                         | Shipped  | v0.21.0 |
 | [0038](0038-store-the-search-key.md)                  | Store the search key, and show what the page contributed                             | Shipped  | v0.21.0 |
 | [0039](0039-structure-from-the-text-layer.md)         | Find a document's structure in its text layer                                        | Shipped  | v0.21.0 |
+| [0040](0040-ai-provider-and-model-settings.md)        | Configure the AI provider and models from Settings                                   | Proposed | —       |
+| [0041](0041-in-app-documentation.md)                  | Read the platform documentation inside the app                                       | Proposed | —       |
 
 <!-- specs:index:end -->
 
