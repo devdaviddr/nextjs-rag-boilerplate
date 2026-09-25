@@ -60,10 +60,14 @@ function subscribeHash(onChange: () => void) {
 const hashSnapshot = () => window.location.hash.slice(1)
 const serverHashSnapshot = () => ''
 
+/** The pane that scrolls; a new section starts at its top. */
+const OUTLET_ID = 'settings-outlet'
+
 function openSection(id: string) {
   // pushState keeps Back working; it fires no hashchange, so send one.
   window.history.pushState(null, '', `#${id}`)
   window.dispatchEvent(new HashChangeEvent('hashchange'))
+  document.getElementById(OUTLET_ID)?.scrollTo({ top: 0 })
 }
 
 function Section({
@@ -160,8 +164,10 @@ export function SettingsClient({
   const def = (id: string) => byId[id]!
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:py-10">
-      <header className="mb-6 lg:mb-8">
+    // Fills the shell's <main> and scrolls only the section pane: the title
+    // and the tabs stay put.
+    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-4 pt-6 sm:px-6 lg:pt-10">
+      <header className="mb-6 shrink-0 lg:mb-8">
         <h1 className="text-2xl font-semibold tracking-tight lg:text-3xl">
           Settings
         </h1>
@@ -170,11 +176,8 @@ export function SettingsClient({
         </p>
       </header>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 md:grid-cols-[12rem_minmax(0,1fr)] lg:gap-10">
-        <nav
-          aria-label="Settings sections"
-          className="md:sticky md:top-6 md:self-start"
-        >
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:gap-10">
+        <nav aria-label="Settings sections" className="md:self-start">
           <ul className="-mx-1 flex gap-1 overflow-x-auto pb-1 md:mx-0 md:flex-col md:overflow-visible md:pb-0">
             {sections.map(({ id, title, icon: Icon }) => (
               <li key={id} className="shrink-0">
@@ -199,7 +202,12 @@ export function SettingsClient({
           </ul>
         </nav>
 
-        <div className="min-w-0">
+        <div
+          id={OUTLET_ID}
+          // px/-mx keep focus rings inside the scroll box; pb leaves room
+          // below the last card.
+          className="-mx-1 min-h-0 min-w-0 overflow-y-auto px-1 pb-10 md:pr-3"
+        >
           <Section def={def('account')} current={current}>
             <CurrentUserCard user={session.user} allRoles={formattedRoles} />
             <FilesPanel initialFiles={files} />
