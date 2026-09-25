@@ -372,6 +372,30 @@ const envSchema = z
       .positive()
       .optional()
       .default(20),
+    // Which backend scores the candidates (spec 0036 FR2).
+    //
+    // `local` runs a cross-encoder in-process as WebAssembly — no account, no
+    // rate limit, no document text leaving the deployment — and is the
+    // default. It costs ~1.5s of retrieval per question (spec 0036).
+    // `llm` scores with RAG_PLANNER_MODEL in one completion, over the same NIM
+    // account the answer uses; kept as the comparison baseline.
+    RAG_RERANK_BACKEND: z.enum(['local', 'llm']).optional().default('local'),
+    // Hugging Face model id for the local backend. Must be a single-label
+    // cross-encoder with an ONNX int8 export. The default is 23 MB and
+    // English; `Xenova/bge-reranker-base` is multilingual and 279 MB.
+    RAG_RERANK_LOCAL_MODEL: z
+      .string()
+      .min(1)
+      .optional()
+      .default('Xenova/ms-marco-MiniLM-L-6-v2'),
+    // Where the local model's weights are cached after the first download.
+    // Relative paths resolve against the working directory; in the Docker
+    // image that is /app, which the app user owns.
+    RAG_RERANK_MODEL_DIR: z
+      .string()
+      .min(1)
+      .optional()
+      .default('.cache/rerank-models'),
 
     // --- HyDE (spec 0033 FR6, 0027 1g) -------------------------------------
     // Embed a hypothetical ANSWER instead of the question, because an answer

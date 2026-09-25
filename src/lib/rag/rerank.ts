@@ -3,6 +3,7 @@ import 'server-only'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { createChatCompletion } from './client'
+import { localReranker } from './rerank-local'
 import type { RetrievedChunk } from './retrieve'
 
 /**
@@ -414,7 +415,10 @@ export const llmReranker: RerankerBackend = {
 }
 
 export interface RerankOptions {
-  /** Defaults to the LLM backend. Injected by tests and by a future NIM one. */
+  /**
+   * Defaults to the backend RAG_RERANK_BACKEND names. Injected by tests and by
+   * a future NIM one.
+   */
   backend?: RerankerBackend
   signal?: AbortSignal
 }
@@ -455,7 +459,11 @@ export async function rerankChunks(
   const head = ordered.slice(0, window)
   const tail = ordered.slice(window)
 
-  const backend = options.backend ?? llmReranker
+  // Anything other than an explicit `local` gets the LLM backend, so a
+  // partially mocked env (as in tests) keeps the historical behaviour.
+  const backend =
+    options.backend ??
+    (env.RAG_RERANK_BACKEND === 'local' ? localReranker : llmReranker)
 
   let scores: number[] | null = null
   try {

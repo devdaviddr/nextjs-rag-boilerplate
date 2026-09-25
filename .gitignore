@@ -63,3 +63,6 @@ eval/results/
 
 # Agent worktrees (created by Claude Code, never part of the repo).
 .claude/worktrees/
+
+# Local reranker model cache (RAG_RERANK_MODEL_DIR default)
+/.cache/

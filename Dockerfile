@@ -88,6 +88,12 @@ ARG APP_GIT_SHA=unknown
 ENV APP_VERSION=$APP_VERSION
 ENV APP_GIT_SHA=$APP_GIT_SHA
 
+# The local reranker (spec 0036) downloads its model into
+# RAG_RERANK_MODEL_DIR (default .cache/rerank-models, relative to /app) on first
+# use. /app belongs to root, so the cache directory is created for the app user
+# here. Mount a volume on /app/.cache to keep the download across redeploys.
+RUN mkdir -p /app/.cache && chown nextjs:nodejs /app/.cache
+
 USER nextjs
 EXPOSE 3000
 
