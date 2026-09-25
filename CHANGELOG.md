@@ -8,63 +8,7 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
-### Fixed
-
-- **You can ask the next question as soon as the answer is written**
-  ([#48](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/48)).
-  The composer stayed locked until citation verification finished — up to
-  12s after the answer and its metrics were on screen. The answer is now
-  saved and its metrics sent the moment drafting ends, and that unlocks the
-  composer; verification continues in the background, shows "Checking
-  sources…" on that answer, and revises it in place if it strips a claim, even
-  if the next question is already streaming. Measured on the live endpoint:
-  unlock at 17.0s instead of 29.0s.
-
-### Fixed
-
-- **An overloaded model is reported as overloaded**
-  ([#43](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/43)).
-  The chat endpoint can answer `200` and then stream an error frame
-  (`"Service temporarily overloaded"`, code 503). The route read it as an
-  empty frame, retried 230ms later into the same overload, and told the user
-  "The model returned an empty answer". Error frames are now recognised, the
-  retry backs off (2s after an upstream error, 1s after an empty stream), and
-  a failure after the retry says the model is overloaded, with its code.
-
-### Fixed
-
-- **The send button unlocks within seconds of the answer**
-  ([#42](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/42)).
-  Citation verification runs after the answer streams and keeps the
-  conversation busy until it returns; it used the client defaults of a 60s
-  timeout and up to 4 attempts, so a slow planner held the composer for
-  92–113s. It now gets one attempt with a 12s deadline and still fails open
-  (nothing is stripped on a timeout). The answer's total time and tokens/sec
-  now describe drafting only, not the verification wait.
-
-### Fixed
-
-- **Follow-up questions survive a planner outage**
-  ([#41](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/41)).
-  Only the planner resolved "what about Sweden Central?" from the
-  conversation, so when it was down the fallback searched the words alone and
-  refused. The fallback now also searches the previous user question together
-  with the new one, and keeps a passage found only that way when the new
-  question made it more relevant than the previous question did on its own —
-  otherwise "And can it be extended?" would be answered with the probation
-  length. With the planner forced down: follow-up hit@1 0 → 0.563, all 4
-  unanswerable follow-ups still refused, single-hop unchanged.
-
-### Changed
-
-- **Filtered vector search keeps its recall on large corpora**
-  ([#25](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/25),
-  spec 0033 1e). Migration `0017` sets `hnsw.iterative_scan = relaxed_order`
-  on the database. When Postgres uses the HNSW index for a tenant-filtered
-  query, the filter is applied after the scan, and a tenant holding 0.1% of all
-  chunks kept 1 in 20 true matches (recall 0.055); with the setting, 0.950. At
-  today's sizes the planner picks an exact scan for tenant queries, so nothing
-  changes yet — `pnpm rag:eval` is identical. Run `pnpm db:migrate`.
+## [0.22.0] - 2026-09-25
 
 ### Added
 
@@ -92,6 +36,58 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   question, which is why reranking itself (`RAG_RERANK_ENABLED`) stays off by
   default. It runs on the Alpine image, where the native ONNX runtime does not
   load, and adds 14.6 MB to it.
+
+### Changed
+
+- **Filtered vector search keeps its recall on large corpora**
+  ([#25](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/25),
+  spec 0033 1e). Migration `0017` sets `hnsw.iterative_scan = relaxed_order`
+  on the database. When Postgres uses the HNSW index for a tenant-filtered
+  query, the filter is applied after the scan, and a tenant holding 0.1% of all
+  chunks kept 1 in 20 true matches (recall 0.055); with the setting, 0.950. At
+  today's sizes the planner picks an exact scan for tenant queries, so nothing
+  changes yet — `pnpm rag:eval` is identical. Run `pnpm db:migrate`.
+
+### Fixed
+
+- **You can ask the next question as soon as the answer is written**
+  ([#48](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/48)).
+  The composer stayed locked until citation verification finished — up to
+  12s after the answer and its metrics were on screen. The answer is now
+  saved and its metrics sent the moment drafting ends, and that unlocks the
+  composer; verification continues in the background, shows "Checking
+  sources…" on that answer, and revises it in place if it strips a claim, even
+  if the next question is already streaming. Measured on the live endpoint:
+  unlock at 17.0s instead of 29.0s.
+
+- **An overloaded model is reported as overloaded**
+  ([#43](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/43)).
+  The chat endpoint can answer `200` and then stream an error frame
+  (`"Service temporarily overloaded"`, code 503). The route read it as an
+  empty frame, retried 230ms later into the same overload, and told the user
+  "The model returned an empty answer". Error frames are now recognised, the
+  retry backs off (2s after an upstream error, 1s after an empty stream), and
+  a failure after the retry says the model is overloaded, with its code.
+
+- **The send button unlocks within seconds of the answer**
+  ([#42](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/42)).
+  Citation verification runs after the answer streams and keeps the
+  conversation busy until it returns; it used the client defaults of a 60s
+  timeout and up to 4 attempts, so a slow planner held the composer for
+  92–113s. It now gets one attempt with a 12s deadline and still fails open
+  (nothing is stripped on a timeout). The answer's total time and tokens/sec
+  now describe drafting only, not the verification wait.
+
+- **Follow-up questions survive a planner outage**
+  ([#41](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/41)).
+  Only the planner resolved "what about Sweden Central?" from the
+  conversation, so when it was down the fallback searched the words alone and
+  refused. The fallback now also searches the previous user question together
+  with the new one, and keeps a passage found only that way when the new
+  question made it more relevant than the previous question did on its own —
+  otherwise "And can it be extended?" would be answered with the probation
+  length. With the planner forced down: follow-up hit@1 0 → 0.563, all 4
+  unanswerable follow-ups still refused, single-hop unchanged.
 
 ## [0.21.1] - 2026-09-25
 
@@ -1098,7 +1094,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.1...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.20.1...v0.21.0
 [0.7.2]: https://github.com/devdaviddr/nextjs-fullstack-boilerplate/compare/v0.7.1...v0.7.2
