@@ -138,6 +138,14 @@ writing the answer and checking its citations, each with the model it used,
 its tokens, and what it found. Runs are kept for `TELEMETRY_RETENTION_DAYS`
 (30 by default).
 
+**Overview** is the dashboard, for the last 24 hours or 7 days against the
+period before: questions asked, how often nothing matched, answer time and
+time to the first word, tokens per answer and the failure rate, each with a
+trend line. Below them: questions and answer times over time, which retrieval
+mode was used, why agentic searches stopped, documents processed, how close
+each question's best passage came to the similarity floor, where the time goes
+step by step, which models failed, and the latest runs.
+
 ### Measured, not asserted
 
 A **retrieval evaluation harness** (`pnpm rag:eval`) runs a ground-truth corpus

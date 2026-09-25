@@ -29,8 +29,14 @@ test('non-admins cannot see or reach Observability (FR11)', async ({
   await expect(page).toHaveURL(/\/chat/)
 
   await expect(page.getByRole('link', { name: 'Observability' })).toHaveCount(0)
-  const res = await page.goto('/observability/logs')
-  expect(res?.status()).toBe(404)
+  for (const path of [
+    '/observability',
+    '/observability/logs',
+    '/observability/runs',
+  ]) {
+    const res = await page.goto(path)
+    expect(res?.status(), path).toBe(404)
+  }
   const api = await page.request.get('/api/observability/logs')
   expect(api.status()).toBe(403)
 })
@@ -51,6 +57,8 @@ test('an admin reads the logs: colours, filters, details, one request (FR7)', as
 
   await signInAdmin(page)
   await page.getByRole('link', { name: 'Observability' }).click()
+  await expect(page).toHaveURL(/\/observability$/)
+  await page.getByRole('link', { name: 'Logs', exact: true }).click()
   await expect(page).toHaveURL(/\/observability\/logs$/)
 
   const log = page.getByRole('log', { name: 'Log lines' })
@@ -111,6 +119,40 @@ test('an admin browses runs, and replays one when there is one (FR9)', async ({
   await expect(page.getByLabel('Waiting').first()).toBeVisible()
 
   results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+})
+
+test('an admin reads the overview for 24 hours and 7 days (FR10)', async ({
+  page,
+}) => {
+  await signInAdmin(page)
+  await page.goto('/observability')
+  await expect(page.getByRole('link', { name: 'Overview' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  for (const tile of [
+    'Questions',
+    'No match',
+    'Answer time (median)',
+    'Failed',
+  ]) {
+    await expect(
+      page.getByRole('button', { name: `About ${tile}` }),
+    ).toBeVisible()
+  }
+  await expect(page.getByText('Questions over time')).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: 'Where the time goes' }),
+  ).toBeVisible()
+
+  await page.getByRole('link', { name: 'Last 7 days' }).click()
+  await expect(page).toHaveURL(/range=7d/)
+  await expect(page.getByText(/compared with the week before/)).toBeVisible()
+
+  const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze()
   expect(results.violations).toEqual([])

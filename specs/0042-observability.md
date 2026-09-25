@@ -179,14 +179,19 @@ descriptions.
       recorded retrieve / plan (failed: time budget) / search / embed-question
       / search-index / draft / verify with models and tokens;
       `tests/unit/observability-runs.test.ts`; e2e _"an admin browses runs"_
-- [ ] FR10: the dashboard shows the tiles and charts for 24 hours and 7 days
-- [ ] FR11: non-admins get 404 / 403 everywhere
+- [x] FR10: the dashboard shows the tiles and charts for 24 hours and 7 days
+      — e2e _"an admin reads the overview for 24 hours and 7 days"_; aggregates
+      in SQL (`src/lib/observability/telemetry.ts`)
+- [x] FR11: non-admins get 404 / 403 everywhere — e2e _"non-admins cannot
+      see or reach Observability"_ (all three pages 404, the data route 403,
+      no sidebar item)
 - [x] NFR1: a failing database does not fail a request (tested) —
       _"drops a batch the database refuses"_, _"never lets a failing sink
       break the caller"_, and the bounded queue
 - [x] NFR2: secrets are redacted before storage (tested) — _"redact
       (NFR2)"_
-- [ ] NFR5: axe finds no violations on the three pages
+- [x] NFR5: axe finds no violations on the three pages — the Logs, Runs and
+      Overview e2e tests run axe
 
 ## Security & privacy
 

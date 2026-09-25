@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation'
 
 import { cn } from '@/lib/utils'
 
-// The Overview joins with the telemetry dashboard (spec 0042 FR10).
 const TABS = [
+  { href: '/observability', label: 'Overview', exact: true },
   { href: '/observability/runs', label: 'Runs' },
   { href: '/observability/logs', label: 'Logs' },
 ]
@@ -18,7 +18,8 @@ export function ObservabilityTabs() {
       <ul className="-mb-px flex gap-4 overflow-x-auto">
         {TABS.map((tab) => {
           const active =
-            pathname === tab.href || pathname.startsWith(`${tab.href}/`)
+            pathname === tab.href ||
+            (!('exact' in tab) && pathname.startsWith(`${tab.href}/`))
           return (
             <li key={tab.href}>
               <Link

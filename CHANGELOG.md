@@ -10,6 +10,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Watch RAG and agent health over time**
+  ([#79](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/79),
+  spec 0042). Observability → Overview shows the last 24 hours or 7 days
+  against the period before: questions, no-match rate, answer time, time to
+  first word, tokens per answer and failures, with trends; charts over time;
+  how agentic searches ended; best match against the similarity floor; where
+  the time goes step by step; failures by model; and documents processed.
 - **See how each question was answered, step by step**
   ([#78](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/78),
   spec 0042). Every question and every document ingestion is now recorded as
