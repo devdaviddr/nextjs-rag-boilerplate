@@ -64,7 +64,7 @@ export function DocToc({ items }: { items: TocItem[] }) {
                 className={cn(
                   'line-clamp-2 rounded-lg px-2 py-1.5 transition-colors',
                   active === h.id
-                    ? 'bg-violet-100 font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+                    ? 'bg-orange-100 font-medium text-orange-700 dark:bg-orange-500/15 dark:text-orange-300'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >

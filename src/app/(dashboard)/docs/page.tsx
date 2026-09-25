@@ -41,7 +41,7 @@ export default function DocsIndexPage() {
           <Icon
             key={i}
             strokeWidth={1.25}
-            className={`absolute text-violet-400/30 dark:text-violet-400/20 ${className}`}
+            className={`absolute text-slate-300 dark:text-slate-700 ${className}`}
           />
         ))}
       </div>
@@ -74,13 +74,13 @@ export default function DocsIndexPage() {
                   <li key={doc.slug}>
                     <Link
                       href={`/docs/${doc.slug}`}
-                      className="group bg-card block h-full overflow-hidden rounded-2xl border shadow-xs transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md focus-visible:ring-4 focus-visible:ring-violet-500/20 focus-visible:outline-none dark:hover:border-violet-500/50"
+                      className="group bg-card block h-full overflow-hidden rounded-2xl border shadow-xs transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md focus-visible:ring-4 focus-visible:ring-orange-500/20 focus-visible:outline-none dark:hover:border-orange-500/50"
                     >
                       <span className="docs-card-art flex h-32 items-center justify-center">
                         <Icon
                           aria-hidden
                           strokeWidth={1.25}
-                          className="size-12 text-violet-600 transition-transform group-hover:scale-105 dark:text-violet-300"
+                          className="size-12 text-orange-600 transition-transform group-hover:scale-105 dark:text-orange-300"
                         />
                       </span>
                       <span className="block p-5">

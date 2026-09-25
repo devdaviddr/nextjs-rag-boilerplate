@@ -33,7 +33,7 @@ function Highlighted({ text, terms }: { text: string; terms: string[] }) {
         part.match ? (
           <mark
             key={i}
-            className="rounded-sm bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200"
+            className="rounded-sm bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200"
           >
             {part.text}
           </mark>
@@ -149,7 +149,7 @@ export function DocsSearch() {
           setOpen(true)
         }}
         onKeyDown={onKeyDown}
-        className="bg-background placeholder:text-muted-foreground h-14 w-full rounded-2xl border pr-14 pl-12 text-base shadow-sm transition-shadow outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/15 dark:focus:border-violet-500 [&::-webkit-search-cancel-button]:hidden"
+        className="bg-background placeholder:text-muted-foreground h-14 w-full rounded-2xl border pr-14 pl-12 text-base shadow-sm transition-shadow outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-500/15 dark:focus:border-orange-500 [&::-webkit-search-cancel-button]:hidden"
       />
       <kbd
         aria-hidden
@@ -193,10 +193,10 @@ export function DocsSearch() {
                     onClick={() => setOpen(false)}
                     className={cn(
                       'flex gap-3 rounded-xl px-3 py-2.5',
-                      i === active && 'bg-violet-50 dark:bg-violet-500/10',
+                      i === active && 'bg-orange-50 dark:bg-orange-500/10',
                     )}
                   >
-                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300">
                       {r.entry.id ? (
                         <Hash className="size-4" />
                       ) : (

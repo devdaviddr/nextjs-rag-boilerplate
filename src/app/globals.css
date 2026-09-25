@@ -298,23 +298,14 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Card art on the docs index: a violet grid that fades out at the edges. */
+/* Card art on the docs index: a light grey grid that fades out at the edges. */
 .docs-card-art {
-  --grid: color-mix(in oklch, oklch(0.606 0.25 292.717) 18%, transparent);
-  background-color: color-mix(
-    in oklch,
-    oklch(0.606 0.25 292.717) 7%,
-    transparent
-  );
+  --grid: color-mix(in oklch, var(--muted-foreground) 16%, transparent);
+  background-color: var(--muted);
   background-image:
     linear-gradient(to right, var(--grid) 1px, transparent 1px),
     linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
   background-size: 22px 22px;
   background-position: center;
-  mask-image: radial-gradient(
-    ellipse 90% 100% at 50% 50%,
-    #000 55%,
-    transparent 100%
-  );
   border-bottom: 1px solid var(--border);
 }
