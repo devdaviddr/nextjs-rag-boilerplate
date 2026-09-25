@@ -90,20 +90,20 @@ jobs:
       # mirroring docker-compose.yml's minio + minio-init services.
       #
       # The Chainguard builds stand in for minio/minio and minio/mc, which no
-      # longer pull from Docker Hub or quay.io (#18). The -dev tags carry the
-      # shell the bucket step needs.
+      # longer pull from Docker Hub or quay.io (#18). Same digests as the
+      # compose files; the -dev tags carry the shell the bucket step needs.
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            cgr.dev/chainguard/minio:latest-dev server /data
+            cgr.dev/chainguard/minio:latest-dev@sha256:d7c906993247627c19f37fc1fa302c34cf2d209ae0e7dc7d52fb0be6ac2849ba server /data
           for i in $(seq 1 30); do
             curl -sf http://localhost:9000/minio/health/live && break
             sleep 1
           done
       - name: Create MinIO bucket
         run: |
-          docker run --rm --network host --entrypoint /bin/sh cgr.dev/chainguard/minio-client:latest-dev -c "
+          docker run --rm --network host --entrypoint /bin/sh cgr.dev/chainguard/minio-client:latest-dev@sha256:f0dd93b48af1f8a641edcd3c64661c8dbe05189bd2ef2f8cea216eb18af10bf8 -c "
             mc alias set local http://localhost:9000 minioadmin minioadmin &&
             mc mb --ignore-existing local/app-files
           "
