@@ -213,6 +213,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- **Object storage starts again on a fresh pull**
+  ([#18](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/18)).
+  `minio/minio` and `minio/mc` stopped pulling from Docker Hub and quay.io, so
+  `docker compose` could not start MinIO, create the bucket or run the MinIO
+  backup — in local dev and in `docker-compose.prod.yml`. Both compose files
+  and CI now use Chainguard's builds (`cgr.dev/chainguard/minio` and
+  `minio-client`, `-dev` tags) pinned by digest, running as root like the old
+  image so existing data stays readable. No data migration is needed.
+
 - **Inference requests are now bounded.** `fetch` has no timeout of its own, so
   a stalled endpoint hung a request indefinitely — measured at 86 seconds on a
   planner call that normally takes 3–6, while the agentic loop's 15-second
