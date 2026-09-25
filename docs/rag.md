@@ -1,6 +1,6 @@
 # RAG — how it works
 
-[← Back to README](../README.md) · Specs: [`0025`](../specs/0025-rag-knowledge-base-and-chat.md) · [`0026`](../specs/0026-chat-first-ux-and-history.md) · [`0028`](../specs/0028-independent-knowledge-bases.md) · [`0029`](../specs/0029-agentic-retrieval-loop.md)
+[← Back to README](../README.md)
 
 This page covers what retrieval-augmented generation is, what happens to a PDF
 when you upload one, what happens when you ask a question, how to run all of it
