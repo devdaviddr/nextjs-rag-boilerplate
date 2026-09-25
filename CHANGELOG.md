@@ -34,8 +34,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 - **The account avatar opens its menu again in development**
   ([#74](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/74)).
-  Under `pnpm dev`, Next.js's dev-tools button sat on top of the avatar in the
-  bottom-left corner and took the click. It now sits bottom-right.
+  Under `pnpm dev`, Next.js's dev-tools button (a dark circle with an "N")
+  sat on top of the avatar and took the click, and looked enough like an
+  avatar to be clicked instead of it. It is now hidden; build and runtime
+  errors still show.
 
 ## [0.22.0] - 2026-09-25
 
