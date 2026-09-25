@@ -2,6 +2,7 @@ import { type SQL, relations, sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
   bigint,
+  bigserial,
   boolean,
   customType,
   index,
@@ -834,3 +835,31 @@ export const aiConnections = pgTable('ai_connections', {
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
 })
+
+/**
+ * Every log line, kept for the Logs page (spec 0042 FR3). Written in batches
+ * by `src/lib/observability/log-store.ts` and pruned after
+ * `LOG_RETENTION_DAYS`. `meta` has already been through the redactor: no
+ * secrets. Not linked to `users` by a foreign key, so a log line outlives the
+ * account it mentions until retention removes it.
+ */
+export const appLogs = pgTable(
+  'app_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    time: timestamp('time', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    level: text('level').notNull(),
+    category: text('category').notNull(),
+    message: text('message').notNull(),
+    requestId: text('request_id'),
+    userId: text('user_id'),
+    meta: jsonb('meta').$type<Record<string, unknown>>(),
+  },
+  (table) => [
+    index('app_logs_time_idx').on(table.time.desc()),
+    index('app_logs_request_idx').on(table.requestId),
+    index('app_logs_level_time_idx').on(table.level, table.time),
+  ],
+)

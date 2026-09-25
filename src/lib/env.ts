@@ -125,6 +125,29 @@ const envSchema = z
     // --- RAG / NVIDIA NIM (spec 0025) — the fields live in ai-env.ts ------
     ...aiEnvShape,
 
+    // --- Observability (spec 0042) ------------------------------------------
+    // Log lines are also kept in Postgres for the Logs page. Off with
+    // LOG_PERSIST=false; lines older than LOG_RETENTION_DAYS are deleted.
+    LOG_PERSIST: z
+      .string()
+      .optional()
+      .transform((v) => v !== 'false'),
+    LOG_RETENTION_DAYS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(365)
+      .optional()
+      .default(7),
+    // Runs and their steps, for the telemetry pages.
+    TELEMETRY_RETENTION_DAYS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(365)
+      .optional()
+      .default(30),
+
     // --- Build identity (baked into the image at CI build time) ------------
     // ci.yml passes these as Docker build-args (APP_VERSION=git ref name,
     // APP_GIT_SHA=commit sha); the Dockerfile persists them as ENV. Surfaced

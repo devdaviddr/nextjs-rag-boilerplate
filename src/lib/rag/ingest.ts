@@ -11,6 +11,7 @@ import {
 } from '@/db/schema'
 import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
 import { aiSettings } from '@/lib/ai-settings'
+import { newRequestId, withRequestContext } from '@/lib/observability/context'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
 import { buildEmbeddingText } from './chunk'
@@ -346,9 +347,23 @@ function parsedPageCache(fileId: string): ParsedPageCache {
 /** Why this run was started. Only `recovery` is bounded by the attempt cap. */
 export type IngestTrigger = 'request' | 'recovery'
 
-export async function ingestDocument(
+/**
+ * Ingest one document. Its log lines share a request id (spec 0042 FR4),
+ * whether it was started by an upload or by the recovery sweep.
+ */
+export function ingestDocument(
   documentId: string,
   options: { trigger?: IngestTrigger } = {},
+): Promise<void> {
+  return withRequestContext(
+    { requestId: newRequestId(), kind: 'ingest', documentId },
+    () => ingestOne(documentId, options),
+  )
+}
+
+async function ingestOne(
+  documentId: string,
+  options: { trigger?: IngestTrigger },
 ): Promise<void> {
   const trigger = options.trigger ?? 'request'
 

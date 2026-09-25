@@ -381,6 +381,11 @@ export async function hypotheticalQuery(
       })
       return null
     }
+    logger.info('HyDE drafted a passage to search with', {
+      category: 'retrieval',
+      backend: backend.name,
+      passage,
+    })
     return passage
   } catch (error) {
     // Failure-open, and warn rather than error: an unavailable HyDE backend is

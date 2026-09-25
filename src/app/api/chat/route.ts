@@ -14,6 +14,11 @@ import { toStoredCitations } from '@/lib/chat/citations'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
+import {
+  annotateContext,
+  newRequestId,
+  withRequestContext,
+} from '@/lib/observability/context'
 import { logger } from '@/lib/logger'
 import { RAG_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
@@ -78,13 +83,25 @@ function line(payload: unknown): Uint8Array {
   return new TextEncoder().encode(`${JSON.stringify(payload)}\n`)
 }
 
+/**
+ * Every line logged while answering, streaming included, carries this
+ * request's id (spec 0042 FR4). The id is also returned as `X-Request-Id`.
+ */
 export async function POST(request: Request) {
+  const requestId = newRequestId()
+  return withRequestContext({ requestId, kind: 'chat' }, () =>
+    answer(request, requestId),
+  )
+}
+
+async function answer(request: Request, requestId: string) {
   await refreshAiSettings()
   const session = await getCurrentSession()
   if (!session?.user.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const userId = session.user.id
+  annotateContext({ userId })
 
   if (!isRagConfigured()) {
     return NextResponse.json(
@@ -191,6 +208,8 @@ export async function POST(request: Request) {
       )
     }
   }
+
+  annotateContext({ conversationId })
 
   // Persisted BEFORE the model is called, so a question is never lost even if
   // generation fails outright.
@@ -631,6 +650,7 @@ export async function POST(request: Request) {
 
   return new Response(stream, {
     headers: {
+      'X-Request-Id': requestId,
       'Content-Type': 'application/x-ndjson; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Accel-Buffering': 'no',

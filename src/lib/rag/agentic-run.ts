@@ -218,6 +218,21 @@ export async function runAgenticRetrieval(input: {
         )
         tokens += used
         const decision: PlannerDecision | null = parseToolCallDecision(choice)
+        // What the agent chose, as it chose it (spec 0042 FR6).
+        logger.info(
+          decision
+            ? `Planner chose to ${decision.action.replace(/[-_]/g, ' ')}`
+            : 'Planner gave no usable decision',
+          {
+            category: 'agent',
+            iteration: steps.length + 1,
+            action: decision?.action ?? null,
+            query: decision?.query,
+            documentId: decision?.documentId,
+            tokens: used,
+            finishReason: choice.finish_reason,
+          },
+        )
         return { decision, tokens: used }
       },
       fallbackQuery: question,
@@ -240,10 +255,28 @@ export async function runAgenticRetrieval(input: {
           aborted: signal.aborted,
         })
       },
-      search: async (searchQuery, documentId) =>
-        documentId
-          ? retrieveDocumentChunks(userId, documentId, permittedKbIds)
-          : retrieveForOwner(userId, searchQuery, permittedKbIds),
+      search: async (searchQuery, documentId) => {
+        const started = Date.now()
+        const found = documentId
+          ? await retrieveDocumentChunks(userId, documentId, permittedKbIds)
+          : await retrieveForOwner(userId, searchQuery, permittedKbIds)
+        logger.info(
+          `Search found ${found.length} passage${found.length === 1 ? '' : 's'}`,
+          {
+            category: 'retrieval',
+            query: searchQuery,
+            documentId,
+            results: found.length,
+            bestSimilarity: found.reduce<number | null>(
+              (best, c) =>
+                best === null || c.similarity > best ? c.similarity : best,
+              null,
+            ),
+            elapsedMs: Date.now() - started,
+          },
+        )
+        return found
+      },
       // Omitted entirely when disabled, so the loop never advertises a tool it
       // cannot service.
       ...(figureReadingEnabled
@@ -289,6 +322,7 @@ export async function runAgenticRetrieval(input: {
   const kept = outcome.chunks.filter((c) => c.similarity >= floor)
 
   logger.info('Agentic retrieval', {
+    category: 'agent',
     userId,
     rewritten,
     searches: outcome.searches,
