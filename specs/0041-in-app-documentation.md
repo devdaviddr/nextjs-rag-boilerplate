@@ -1,10 +1,10 @@
 ---
 id: 0041
 title: Read the platform documentation inside the app
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.23.0
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # 0041 — Read the platform documentation inside the app

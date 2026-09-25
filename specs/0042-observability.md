@@ -1,8 +1,8 @@
 ---
 id: 0042
 title: See what the RAG pipeline and its agents are doing
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.23.0
 created: 2026-09-26
 updated: 2026-09-26
 ---
