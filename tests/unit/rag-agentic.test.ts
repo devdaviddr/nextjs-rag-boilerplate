@@ -220,6 +220,88 @@ describe('runAgenticLoop — planner failure', () => {
     expect(plan).toHaveBeenCalledTimes(1)
   })
 
+  /**
+   * With the agentic path on by default, a planner that is down before the
+   * first search used to leave zero chunks — a guaranteed refusal while the
+   * embedding and chat models were healthy (observed 2026-09-25). The
+   * original question is searched once instead.
+   */
+  it('falls back to one search when the planner throws before searching', async () => {
+    const plan = vi.fn().mockRejectedValue(new Error('upstream timeout'))
+    const search = vi.fn().mockResolvedValue([chunk('a', 0.6)])
+    const onPlanFailure = vi.fn()
+
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({
+        plan,
+        search,
+        fallbackQuery: 'the original question',
+        onPlanFailure,
+      }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-unavailable')
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(search).toHaveBeenCalledWith('the original question', undefined)
+    expect(out.searches).toBe(1)
+    expect(out.chunks).toHaveLength(1)
+    expect(out.steps[0]).toMatchObject({
+      query: 'the original question',
+      resultCount: 1,
+      bestSimilarity: 0.6,
+    })
+    expect(onPlanFailure).toHaveBeenCalledWith(
+      'planner unavailable before searching; falling back to one search',
+    )
+  })
+
+  it('falls back on an unusable first decision too', async () => {
+    const search = vi.fn().mockResolvedValue([chunk('a', 0.6)])
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({
+        plan: vi.fn().mockResolvedValue({ decision: null, tokens: 10 }),
+        search,
+        fallbackQuery: 'q',
+      }),
+      signal,
+    )
+    expect(search).toHaveBeenCalledWith('q', undefined)
+    expect(out.chunks).toHaveLength(1)
+  })
+
+  it('does not fall back once evidence exists', async () => {
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        decision: { action: 'search', query: 'leave' },
+        tokens: 10,
+      })
+      .mockRejectedValueOnce(new Error('502 upstream'))
+    const search = vi.fn().mockResolvedValue([chunk('a', 0.55)])
+
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({ plan, search, fallbackQuery: 'q' }),
+      signal,
+    )
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(search).toHaveBeenCalledWith('leave', undefined)
+    expect(out.searches).toBe(1)
+  })
+
+  it('does not fall back without a fallback query', async () => {
+    const search = vi.fn()
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({ plan: vi.fn().mockRejectedValue(new Error('down')), search }),
+      signal,
+    )
+    expect(search).not.toHaveBeenCalled()
+    expect(out.chunks).toEqual([])
+  })
+
   it('stops on a search decision with an empty query', async () => {
     const out = await runAgenticLoop(
       BUDGET,
