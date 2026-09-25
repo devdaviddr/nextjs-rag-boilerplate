@@ -1,12 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate opens `fix(deps)`/`chore(deps)` PRs. They carry the no-changelog label so the PR checks (.github/workflows/pr.yml) don't demand a CHANGELOG entry per bump; the release summarises dependency updates instead. Bots are exempt from the linked-issue rule.",
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
     ":semanticCommits",
     "helpers:pinGitHubActionDigests"
   ],
-  "labels": ["dependencies"],
+  "labels": ["dependencies", "no-changelog"],
   "schedule": ["before 6am on monday"],
   "packageRules": [
     {

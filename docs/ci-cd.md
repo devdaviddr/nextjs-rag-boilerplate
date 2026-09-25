@@ -182,6 +182,23 @@ A repository ruleset on `main` requires a pull request and these checks to
 pass before merge: **Lint · Typecheck · Unit**, **E2E (Playwright)** and
 **PR checks**. Nothing reaches `main` without them, including release commits.
 
+### Dependency updates and security scanning
+
+**Renovate** (`renovate.json`) opens dependency PRs every Monday before 6am:
+non-major updates grouped into one PR, majors one at a time with a `major`
+label, lock-file maintenance monthly, and security fixes as soon as an advisory
+lands (labelled `security`). It also keeps the pinned image digests in the
+compose files and CI current, and pins GitHub Actions to digests. Its PRs are
+labelled `dependencies` and `no-changelog` — the PR checks exempt bots from the
+linked-issue rule, and the release summarises dependency updates in one
+CHANGELOG line rather than one per bump. The Dependency Dashboard issue lists
+everything pending.
+
+**Secret scanning with push protection** is on: a push that contains a
+recognised credential is rejected before it reaches GitHub. **Dependabot
+alerts** are on for the Security tab; Dependabot's own update PRs are off so
+they don't duplicate Renovate's.
+
 ## Release fast-path
 
 A release is a `v*` tag placed on a `main` commit that CI **already built,
