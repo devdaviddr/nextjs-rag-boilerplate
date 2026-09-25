@@ -106,10 +106,16 @@ retention). Email is enabled against Mailpit (`EMAIL_ENABLED=true`,
 round-trips in `email-flow.spec.ts` actually run. `AUTH_SECRET` is a throwaway
 CI value.
 
-**The RAG suites need an inference key.** `NVIDIA_API_KEY` is passed from a
-repository secret of the same name. Without it, `rag.spec.ts` and the chat
-greeting assertion self-skip and the rest of the run is unaffected — which is
-the state of a fork that has not added the secret.
+**The RAG suites always skip in CI.** `rag.spec.ts`, `knowledge-bases.spec.ts`
+and the inference-dependent tests in `chat.spec.ts` self-skip without
+`NVIDIA_API_KEY`, and the E2E step sets it to an empty string on purpose: they
+call the rate-limited NIM endpoint, so they are not run on every PR. A
+repository secret of that name has no effect. Run them locally, with the key in
+`.env`, before merging a change to retrieval, ingestion or chat:
+
+```bash
+pnpm test:e2e tests/e2e/rag.spec.ts tests/e2e/knowledge-bases.spec.ts tests/e2e/chat.spec.ts
+```
 
 **Test isolation.** Each E2E test uses a unique client IP (via
 `CF-Connecting-IP`) so rate-limit buckets do not leak between tests — that is
