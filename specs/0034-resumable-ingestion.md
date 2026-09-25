@@ -1,10 +1,10 @@
 ---
 id: 0034
 title: Resumable ingestion
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.21.0
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-25
 ---
 
 # 0034 — Resumable ingestion

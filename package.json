@@ -1,6 +1,6 @@
 {
-  "name": "nextjs-fullstack-boilerplate",
-  "version": "0.20.1",
+  "name": "nextjs-rag-boilerplate",
+  "version": "0.21.0",
   "private": true,
   "license": "MIT",
   "type": "module",

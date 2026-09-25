@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-25
+
 ### Security
 
 - **Next.js and Auth.js patched past critical advisories**
@@ -990,7 +992,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-fullstack-boilerplate/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.20.1...v0.21.0
 [0.7.2]: https://github.com/devdaviddr/nextjs-fullstack-boilerplate/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/devdaviddr/nextjs-fullstack-boilerplate/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/devdaviddr/nextjs-fullstack-boilerplate/compare/v0.6.0...v0.7.0

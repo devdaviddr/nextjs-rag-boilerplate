@@ -1,10 +1,10 @@
 ---
 id: 0035
 title: Highlight the cited span, not just the page
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.21.0
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-25
 ---
 
 # 0035 — Highlight the cited span, not just the page

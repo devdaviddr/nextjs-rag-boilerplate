@@ -1,10 +1,10 @@
 ---
 id: 0039
 title: Find a document's structure in its text layer
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.21.0
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-25
 ---
 
 # 0039 — Find a document's structure in its text layer

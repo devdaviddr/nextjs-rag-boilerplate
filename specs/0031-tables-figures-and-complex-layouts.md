@@ -1,10 +1,10 @@
 ---
 id: 0031
 title: Index tables, figures and complex layouts
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.21.0
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-25
 ---
 
 # 0031 — Index tables, figures and complex layouts
