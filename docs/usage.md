@@ -135,25 +135,29 @@ Everything is a `pnpm` script. The ones you will use daily are `dev`, `test`
 and the pre-push verify chain; the rest are here so you do not have to go
 digging in `package.json`.
 
-| Command                                                                 | Description                              |
-| ----------------------------------------------------------------------- | ---------------------------------------- |
-| `pnpm dev`                                                              | Start the dev server (Turbopack)         |
-| `pnpm build` / `pnpm start`                                             | Production build / serve                 |
-| `pnpm lint` · `pnpm lint:fix`                                           | ESLint                                   |
-| `pnpm typecheck`                                                        | `tsc --noEmit`                           |
-| `pnpm format` · `pnpm format:check`                                     | Prettier                                 |
-| `pnpm test` · `pnpm test:watch` · `pnpm test:coverage`                  | Vitest units                             |
-| `pnpm test:e2e` · `pnpm test:e2e:ui`                                    | Playwright E2E                           |
-| `pnpm db:generate` · `db:migrate` · `db:push` · `db:studio` · `db:seed` | Database (see [Database](database.md))   |
-| `pnpm rag:eval`                                                         | Retrieval evaluation (see [RAG](rag.md)) |
-| `pnpm rag:eval --compare`                                               | Fixed pipeline vs agentic, side by side  |
-| `pnpm rag:eval --label x --baseline y`                                  | Save a run; fail on a refusal regression |
-| `pnpm rag:eval --no-ingest`                                             | Reuse what is already indexed            |
-| `pnpm rag:corpus`                                                       | Rebuild the eval corpus PDFs             |
-| `pnpm gen:icons` · `pnpm gen:og`                                        | Regenerate PWA icons · OG share image    |
-| `pnpm docker:db`                                                        | Start the local Postgres container       |
-| `pnpm docker:minio`                                                     | Start local MinIO + bucket init          |
-| `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)      |
+| Command                                                                 | Description                                  |
+| ----------------------------------------------------------------------- | -------------------------------------------- |
+| `pnpm dev`                                                              | Start the dev server (Turbopack)             |
+| `pnpm build` / `pnpm start`                                             | Production build / serve                     |
+| `pnpm lint` · `pnpm lint:fix`                                           | ESLint                                       |
+| `pnpm typecheck`                                                        | `tsc --noEmit`                               |
+| `pnpm format` · `pnpm format:check`                                     | Prettier                                     |
+| `pnpm test` · `pnpm test:watch` · `pnpm test:coverage`                  | Vitest units                                 |
+| `pnpm test:e2e` · `pnpm test:e2e:ui`                                    | Playwright E2E                               |
+| `pnpm db:generate` · `db:migrate` · `db:push` · `db:studio` · `db:seed` | Database (see [Database](database.md))       |
+| `pnpm rag:eval`                                                         | Retrieval evaluation (see [RAG](rag.md))     |
+| `pnpm rag:eval --compare`                                               | Fixed pipeline vs agentic, side by side      |
+| `pnpm rag:eval --label x --baseline y`                                  | Save a run; fail on a refusal regression     |
+| `pnpm rag:eval --no-ingest`                                             | Reuse what is already indexed                |
+| `pnpm rag:corpus`                                                       | Rebuild the eval corpus PDFs                 |
+| `pnpm gen:icons` · `pnpm gen:og`                                        | Regenerate PWA icons · OG share image        |
+| `pnpm specs:index` · `pnpm specs:check`                                 | Regenerate · verify the spec index           |
+| `pnpm release:next`                                                     | Suggest the next version from commits        |
+| `pnpm release:check`                                                    | Check a release before tagging it            |
+| `pnpm pr:check`                                                         | The PR check, locally (`PR_TITLE`/`PR_BODY`) |
+| `pnpm docker:db`                                                        | Start the local Postgres container           |
+| `pnpm docker:minio`                                                     | Start local MinIO + bucket init              |
+| `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)          |
 
 Run this before every push. CI runs the same gate on every PR, but catching a
 failure locally is faster:

@@ -30,6 +30,9 @@ pnpm test | test:e2e                     # Vitest (tests/unit) · Playwright (te
 pnpm docker:db                           # local Postgres
 pnpm db:generate | db:migrate | db:seed | db:studio
 pnpm gen:icons                           # regenerate PWA icons
+pnpm specs:index | specs:check           # regenerate · verify the spec index
+pnpm release:next | release:check        # suggest the next version · check a release
+pnpm pr:check                            # the PR check, locally (PR_TITLE / PR_BODY env)
 ```
 
 Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
@@ -75,6 +78,33 @@ Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
   `src/components/shell/`; nav is data-driven from `src/lib/shell/nav.ts`.
 - **Structured logging** via `src/lib/logger.ts` — prefer it over `console.*`.
 
+## Work tracking
+
+All work is tracked as issues in this repo on the private project board
+**"devdaviddr — Public repos"** (<https://github.com/users/devdaviddr/projects/11>).
+Do not start a change that has no issue.
+
+- **Find or file the issue first.** Product work is a tree: `[Pillar]` →
+  `[Capability]` (users can …) → `[Feature]` (one user job), each linked to its
+  parent as a sub-issue. Work outside the tree is a `[Bug]`, `[Change]`,
+  `[Chore]` (internal: deps, tooling, refactors, docs) or `[Spike]`
+  (time-boxed question ending in a decision). Title prefix and label match the
+  kind. A Feature for new behaviour needs a spec first; its body names it
+  (`Spec: specs/NNNN-slug.md`). If the `github-issue` skill is available, use
+  it — it holds the board field ids and body templates.
+- **Board fields.** New issues go on the board with Status `Todo`, and a
+  Priority and Size when known. Move the issue to `In Progress` when work
+  starts. Closing the issue (via the PR) moves it to `Done`.
+- **Milestones** name the release an issue is planned for (`v0.21.0`).
+- **Branch** off `main` as `<type>/<issue#>-<slug>` — `feat/16-reranking`,
+  `fix/18-minio-images`, `chore/19-release-process`.
+- **PR** into `main` with a Conventional Commit title, `Closes #N` (or
+  `Part of #N`) in the body, and the template filled in. The `PR checks` job
+  fails without the issue link, and fails a `feat`/`fix`/`perf`/`revert` or
+  breaking PR that doesn't touch `CHANGELOG.md` unless it has the
+  `no-changelog` label.
+- **Never push to `main` directly.** A ruleset requires a PR with green CI.
+
 ## Git & workflow
 
 - **Spec-driven.** Non-trivial features start with a spec in [`specs/`](specs/)
@@ -82,26 +112,53 @@ Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
   and `Rejected` for a spec that stops being the plan of record). There is no
   `Accepted` state — `scripts/specs-index.mjs` rejects it and `pnpm specs:check`
   fails. A spec stays `Proposed` while it is implemented and flips to `Shipped`
-  in the release commit. See [`specs/README.md`](specs/README.md).
-- **Trunk-based.** `main` is the only long-lived branch (no `develop`).
-  Feature work branches off `main` as `feature/<slug>` and PRs back into
-  `main`. A **release is a `vX.Y.Z` tag on a `main` commit** — bump the version,
-  update `CHANGELOG.md`, then tag. The tagged commit can be a `Release vX.Y.Z`
-  merge commit (the style through v0.13.6) or a plain commit on `main` (v0.14.0+
-  tag directly, no release-merge commit); both are fine — the tag is what
-  defines the release. CI (`ci.yml`) publishes the app + migrate images from
-  every green `main`, and a `v*` tag re-tags that image as the semver and
-  `stable` and creates the GitHub Release from `CHANGELOG.md`. `deploy.yml` is
-  skipped unless the repo variable `SELF_HOSTED_DEPLOY` is `'true'` (it is
-  unset here, and this repo is public, where enabling it is unsafe); the box's
-  pull timer deploys instead — see [`docs/ci-cd.md`](docs/ci-cd.md) and
-  [`docs/workflow.md`](docs/workflow.md).
-  Pre-1.0.
-- **Conventional Commits**, enforced by a commitlint `commit-msg` hook. Keep
-  commit **body lines ≤ 100 characters**. A `pre-commit` hook runs lint-staged.
-- Update `CHANGELOG.md` (Keep a Changelog) for user-facing changes.
-- **Do NOT credit AI in git.** Never add `Co-Authored-By: Claude`,
-  "Generated with…", or any AI/assistant trailer to commits or PR descriptions.
+  in the release PR. See [`specs/README.md`](specs/README.md).
+- **Trunk-based.** `main` is the only long-lived branch (no `develop`). Work
+  branches off `main` (naming above) and PRs back into it. CI (`ci.yml`)
+  publishes the app + migrate images from every green `main`.
+- **Conventional Commits**, enforced by a commitlint `commit-msg` hook locally
+  and on every PR commit and title in CI. Keep commit **body lines ≤ 100
+  characters**. A `pre-commit` hook runs lint-staged.
+- **CHANGELOG.md** (Keep a Changelog): every user-facing change adds an entry
+  under `[Unreleased]` in the same PR, not at release time.
+- **Docs move with the code.** A PR that changes behaviour, setup, an env var,
+  a command or a route updates the page that owns it: RAG → `docs/rag.md`,
+  schema → `docs/database.md`, env vars → `.env.example` and
+  `docs/usage.md`, auth/OAuth/email → `docs/features.md`, `docs/oauth.md`,
+  `docs/email.md`, deploy/CI → `docs/self-hosting.md`, `docs/ci-cd.md`,
+  `docs/workflow.md`. Also update `CLAUDE.md` when a convention here changes.
+
+## Releasing
+
+Run the `/ship` skill (`.claude/skills/ship/SKILL.md`); it walks every step
+below. A **release is a `vX.Y.Z` tag on a `main` commit**, made in two parts:
+
+1. **Release PR** from `release/vX.Y.Z`: `pnpm release:next` suggests the
+   version from the Conventional Commits since the last tag; bump
+   `package.json`; move `[Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD`
+   (leaving an empty `[Unreleased]`); flip every spec whose criteria are all
+   ticked to `Shipped` with `release: vX.Y.Z` and run `pnpm specs:index`;
+   update version references in docs. `pnpm release:check` must pass. Title
+   `chore(release): vX.Y.Z`.
+2. **Tag** the merge commit once `main` is green:
+   `git tag -a vX.Y.Z -m "<short title>" && git push origin vX.Y.Z`. CI's
+   `release` job re-runs `release:check`, re-tags the image as the semver and
+   `stable`, and creates the GitHub Release from the CHANGELOG section. Then
+   close the milestone.
+
+**Versioning** (SemVer, pre-1.0 while the version starts `0.`): a breaking
+change or a `feat` bumps the minor, anything else the patch. From 1.0: breaking
+→ major, `feat` → minor, else patch. `release:next` applies these rules.
+
+`deploy.yml` is skipped unless the repo variable `SELF_HOSTED_DEPLOY` is
+`'true'` (it is unset here, and this repo is public, where enabling it is
+unsafe); the box's pull timer deploys instead — see
+[`docs/ci-cd.md`](docs/ci-cd.md) and [`docs/workflow.md`](docs/workflow.md).
+
+## Attribution
+
+**Do NOT credit AI in git.** Never add `Co-Authored-By: Claude`, "Generated
+with…", or any AI/assistant trailer to commits or PR descriptions.
 
 ## graphify
 

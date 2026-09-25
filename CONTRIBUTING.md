@@ -17,29 +17,49 @@ pnpm dev
 
 ## Workflow
 
-1. For a non-trivial feature, write a spec first — copy
+1. **Start from an issue.** Every change is the work of an issue in this repo,
+   tracked on the project board. Find it, or file one: a `[Feature]` for new
+   user-facing behaviour (under its `[Capability]`), or a `[Bug]`, `[Change]`,
+   `[Chore]` or `[Spike]`. Move it to **In Progress** when you start.
+2. For a non-trivial feature, write a spec first — copy
    [`specs/TEMPLATE.md`](specs/TEMPLATE.md) and open it as `Proposed`
    (see [`specs/README.md`](specs/README.md)).
-2. Branch off `main`: `feature/<slug>`. There is no `develop` branch — `main`
-   is the only long-lived branch.
-3. Make your change with tests where it makes sense.
-4. Run the full gate locally before pushing:
+3. Branch off `main` as `<type>/<issue#>-<slug>`, e.g. `feat/16-reranking` or
+   `fix/18-minio-images`. There is no `develop` branch — `main` is the only
+   long-lived branch, and it only changes through pull requests.
+4. Make your change with tests where it makes sense. In the same branch, add a
+   `CHANGELOG.md` entry under `[Unreleased]` for anything a user of the
+   template can notice, and update the docs page that owns what you changed.
+5. Run the full gate locally before pushing:
 
    ```bash
    pnpm lint && pnpm typecheck && pnpm test && pnpm build
    ```
 
-5. Open a pull request into `main`. CI runs the same gate plus the Playwright
-   suite on it (see [docs/ci-cd.md](docs/ci-cd.md)); merge once it is green.
-   To cut a release, bump the version, set the
-   spec to `Shipped`, update `CHANGELOG.md`, and push a `vX.Y.Z` tag on `main`
-   — the tag defines the release (there's no required `Release vX.Y.Z` merge
-   commit; v0.14.0+ tag a plain commit directly). Before tagging, walk the
-   release checklist in
-   [Feature → Production § 5](docs/workflow.md#5--cut-a-release) — spec
-   statuses, acceptance criteria, `pnpm specs:check`, changelog entry. CI turns
-   the tag into a release image and a GitHub Release, and the box's pull timer
-   picks it up (see [Feature → Production](docs/workflow.md) steps 4–6).
+6. Open a pull request into `main` and fill in the template. The title is a
+   Conventional Commit header, and the body says `Closes #N` (or `Part of #N`).
+   CI runs the gate and the Playwright suite, and the **PR checks** job checks
+   the title, every commit message, the issue link, and — for `feat`, `fix`,
+   `perf`, `revert` or breaking changes — that `CHANGELOG.md` changed (add the
+   `no-changelog` label if users cannot notice the change). Merge once it is
+   all green. See [docs/ci-cd.md](docs/ci-cd.md).
+
+## Releasing
+
+Releases follow [Feature → Production § 5](docs/workflow.md#5--cut-a-release),
+and the `/ship` skill in `.claude/skills/ship/` walks it for Claude Code. In
+short: a `release/vX.Y.Z` PR bumps `package.json`, moves `[Unreleased]` into
+`## [X.Y.Z] - YYYY-MM-DD`, flips finished specs to `Shipped` and passes
+`pnpm release:check`; after it merges, an annotated `vX.Y.Z` tag on the merge
+commit makes CI publish the release image and the GitHub Release.
+
+### Versioning
+
+[Semantic Versioning](https://semver.org). While the version is `0.x`, a
+breaking change or a new feature bumps the minor and anything else bumps the
+patch. From `1.0.0`: breaking → major, `feat` → minor, everything else → patch.
+`pnpm release:next` reads the Conventional Commits since the last tag and
+suggests the version by these rules.
 
 ## Commit messages
 

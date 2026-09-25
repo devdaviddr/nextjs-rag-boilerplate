@@ -1,0 +1,55 @@
+name: PR
+
+# Checks a pull request against the process in CONTRIBUTING.md, separately from
+# ci.yml so that editing the title or description, or changing a label, re-runs
+# this in seconds without re-running the build and E2E suite.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    name: PR checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # commitlint and the CHANGELOG check both need the PR's full range.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Title, body and labels are passed through env, never interpolated into
+      # the script: they are attacker-controlled on a fork PR.
+      - name: Commit messages follow Conventional Commits
+        run: pnpm commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Title follows Conventional Commits
+        run: printf '%s\n' "$PR_TITLE" | pnpm commitlint --verbose
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+
+      - name: Linked issue and CHANGELOG entry
+        run: pnpm pr:check
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
