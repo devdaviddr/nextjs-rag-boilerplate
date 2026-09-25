@@ -509,6 +509,11 @@ export async function POST(request: Request) {
           return
         }
 
+        // Drafting ends here. The metrics clock stops now, not after
+        // verification: tokens/sec and total time describe the answer the user
+        // watched stream in, not the post-hoc check that follows it (#42).
+        const draftedAt = Date.now()
+
         // Verify citations before the answer is committed (spec 0029 FR6).
         //
         // This runs AFTER streaming rather than before it. Verifying first
@@ -550,7 +555,7 @@ export async function POST(request: Request) {
           completionTokens,
           startedAt,
           firstTokenAt,
-          finishedAt: Date.now(),
+          finishedAt: draftedAt,
           sourceCount: citations.length,
           retrieval: retrievalMode,
         })

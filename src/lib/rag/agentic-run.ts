@@ -323,6 +323,18 @@ export async function runAgenticRetrieval(input: {
  * is the similarity floor, which has already run. A flaky verification call
  * must not be able to turn a correctly-grounded answer into a refusal.
  */
+/**
+ * Deadline for citation verification, one attempt (#42).
+ *
+ * Verification runs after the answer has streamed and fails open (no verdict =
+ * nothing stripped), but the stream — and so the composer — stays open until
+ * it returns. With the client defaults (60s x 4 attempts) a hanging planner
+ * kept the send button locked for 92–113s after the answer was on screen.
+ * 12s covers the planner's recorded median (8.4s, spec 0036) while bounding
+ * the worst case to one short wait.
+ */
+export const VERIFY_TIMEOUT_MS = 12_000
+
 export async function verifyCitations(
   answer: string,
   chunks: readonly RetrievedChunk[],
@@ -348,6 +360,8 @@ export async function verifyCitations(
         maxTokens: 500,
         temperature: 0,
         signal,
+        timeoutMs: VERIFY_TIMEOUT_MS,
+        maxAttempts: 1,
       },
     )
     return parseVerdict(choice?.message?.content)

@@ -113,13 +113,20 @@ async function post(
     stream = false,
     signal,
     timeoutMs = REQUEST_TIMEOUT_MS,
-  }: { stream?: boolean; signal?: AbortSignal; timeoutMs?: number } = {},
+    maxAttempts = MAX_ATTEMPTS,
+  }: {
+    stream?: boolean
+    signal?: AbortSignal
+    timeoutMs?: number
+    maxAttempts?: number
+  } = {},
 ): Promise<Response> {
+  const attempts = Math.min(MAX_ATTEMPTS, Math.max(1, Math.floor(maxAttempts)))
   const key = requireKey()
   const url = `${env.RAG_LLM_BASE_URL.replace(/\/$/, '')}${path}`
 
   let lastDetail = 'no response'
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     let response: Response
     const deadline = withDeadline(signal, timeoutMs)
     try {
@@ -139,8 +146,7 @@ async function post(
       if (signal?.aborted) throw error
 
       lastDetail = `no response within ${timeoutMs}ms`
-      if (attempt === MAX_ATTEMPTS - 1)
-        throw new RagUpstreamError(0, lastDetail)
+      if (attempt === attempts - 1) throw new RagUpstreamError(0, lastDetail)
       logger.warn('Inference request timed out', {
         timeoutMs,
         attempt: attempt + 1,
@@ -168,7 +174,7 @@ async function post(
 
     if (
       (!RETRYABLE.has(response.status) && !transientNotFound) ||
-      attempt === MAX_ATTEMPTS - 1
+      attempt === attempts - 1
     ) {
       throw new RagUpstreamError(response.status, lastDetail)
     }
@@ -290,6 +296,12 @@ interface CompletionResponse {
 export interface CompletionOptions {
   /** Per-attempt deadline. Defaults to `REQUEST_TIMEOUT_MS`. */
   timeoutMs?: number
+  /**
+   * Attempts including the first, capped at the client's own maximum (4, the
+   * default). A caller that fails open and has a user waiting — citation
+   * verification — passes 1: a retry only adds another full deadline (#42).
+   */
+  maxAttempts?: number
   /** Defaults to the chat model; the planner passes `RAG_PLANNER_MODEL`. */
   model?: string
   /** Advertise tools. With these present, reasoning models split their
@@ -333,6 +345,9 @@ export async function createChatCompletion(
     signal: options.signal,
     ...(options.timeoutMs !== undefined
       ? { timeoutMs: options.timeoutMs }
+      : {}),
+    ...(options.maxAttempts !== undefined
+      ? { maxAttempts: options.maxAttempts }
       : {}),
   })
   const json = (await response.json()) as CompletionResponse
