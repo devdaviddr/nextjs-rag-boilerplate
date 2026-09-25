@@ -6,10 +6,10 @@
 running live on your own box, in order, with nothing skipped. Each step links to
 the doc that owns the detail — this page is the map, not a third copy.
 
-The short version: you branch off `main`, run the quality gate yourself (there
-is no CI in this fork), merge, build and push a container image by hand, tag a
-release, and a small timer on your box notices the new image and updates itself.
-Nothing ever reaches into the box; it only ever reaches out.
+The short version: you branch off `main`, open a PR that CI checks, merge, let
+CI publish the image, tag a release, and a small timer on your box notices the
+new image and updates itself. Nothing ever reaches into the box; it only ever
+reaches out.
 
 > **Not GitFlow.** This repo is intentionally **trunk-based**: `main` is the only
 > long-lived branch — no `develop`, `release`, or `hotfix` branches. Feature
@@ -17,15 +17,15 @@ Nothing ever reaches into the box; it only ever reaches out.
 > commit. If "gitflow" is what you are picturing, this is that idea simplified
 > to one branch.
 
-Here is the whole path. The starred step is the one that used to be automatic
-and now is yours to run.
+Here is the whole path.
 
 ```text
-feature/<slug> ──PR──▶ main
+feature/<slug> ──PR──▶ main      (CI: quality + e2e must pass)
                         │
-         ★ you build & push the images   (CI used to do this)
+          CI publishes the app + migrate images to GHCR
                         │
-              push a v* tag  ──▶  release cut (tag + CHANGELOG)
+              push a v* tag  ──▶  CI re-tags the image as the semver + stable,
+                        │         and creates the GitHub Release from CHANGELOG
                         │
       Mac mini (Tier B timer, <=60s poll) pulls, migrates, restarts
                         │
@@ -61,8 +61,8 @@ Full detail: [CONTRIBUTING.md → Workflow](../CONTRIBUTING.md#workflow).
 pnpm dev
 ```
 
-Before you push, run the gate. **Nothing runs it for you** — this fork has no
-CI, so this command is the entire quality bar:
+Before you push, run the gate. CI runs it again on the PR, but a local failure
+is quicker to fix:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
@@ -81,35 +81,26 @@ suites cover.
 
 ## 3 — Open a PR into `main`
 
-There is no `develop` branch to target — PRs go straight into `main`. There are
-also no status checks, so the PR is a review step, not a gate. Merge once you
-have run step 2 and a human has looked at it.
+There is no `develop` branch to target — PRs go straight into `main`. CI runs
+`quality` (format, lint, typecheck, unit tests with coverage, `specs:check`) and
+`e2e` (Playwright against Postgres, MinIO and Mailpit), and builds both image
+architectures without pushing. Merge once it is green and a human has looked at
+it. Job by job detail: [CI/CD](ci-cd.md).
 
-What the removed pipeline used to run on every PR, job by job, is kept as a
-record in [CI/CD](ci-cd.md).
+## 4 — CI publishes the images
 
-## 4 — Build and push the images
+When the merge lands on `main`, CI runs the same checks again and, once both
+`quality` and `e2e` are green, publishes two multi-arch images to GHCR, tagged
+`sha-<short>` and `latest`:
 
-Nothing is built or published when you merge. The `docker` / `docker-merge` jobs
-that pushed `ghcr.io/<owner>/<repo>` and `.../migrate` went with `ci.yml`, so
-**there is currently no image for a deploy to pull.** Build both yourself:
+- `ghcr.io/<owner>/<repo>` — the `runner` target, the slim production app.
+- `ghcr.io/<owner>/<repo>/migrate` — the `builder` target, the migrator.
 
-```bash
-docker build --target runner  -t ghcr.io/<owner>/<repo>:stable .
-docker build --target builder -t ghcr.io/<owner>/<repo>/migrate:stable .
-docker push ghcr.io/<owner>/<repo>:stable
-docker push ghcr.io/<owner>/<repo>/migrate:stable
-```
-
-Two images, because one cannot do both jobs. The `runner` target is the slim
-production app and has no source or `tsx` in it, so it physically cannot run a
-migration. The `builder` target is the migrator: the deploy runs `pnpm
-db:migrate` from it as a one-shot container **before** the new app starts, which
-is how a schema change — a new table, a new vector index — reaches a running box
-without you touching its database by hand.
-
-Tag those images with whatever your box tracks. `stable` above matches the
-recommended default in step 6.
+Two images, because one cannot do both jobs. The `runner` target has no source
+or `tsx` in it, so it physically cannot run a migration. The deploy runs `pnpm
+db:migrate` from the `builder` image as a one-shot container **before** the new
+app starts, which is how a schema change — a new table, a new vector index —
+reaches a running box without you touching its database by hand.
 
 ## 5 — Cut a release
 
@@ -134,18 +125,13 @@ git tag -a vX.Y.Z -m "short title"
 git push origin main --tags
 ```
 
-The tag is what defines the release. It no longer triggers anything: the
-`release` job that re-tagged the image and moved the floating `stable` tag was
-part of `ci.yml`. `deploy.yml` still listens for `v*` tags, but it is gated
-behind the repository variable `SELF_HOSTED_DEPLOY` (currently `false`) — and
-even switched on it would look for an image nobody built. Restore an
-image-publishing job before turning it on. See
-[CI/CD → What is still in `.github/workflows/`](ci-cd.md#what-is-still-in-githubworkflows).
+The tag is what defines the release. It triggers `ci.yml`'s `release` job,
+which waits for the image `main` already built for that commit, re-tags it with
+the semver, moves the floating `stable` tag (~30s, no rebuild) and creates the
+GitHub Release with this version's `CHANGELOG.md` section as its notes. See
+[CI/CD → Release fast-path](ci-cd.md#release-fast-path).
 
 ## 6 — The box picks it up
-
-> This step needs an image to exist under the tag your box tracks — so do step 4
-> before you expect anything to happen.
 
 A Mac mini (or any always-on host) running the recommended **Tier B** pull timer
 notices the new image digest on its next poll (≤60s) and runs `make deploy`
@@ -209,19 +195,18 @@ semver never moves, so you know precisely what is running.
 
 ## Where things live, at a glance
 
-| Concern                                         | Doc                                                                        |
-| ----------------------------------------------- | -------------------------------------------------------------------------- |
-| Branching, commits, PR process                  | [CONTRIBUTING.md](../CONTRIBUTING.md)                                      |
-| Scripts, testing, environment variables         | [Usage & Development](usage.md)                                            |
-| What CI used to run (removed, kept as a record) | [CI/CD](ci-cd.md)                                                          |
-| Cloudflare Tunnel setup, `make setup`           | [Self-hosting](self-hosting.md)                                            |
-| Mac mini boot persistence & sizing              | [Self-hosting → Mac mini](self-hosting.md#running-on-a-mac-mini-always-on) |
-| Terraform / dashboard tunnel commands           | [Deployment](deployment.md)                                                |
-| Nightly backups & restore                       | [Backups](backups.md)                                                      |
-| Troubleshooting a stuck deploy                  | [Self-hosting → Troubleshooting](self-hosting.md#troubleshooting)          |
+| Concern                                 | Doc                                                                        |
+| --------------------------------------- | -------------------------------------------------------------------------- |
+| Branching, commits, PR process          | [CONTRIBUTING.md](../CONTRIBUTING.md)                                      |
+| Scripts, testing, environment variables | [Usage & Development](usage.md)                                            |
+| What CI runs, job by job                | [CI/CD](ci-cd.md)                                                          |
+| Cloudflare Tunnel setup, `make setup`   | [Self-hosting](self-hosting.md)                                            |
+| Mac mini boot persistence & sizing      | [Self-hosting → Mac mini](self-hosting.md#running-on-a-mac-mini-always-on) |
+| Terraform / dashboard tunnel commands   | [Deployment](deployment.md)                                                |
+| Nightly backups & restore               | [Backups](backups.md)                                                      |
+| Troubleshooting a stuck deploy          | [Self-hosting → Troubleshooting](self-hosting.md#troubleshooting)          |
 
 ---
 
-**Next:** [CI/CD](ci-cd.md) — why the automated pipeline is gone, and the full
-record of what it did, including the release fast-path this playbook's step 5
-used to rely on.
+**Next:** [CI/CD](ci-cd.md) — what each CI job runs, and the release fast-path
+behind step 5.

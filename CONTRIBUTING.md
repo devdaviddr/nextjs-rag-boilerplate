@@ -29,19 +29,17 @@ pnpm dev
    pnpm lint && pnpm typecheck && pnpm test && pnpm build
    ```
 
-5. Open a pull request into `main`. There is no CI in this fork and no status
-   checks — the gate in step 4 is yours to run (see
-   [docs/ci-cd.md](docs/ci-cd.md)). To cut a release, bump the version, set the
+5. Open a pull request into `main`. CI runs the same gate plus the Playwright
+   suite on it (see [docs/ci-cd.md](docs/ci-cd.md)); merge once it is green.
+   To cut a release, bump the version, set the
    spec to `Shipped`, update `CHANGELOG.md`, and push a `vX.Y.Z` tag on `main`
    — the tag defines the release (there's no required `Release vX.Y.Z` merge
    commit; v0.14.0+ tag a plain commit directly). Before tagging, walk the
    release checklist in
    [Feature → Production § 5](docs/workflow.md#5--cut-a-release) — spec
-   statuses, acceptance criteria, `pnpm specs:check`, changelog entry. The tag
-   no longer triggers a
-   deploy on its own: build and push the images yourself, then the box's pull
-   timer picks them up (see
-   [Feature → Production](docs/workflow.md) steps 4–6).
+   statuses, acceptance criteria, `pnpm specs:check`, changelog entry. CI turns
+   the tag into a release image and a GitHub Release, and the box's pull timer
+   picks it up (see [Feature → Production](docs/workflow.md) steps 4–6).
 
 ## Commit messages
 

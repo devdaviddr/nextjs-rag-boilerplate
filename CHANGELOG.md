@@ -171,6 +171,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Changed
 
+- **CI is back** ([#12](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/12)).
+  `.github/workflows/ci.yml` runs format, lint, typecheck, unit tests with
+  coverage, `specs:check` and the Playwright suite on every PR and push to
+  `main`, publishes the multi-arch app and migrate images to GHCR from a green
+  `main`, and turns a `v*` tag into a re-tagged image and a GitHub Release. A
+  release tag ships something again. MinIO in CI uses the Chainguard images,
+  because `minio/minio` and `minio/mc` no longer pull
+  ([#18](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/18)).
+  CodeQL stays off.
 - **Scanned PDFs are no longer rejected outright** when cracking is enabled.
   With it off, the existing rejection is unchanged.
 

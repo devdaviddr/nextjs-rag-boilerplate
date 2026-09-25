@@ -347,10 +347,10 @@ the compose files, the backup sidecars and the tunnel.
   a `backup-verify.sh` doctor, and a tested restore runbook. See [Backups](backups.md).
 - **Cloudflare Tunnel deployment** — `make setup` takes a fresh clone to a live HTTPS URL
   with no open ports; `make deploy` is continuous deployment after that. See [Self-hosting](self-hosting.md) and [Deployment](deployment.md).
-- **No CI pipeline.** `ci.yml` was removed from this fork; the quality gate is the
-  pre-commit hook plus `pnpm lint && pnpm typecheck && pnpm test && pnpm build` before a push. The one workflow that remains is an
-  opt-in self-hosted deploy gated behind the `SELF_HOSTED_DEPLOY` repo variable. See [CI/CD](ci-cd.md) for the
-  record of the former pipeline.
+- **CI pipeline** — GitHub Actions runs format, lint, typecheck, unit tests with
+  coverage, `specs:check` and the Playwright suite on every PR and push to `main`,
+  then publishes multi-arch app + migrate images to GHCR; a `v*` tag re-tags the
+  tested image in ~30s and creates the GitHub Release. See [CI/CD](ci-cd.md).
 
 See [Usage & Development](usage.md) and [Deployment](deployment.md).
 

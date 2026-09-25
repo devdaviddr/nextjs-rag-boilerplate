@@ -225,22 +225,12 @@ version at it. So both paths below are **pull-based**: the box reaches out for
 the new image; nothing reaches in. Tier B does the pull on a timer. Tier C lets
 GitHub trigger it, at the cost of running a GitHub runner on your network.
 
-> **The image-publishing pipeline was removed from this fork.** `ci.yml` used to
-> publish `ghcr.io/<owner>/<repo>` (the app) and `.../migrate` (the migrator —
-> the app image can't run migrations itself) on every green merge, and a `v*`
-> tag re-tagged that image as `stable` in ~30s. None of that runs now. Both
-> deploy tiers below still work exactly as described, but **you build and push
-> the two images yourself** before the box has anything to pull:
->
-> ```bash
-> docker build --target runner  -t ghcr.io/<owner>/<repo>:stable .
-> docker build --target builder -t ghcr.io/<owner>/<repo>/migrate:stable .
-> docker push ghcr.io/<owner>/<repo>:stable
-> docker push ghcr.io/<owner>/<repo>/migrate:stable
-> ```
->
-> What the pipeline did, and how to restore it, is recorded in
-> [CI/CD](ci-cd.md) and [spec 0024](../specs/0024-faster-time-to-deploy.md).
+> **Where the images come from.** `ci.yml` publishes `ghcr.io/<owner>/<repo>`
+> (the app) and `.../migrate` (the migrator — the app image can't run
+> migrations itself) on every green merge to `main`, and a `v*` tag re-tags that
+> image as the semver and `stable` in ~30s. Both deploy tiers below pull those
+> images. See [CI/CD](ci-cd.md) and
+> [spec 0024](../specs/0024-faster-time-to-deploy.md).
 
 ### Tier B (recommended) — pull with `make deploy`
 

@@ -155,8 +155,8 @@ digging in `package.json`.
 | `pnpm docker:minio`                                                     | Start local MinIO + bucket init          |
 | `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)      |
 
-Run this before every push. It is the whole quality gate — there is no CI
-pipeline to catch what you miss:
+Run this before every push. CI runs the same gate on every PR, but catching a
+failure locally is faster:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
@@ -268,19 +268,20 @@ emergency: `git commit --no-verify`.
 
 ## Continuous integration
 
-There is no CI pipeline. `ci.yml` was removed deliberately; the quality gate is
-the pre-commit hook plus the checklist below, run locally before a push:
+`.github/workflows/ci.yml` runs on every PR and push to `main`: format, lint,
+typecheck, unit tests with coverage, `specs:check`, and the Playwright suite
+against Postgres, MinIO and Mailpit. A green `main` publishes the app and
+migrate images to GHCR, and a `v*` tag re-tags them and creates the GitHub
+Release. Run the same gate locally before a push:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
-The one workflow that remains, `.github/workflows/deploy.yml`, is an opt-in
-self-hosted deploy triggered by a `v*` tag — and it is gated behind the repo
-variable `SELF_HOSTED_DEPLOY`, which is `false`. With no image-publishing job
-left, a release tag currently ships nothing; restore a build/push job before
-enabling it. [CI/CD](ci-cd.md) keeps the full record of what the pipeline used
-to do, and [Deployment](deployment.md) covers how deploys work now.
+`.github/workflows/deploy.yml` is an opt-in self-hosted deploy triggered by a
+`v*` tag, gated behind the repo variable `SELF_HOSTED_DEPLOY` (unset). Job by job
+detail is in [CI/CD](ci-cd.md), and [Deployment](deployment.md) covers how
+deploys reach the box.
 
 ## Extending
 

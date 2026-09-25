@@ -96,10 +96,9 @@ image (`make deploy`), macOS boot persistence for an always-on Mac mini
 **[Self-hosting](self-hosting.md)** · **[Deployment](deployment.md)** ·
 **[Backups](backups.md)**
 
-> **No CI in this fork.** The `CI` and `CodeQL` GitHub Actions workflows were
-> deleted; only `deploy.yml` remains, and it only runs when the repository
-> variable `SELF_HOSTED_DEPLOY` is `'true'`. Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
-> yourself before pushing. The record of what the pipeline did is kept in
+> **CI.** GitHub Actions runs format, lint, typecheck, unit tests, `specs:check`
+> and the Playwright suite on every PR, publishes the app and migrate images to
+> GHCR from `main`, and turns a `v*` tag into a release. See
 > **[CI/CD](ci-cd.md)**.
 
 ## Where to start
