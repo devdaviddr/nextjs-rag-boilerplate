@@ -6,3 +6,10 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+# Security floors for transitive dependencies that the direct ones have not
+# picked up yet (#11). Remove an entry once `pnpm why <pkg>` shows every path
+# already resolving above it.
+overrides:
+  browserslist: '>=4.28.7'
+  baseline-browser-mapping: '>=2.11.0'
