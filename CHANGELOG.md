@@ -20,6 +20,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   searches the original question once in that case, so an outage degrades to
   the fixed pipeline's retrieval and answers stay grounded. It still waits out
   the planner's budget first.
+- **GitHub Release titles use the tag message again**
+  ([#33](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/33)). The
+  release job read the subject of the commit the tag points at, because
+  `actions/checkout` fetches a tag as a lightweight ref, so v0.21.0 was titled
+  "Merge pull request #31 …". It now fetches the annotated tag before reading
+  its message.
 
 ## [0.21.0] - 2026-09-25
 

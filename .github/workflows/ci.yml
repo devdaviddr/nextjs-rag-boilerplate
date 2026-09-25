@@ -409,10 +409,18 @@ jobs:
             hit && /^## \[/ { exit }
             hit { print }
           ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
-          subject="$(git for-each-ref --format='%(contents:subject)' "refs/tags/v${VERSION}")"
+          # actions/checkout leaves the tag as a lightweight ref on the commit,
+          # so its subject would be the COMMIT's ("Merge pull request #31 …",
+          # #33). Fetch the real tag object first, and only read a subject from
+          # an annotated tag.
+          git fetch --force origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+          subject=""
+          if [ "$(git cat-file -t "refs/tags/v${VERSION}")" = tag ]; then
+            subject="$(git for-each-ref --format='%(contents:subject)' "refs/tags/v${VERSION}")"
+          fi
           title="v${VERSION}"
           case "$subject" in
-            '' | "Release v"* | "chore(release)"*) ;; # lightweight tag → commit subject → skip
+            '' | "Release v"* | "chore(release)"* | "Merge pull request"*) ;; # no usable tag message
             *) title="v${VERSION} — ${subject}" ;;
           esac
           if [ -s "$RUNNER_TEMP/notes.md" ]; then
