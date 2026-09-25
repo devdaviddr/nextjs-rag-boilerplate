@@ -10,6 +10,22 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Work is tied to issues, and the release process is checked**
+  ([#19](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/19)).
+  A new `PR checks` workflow (`.github/workflows/pr.yml`) runs commitlint over
+  every PR commit and title, requires `Closes #N` / `Part of #N` in the PR
+  body, and requires a `CHANGELOG.md` entry for `feat`, `fix`, `perf`, `revert`
+  and breaking changes unless the PR is labelled `no-changelog`.
+  `pnpm release:next` suggests the next version from the Conventional Commits
+  since the last tag; `pnpm release:check` fails a release whose
+  `package.json`, CHANGELOG heading and tag disagree, whose `[Unreleased]` was
+  not rolled in, whose version does not go up, or that leaves a finished spec
+  `Proposed` — and CI's `release` job now runs it before re-tagging anything.
+  `CLAUDE.md` gains "Work tracking" and "Releasing" sections, the PR template
+  asks for the issue, spec, CHANGELOG line, docs and version impact, and a
+  `/ship` Claude Code skill walks a release end to end. Branches are named
+  `<type>/<issue#>-<slug>`, and `main` only changes through pull requests.
+
 - **A document's structure is found in its text layer**
   ([spec 0039](specs/0039-structure-from-the-text-layer.md)). A page read by
   the layout parser came back as typed elements and got everything built on

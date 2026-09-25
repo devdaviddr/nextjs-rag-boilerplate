@@ -11,8 +11,9 @@ instead — it is the ordered path, and this page is the reference behind it.
 
 ## The workflows
 
-Two workflows live in `.github/workflows/`. `ci.yml` runs on every push and
-pull request to `main` and on `v*` tags; `deploy.yml` is opt-in and only runs on
+Three workflows live in `.github/workflows/`. `ci.yml` runs on every push and
+pull request to `main` and on `v*` tags; `pr.yml` checks each pull request
+against the contribution process; `deploy.yml` is opt-in and only runs on
 release tags.
 
 ```
@@ -30,9 +31,15 @@ release tags.
 │             manifest → publish 2 GHCR images (app + migrate); │
 │             PRs build only (no push, no merge)               │
 │ On a v* release tag (fast path — no rebuild):                │
-│   release : wait for main's already-built image for this     │
-│             commit, then re-tag it with the semver + stable  │
-│             (~30s). See "Release fast-path" below.           │
+│   release : release:check, then wait for main's already-built │
+│             image for this commit and re-tag it with the     │
+│             semver + stable (~30s). See "Release fast-path". │
+└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ .github/workflows/pr.yml  (PR → main · edits and labels)     │
+├─────────────────────────────────────────────────────────────┤
+│ process : commitlint on every PR commit and the title ·      │
+│           pr:check (linked issue, CHANGELOG entry)           │
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │ .github/workflows/deploy.yml  (release tags · opt-in)       │
@@ -144,6 +151,31 @@ operator can confirm which version a self-hosted box is running.
 On a tag ref, `docker` and `docker-merge` are skipped and the `release` job
 re-tags instead.
 
+### `pr.yml` — PR checks
+
+A separate workflow so that editing a PR's title or description, or changing a
+label, re-runs it in seconds without re-running the build and E2E suite. One
+job, **PR checks**:
+
+- `commitlint` over every commit in the PR (`--from base --to head`) and over
+  the PR title, with the same `@commitlint/config-conventional` rules as the
+  local `commit-msg` hook.
+- `pnpm pr:check` (`scripts/pr-check.mjs`): the body must link an issue with
+  `Closes #N`, `Fixes #N`, `Resolves #N` or `Part of #N` (bots exempt), and a
+  `feat`, `fix`, `perf`, `revert` or breaking PR must change `CHANGELOG.md`
+  unless it carries the `no-changelog` label.
+
+The title, body and labels reach the scripts through `env:`, never through
+`${{ }}` interpolation inside `run:` — on a fork PR they are attacker-controlled.
+The rules themselves are pure functions in `scripts/process-rules.mjs`, tested
+in `tests/unit/process-rules.test.ts`.
+
+### Required checks
+
+A repository ruleset on `main` requires a pull request and these checks to
+pass before merge: **Lint · Typecheck · Unit**, **E2E (Playwright)** and
+**PR checks**. Nothing reaches `main` without them, including release commits.
+
 ## Release fast-path
 
 A release is a `v*` tag placed on a `main` commit that CI **already built,
@@ -154,6 +186,13 @@ workflow runs a single `release` job that **adds the semver tag — and moves th
 floating `stable` tag — on the existing multi-arch digest** with
 `docker buildx imagetools create` (a manifest operation, ~30s). `quality`,
 `e2e`, `docker` and `docker-merge` are all skipped.
+
+Before any of that, the job runs `scripts/release-check.mjs --tag vX.Y.Z`. It
+fails the release — so nothing is re-tagged — when `package.json`, the
+`CHANGELOG.md` heading and the tag name different versions, when
+`[Unreleased]` still has entries, when the version is not higher than every
+earlier tag, or when a spec with every acceptance criterion ticked is still
+`Proposed`. `pnpm release:check` runs the same check locally before you tag.
 
 Skipping the tests on a tag sounds unsafe. It is not, because of a wait. The
 `release` job **waits** for `ghcr.io/<owner>/<repo>:sha-<short>` (app + migrate)
@@ -299,6 +338,9 @@ Failures specific to running the suite:
   client IP from `tests/e2e/fixtures.ts`; a shared IP makes tests interfere.
 - **Compose health checks not ready.** The dependency containers are slower than
   the test runner on a cold start. Give them longer, or read their logs.
+- **`release:check` fails on a tag.** The tagged commit is not a finished
+  release. Delete the tag (`git push --delete origin vX.Y.Z`), fix it in a PR,
+  and tag the new merge commit.
 - **A `release` job times out waiting for `sha-<short>`.** `main`'s run for that
   commit failed or has not finished. Get `main` green, then re-run the job.
 

@@ -20,7 +20,7 @@ reaches out.
 Here is the whole path.
 
 ```text
-feature/<slug> ──PR──▶ main      (CI: quality + e2e must pass)
+<type>/<issue#>-<slug> ──PR──▶ main   (CI + PR checks must pass)
                         │
           CI publishes the app + migrate images to GHCR
                         │
@@ -40,9 +40,14 @@ inbound ports.
 
 ## 1 — Start a feature
 
+Every change starts from an issue on the project board — a `[Feature]` under
+its `[Capability]`, or a `[Bug]`, `[Change]`, `[Chore]` or `[Spike]`. File one
+if it does not exist, and move it to **In Progress**. Then branch, naming the
+issue:
+
 ```bash
 git checkout main && git pull
-git checkout -b feature/<slug>
+git checkout -b <type>/<issue#>-<slug>     # e.g. feat/16-reranking
 ```
 
 For a non-trivial change, write a spec first: copy
@@ -81,7 +86,12 @@ suites cover.
 
 ## 3 — Open a PR into `main`
 
-There is no `develop` branch to target — PRs go straight into `main`. CI runs
+There is no `develop` branch to target — PRs go straight into `main`, and
+`main` only changes through them. Fill in the template: a Conventional Commit
+title, `Closes #N` for the issue, the CHANGELOG entry and the docs you touched.
+The **PR checks** job fails without the issue link, on a commit or title that
+is not Conventional, or on a `feat`/`fix`/`perf`/`revert`/breaking PR with no
+`CHANGELOG.md` change (label it `no-changelog` if users cannot notice it). CI runs
 `quality` (format, lint, typecheck, unit tests with coverage, `specs:check`) and
 `e2e` (Playwright against Postgres, MinIO and Mailpit), and builds both image
 architectures without pushing. Merge once it is green and a human has looked at
@@ -104,32 +114,53 @@ reaches a running box without you touching its database by hand.
 
 ## 5 — Cut a release
 
-Before you tag, walk this list. Every item on it is something that has been
-missed on a past release — specs left mid-flight, criteria never closed out,
-tags with no changelog entry:
+In Claude Code, run `/ship` — it walks this section step by step. By hand:
 
-- [ ] Every spec this release ships: `status: Shipped`, `release:` filled in
-- [ ] Its acceptance criteria closed out — ticked with the evidence that backs
-      them, or left open under a `> **Not verified (YYYY-MM-DD).**` note
-- [ ] `pnpm specs:check` passes (regenerate with `pnpm specs:index` if it
-      complains the index is stale)
-- [ ] `CHANGELOG.md` has a `## [X.Y.Z]` section for this version
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+**Choose the version.** `pnpm release:next` reads the Conventional Commits since
+the last tag and suggests one. SemVer, and while the version is `0.x` a breaking
+change or a `feat` bumps the minor and anything else the patch; from `1.0.0`,
+breaking → major, `feat` → minor, else patch.
+
+**Open the release PR.** `main` is protected, so the release commit goes
+through a PR like any other change:
+
+- [ ] `package.json` `version` set to `X.Y.Z`
+- [ ] `CHANGELOG.md`: `[Unreleased]` renamed to `## [X.Y.Z] - YYYY-MM-DD`, with
+      a new empty `[Unreleased]` above it, and an entry for every `feat`/`fix`
+- [ ] Every spec this release ships: `status: Shipped`, `release: vX.Y.Z`, its
+      acceptance criteria ticked with the evidence that backs them, or left
+      open under a `> **Not verified (YYYY-MM-DD).**` note
+- [ ] `pnpm specs:index`, and docs that name the old version updated
+- [ ] `pnpm release:check` and
+      `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass
 
 ```bash
-# bump "version" in package.json, update CHANGELOG.md,
-# set any shipped spec's status to Shipped, close out its criteria
-pnpm specs:index && pnpm specs:check
-git commit -m "chore(release): vX.Y.Z"
+git checkout -b release/vX.Y.Z
+# edits above, then:
+pnpm release:check
+git commit -am "chore(release): vX.Y.Z"
+gh pr create --title "chore(release): vX.Y.Z"
+```
+
+Every item on that list has been missed on a past release — specs left
+mid-flight, criteria never closed out, tags with no changelog entry.
+`release:check` fails on each of them.
+
+**Tag the merge commit** once `main`'s CI is green:
+
+```bash
+git checkout main && git pull
 git tag -a vX.Y.Z -m "short title"
-git push origin main --tags
+git push origin vX.Y.Z
 ```
 
 The tag is what defines the release. It triggers `ci.yml`'s `release` job,
-which waits for the image `main` already built for that commit, re-tags it with
-the semver, moves the floating `stable` tag (~30s, no rebuild) and creates the
-GitHub Release with this version's `CHANGELOG.md` section as its notes. See
-[CI/CD → Release fast-path](ci-cd.md#release-fast-path).
+which runs `release:check` against the tag, waits for the image `main` already
+built for that commit, re-tags it with the semver, moves the floating `stable`
+tag (~30s, no rebuild) and creates the GitHub Release with this version's
+`CHANGELOG.md` section as its notes. See
+[CI/CD → Release fast-path](ci-cd.md#release-fast-path). Close the release's
+milestone when it is done.
 
 ## 6 — The box picks it up
 
