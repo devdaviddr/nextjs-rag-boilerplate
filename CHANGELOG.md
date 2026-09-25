@@ -21,6 +21,19 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Whole sections come back as one source**
+  ([#26](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/26),
+  spec 0033 1c). When two or more chunks of one section on one page clear the
+  similarity floor, retrieval returns the whole section once, in reading
+  order, instead of several adjacent slices of it. The citation highlights
+  every paragraph of the section, and the document inspector shows which
+  section run each chunk belongs to. Sections come from the headings ingestion
+  already records, so nothing is re-embedded and no re-ingest or migration is
+  needed; the similarity floor still decides what is relevant, so a question
+  the documents cannot answer is still refused. On by default;
+  `RAG_PARENT_ASSEMBLY=false` turns it off. `pnpm rag:eval --parents-ab`
+  scores one retrieval both ways, against a new `records-policy` evaluation
+  document and a `section` question type.
 - **A local reranker that needs no account**
   ([#16](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/16),
   spec 0036). `RAG_RERANK_BACKEND=local` — now the default backend — scores

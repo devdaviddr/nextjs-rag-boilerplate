@@ -10,6 +10,7 @@ import {
 } from '@/db/schema'
 import type { StoredCitation } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
+import { toStoredCitations } from '@/lib/chat/citations'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
 import { env } from '@/lib/env'
@@ -340,14 +341,8 @@ export async function POST(request: Request) {
         const retrieved = await gatherEvidence((phase, iteration) => {
           send({ type: 'step', phase, iteration })
         })
-        citations = retrieved.map((chunk, i) => ({
-          index: i + 1,
-          chunkId: chunk.chunkId,
-          documentId: chunk.documentId,
-          documentTitle: chunk.documentTitle,
-          pageNumber: chunk.pageNumber,
-          similarity: Number(chunk.similarity.toFixed(4)),
-        }))
+        // Section parents are flagged so the panel highlights the whole run.
+        citations = toStoredCitations(retrieved)
         send({ type: 'citations', citations })
 
         // The full trace (spec 0029 FR9). Logged rather than streamed: it is

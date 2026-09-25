@@ -375,3 +375,135 @@ describe('retrieveForOwner — candidate pool width (spec 0036 FR1)', () => {
     expect(params).toContain(4)
   })
 })
+
+describe('retrieveForOwner — parent assembly (spec 0033, 1c)', () => {
+  const HEADING_BOX = { xmin: 0.1, ymin: 0.1, xmax: 0.5, ymax: 0.12 }
+
+  function fusedRow(id: string, similarity: number, heading = 'Disposal') {
+    return {
+      chunk_id: id,
+      document_id: 'doc-1',
+      document_title: 'records-policy',
+      content: `content ${id}`,
+      page_number: 1,
+      kind: 'text',
+      heading,
+      heading_bbox: HEADING_BOX,
+      similarity,
+      lexical_rank: 0,
+      vec_rank: 1,
+      lex_rank_pos: null,
+    }
+  }
+
+  function pageRow(id: string, chunkIndex: number, heading = 'Disposal') {
+    return {
+      id,
+      content: `content ${id}`,
+      heading,
+      heading_bbox: HEADING_BOX,
+      kind: 'text',
+      chunk_index: chunkIndex,
+      token_count: 60,
+      page_number: 1,
+      document_id: 'doc-1',
+    }
+  }
+
+  beforeEach(() => {
+    mockEnv.RAG_PARENT_ASSEMBLY = true
+    mockEnv.RAG_CHUNK_TOKENS = 512
+  })
+
+  it('loads the page under the owner AND knowledge-base predicates (spec 0028)', async () => {
+    execute
+      .mockResolvedValueOnce([fusedRow('b', 0.48), fusedRow('a', 0.45)])
+      .mockResolvedValueOnce([
+        pageRow('a', 0),
+        pageRow('b', 1),
+        pageRow('c', 2),
+      ])
+
+    const out = await retrieveForOwner('user-a', 'q', ['kb-a', 'kb-b'])
+
+    expect(execute).toHaveBeenCalledTimes(2)
+    const { text, params } = inspect(execute.mock.calls[1]?.[0] as SqlChunk)
+    expect(text).toMatch(/WHERE\s+c\.owner_id\s*=\s*\?/)
+    expect(text).toMatch(/c\.knowledge_base_id\s*=\s*ANY\(ARRAY\[/)
+    expect(text).toMatch(/\(c\.document_id,\s*c\.page_number\)\s+IN/)
+    expect(params).toContain('user-a')
+    expect(params).toContain('kb-a')
+    expect(params).toContain('kb-b')
+
+    expect(out).toHaveLength(1)
+    expect(out[0]?.chunkId).toBe('a')
+    expect(out[0]?.memberChunkIds).toEqual(['a', 'b', 'c'])
+    expect(out[0]?.similarity).toBe(0.48)
+  })
+
+  it('never runs the page query for a refusal — nothing cleared the floor', async () => {
+    execute.mockResolvedValueOnce([fusedRow('a', 0.2), fusedRow('b', 0.19)])
+
+    const out = await retrieveForOwner('user-a', 'q', KB_A)
+
+    expect(out).toEqual([])
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('builds no parent from one admitted child, however many siblings it has', async () => {
+    // b is a sibling of a but below the floor: the rule is two ADMITTED.
+    execute.mockResolvedValueOnce([fusedRow('a', 0.5), fusedRow('b', 0.3)])
+
+    const out = await retrieveForOwner('user-a', 'q', KB_A)
+
+    expect(out.map((c) => c.chunkId)).toEqual(['a'])
+    expect(out[0]?.memberChunkIds).toBeUndefined()
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns the flat list, with no page query, when assembly is off', async () => {
+    execute.mockResolvedValueOnce([fusedRow('b', 0.48), fusedRow('a', 0.45)])
+
+    const out = await retrieveForOwner('user-a', 'q', KB_A, {
+      assembleParents: false,
+    })
+
+    expect(out.map((c) => c.chunkId)).toEqual(['b', 'a'])
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns exactly the pre-1c shape with assembly off and no heading stored', async () => {
+    // Recorded, not derived: the object retrieveForOwner returned before
+    // parent assembly existed. A heading-less row gains no new keys.
+    execute.mockResolvedValueOnce([
+      { ...fusedRow('a', 0.5), heading: null, heading_bbox: null },
+    ])
+
+    const out = await retrieveForOwner('user-a', 'q', KB_A, {
+      assembleParents: false,
+    })
+
+    expect(out).toStrictEqual([
+      {
+        chunkId: 'a',
+        documentId: 'doc-1',
+        documentTitle: 'records-policy',
+        content: 'content a',
+        pageNumber: 1,
+        kind: 'text',
+        similarity: 0.5,
+        lexicalRank: 0,
+        source: 'vector',
+      },
+    ])
+  })
+
+  it('reads RAG_PARENT_ASSEMBLY as the default', async () => {
+    mockEnv.RAG_PARENT_ASSEMBLY = false
+    execute.mockResolvedValueOnce([fusedRow('b', 0.48), fusedRow('a', 0.45)])
+
+    await retrieveForOwner('user-a', 'q', KB_A)
+
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+})

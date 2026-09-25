@@ -103,7 +103,15 @@ the same problem, neither measured against the other.
   citation resolve to an exact page (spec 0025 FR6) and it is not negotiable
   for a recall gain.
 - **NFR4** — Any change requiring a re-ingest says so, and existing documents
-  keep working until re-ingested.
+  keep working until re-ingested. 1c requires none. What existing rows get
+  depends on how they were ingested: cracked rows ingested since 0038 carry
+  `heading_bbox` and group by section; cracked rows from before 0038 carry
+  per-element headings but no box, so they group by heading text — section
+  level, except that adjacent sections sharing a title on one page merge;
+  text-layer rows from before 0039 have one `detectHeading` line per page and
+  group at page level. Every case is still single-page and still gated;
+  re-ingesting brings the first two cases to exact sections and gives the
+  third sections when the PDF reports point sizes.
 
 ## Design / approach
 
@@ -208,12 +216,57 @@ tokenizer at ingestion only (FR2).
 
 Cracked pages already produce `NormalizedElement`s carrying `heading` and
 `atomic`. A parent is the run of elements under one `Section-header`; children
-are today's token-budget chunks. Both are embedded; retrieval prefers the parent
+are today's token-budget chunks. ~~Both are embedded~~ **Children are embedded;
+the parent is assembled from gated children**; retrieval prefers the parent
 when several children of the same parent match.
 
-The text-layer path has no elements, so it needs a heading-run equivalent from
+> **Amended (2026-09-25, #26) — the parent is assembled, not embedded.** A
+> section-sized vector is a new similarity distribution, and the 0.35 floor
+> (NFR2) was calibrated against chunk-sized ones; embedding parents would move
+> what the floor means on exactly the metric this spec holds at 1.000. So a
+> parent is the contiguous run of non-figure chunks on one page sharing a
+> section key — `heading` plus `heading_bbox`, both already stored — and it is
+> assembled after the gate, only when **two or more** of its chunks were
+> admitted on their own cosine. Its score is the best admitted child's. FR3's
+> "retrievable unit" is met because the parent is the unit retrieval returns;
+> FR4 is met by construction. What it costs, stated: a section where no two
+> children clear the floor on their own can never surface as a parent. No
+> migration and no re-ingest (NFR4). Code: `src/lib/rag/parents.ts`, with
+> `assembleParents` in `retrieve.ts`.
+>
+> **A second cost, in the agentic loop.** The attempt-scaled floor (0.35 +
+> 0.04 per extra search) re-filters on `similarity`, and a parent's is its
+> best member's, including a member absorbed from another search. So the
+> floor scores a parent as it would its best child, and refusal cannot move:
+> a list is empty exactly when its best score is under the floor. The text is
+> another matter. A parent kept on its best child carries its whole run,
+> members under the raised floor and members never admitted included. Before
+> parents, only the passing child's text survived. The raised floor therefore
+> bounds scores, not text; accepted, because a parent's text is the whole
+> section at the base floor too, and pinned in `rag-agentic.test.ts`.
+
+~~The text-layer path has no elements, so it needs a heading-run equivalent from
 `detectHeading` — weaker, and that asymmetry should be stated rather than
-hidden. It also means the benefit accrues mostly to cracked documents.
+hidden. It also means the benefit accrues mostly to cracked documents.~~
+
+> **Corrected (2026-09-25).** Since
+> [`0039`](0039-structure-from-the-text-layer.md) the text-layer path DOES
+> produce elements: a PDF that reports point sizes gets headings from
+> `layout.ts`. There are three paths, and the parent differs by path:
+>
+> - **cracked** — the parser's `Section-header` elements; the parent is the
+>   section.
+> - **text layer with point sizes** — lines set larger than the body; the
+>   parent is the section.
+> - **`chunkPages` fallback** — one `detectHeading` line per page and no heading
+>   box, so the parent is the whole page, capped at `3 × RAG_CHUNK_TOKENS`.
+>
+> **Measured limitation.** A heading set at body size — the ALL-CAPS first line
+> of every page in `eval/corpus`'s original documents — is not detected by
+> `layout.ts`, so each of those pages is one chunk and 1c changes nothing there.
+> That makes them the control for 1c's own measurement. The evaluation adds
+> `records-policy`, generated with explicit point sizes, for the questions 1c
+> is meant to change.
 
 ### 1e — filtered ANN
 
@@ -254,6 +307,22 @@ believes it was measured.
 >
 > `pnpm rag:eval` after the migration is identical per question to the 1d
 > baseline, as expected at the eval corpus's size.
+
+> **1c — measured (2026-09-25).** `pnpm rag:eval --label parents`, cracking
+> off, fixed pipeline, `RAG_PARENT_ASSEMBLY=true`, corpus now including
+> `eval/corpus/records-policy.pdf` (the one document with several chunks per
+> section). Section slice (n=3, 2 gating): `section-records-disposal` rank 1 as
+> a parent assembled from 4 chunks, `section-records-retention` rank 1 from 2;
+> the diagnostic `section-downtime-table` (a text-layer table) is not retrieved
+> and does not gate. Single-hop (the control): hit@1 0.941, hit@3 0.941, MRR
+> 0.941, **refusal 1.000**, cross-KB leakage 0. Assembly only replaces two or
+> more chunks that each already passed the similarity gate, so it cannot turn a
+> refusal into an answer, and nothing new is embedded or stored — no re-ingest.
+>
+> **1g was not completed.** A run of `scope.ts` alone and of neither both scored
+> hit@1 0.941 and refusal 1.000 on 2026-09-25; the HyDE-alone and both runs were
+> stopped part-way at the owner's request, and the whole-document questions
+> they needed were not merged. The 1g criteria stay open (#27).
 
 ### 1g — HyDE versus `scope.ts`
 
@@ -326,9 +395,11 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
       measured (2026-09-25)_; `drizzle/0017_hnsw_iterative_scan.sql`
 - [x] `pnpm rag:eval` after 1e alone, recorded — identical per question to
       the 1d baseline (hit@1 0.882, MRR 0.912, refusal 1.000, leakage 0)
-- [ ] A question answered by a whole section retrieves the parent rather than
-      three adjacent children — `eval/questions.json`
-- [ ] `pnpm rag:eval` after 1c alone, recorded
+- [x] A question answered by a whole section retrieves the parent rather than
+      three adjacent children — `eval/questions.json` `section-*`: both gating
+      questions return an assembled parent at rank 1 (parent@1 2/2, 2026-09-25)
+- [x] `pnpm rag:eval` after 1c alone, recorded — single-hop hit@1 0.941,
+      MRR 0.941, refusal 1.000, cross-KB leakage 0 (see _1c — measured_)
 - [ ] HyDE measured alone, `scope.ts` measured alone, and both together, on the
       same questions — the loser removed or disabled with numbers stated
 - [ ] Refusal accuracy is 1.000 at every one of those checkpoints
@@ -345,8 +416,8 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
 > run, and none has been done:
 >
 > - **The four `pnpm rag:eval` checkpoints and the refusal-accuracy line.**
->   _(1d and 1e have since been measured — see 2026-09-25 above; this bullet
->   stands for 1c and 1g.)_ 1d
+>   _(1d, 1e and 1c have since been measured — see 2026-09-25 above; this
+>   bullet stands for 1g.)_ 1d
 >   was in the tree and **had not been measured**, which is the one thing the
 >   Design section's ordering argument said must not happen. Table chunks got
 >   roughly twice as small, `RAG_MIN_SIMILARITY` (0.35) was calibrated against

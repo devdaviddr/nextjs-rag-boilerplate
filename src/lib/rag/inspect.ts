@@ -1,5 +1,6 @@
 import type { ChunkKind, ExtractionPage, ExtractionSummary } from '@/db/schema'
 import type { CitationBox } from '@/lib/citations/boxes'
+import { runFitsParent, sectionRuns } from './parents'
 
 /**
  * Turning what ingestion recorded into something a user can read (spec 0037).
@@ -58,6 +59,23 @@ export interface InspectedChunk {
    * exactly the kind of confident wrongness this whole feature exists against.
    */
   embeddedText: string
+  /**
+   * Which section run on its page this chunk belongs to, 1-based, and how
+   * many chunks that run holds (spec 0033, 1c). A run is what retrieval can
+   * return as one PARENT when two or more of its chunks match a question —
+   * computed by the same `sectionRuns` retrieval uses, so the view cannot
+   * disagree with what a search would assemble. Absent for a figure, which
+   * is never part of a run, and optional so a caller that builds chunks
+   * before `buildInspection` numbers them need not invent one.
+   */
+  run?: number
+  runSize?: number
+  /**
+   * The run is over the parent size cap (`parentMaxTokens`), so retrieval
+   * never returns it whole — only as the separate children the gate admits.
+   * Checked with the same `runFitsParent` retrieval uses.
+   */
+  runTooLarge?: true
 }
 
 /**
@@ -323,8 +341,13 @@ export function buildInspection(input: {
   pageCount: number | null
   extraction: ExtractionSummary | null
   chunks: readonly (InspectedChunk & { pageNumber: number })[]
+  /**
+   * The parent size cap retrieval applies (`parentMaxTokens`). Required, so
+   * the view cannot show a run as returnable whole when retrieval would not.
+   */
+  parentMaxTokens: number
 }): InspectedDocument {
-  const { pageCount, extraction, chunks } = input
+  const { pageCount, extraction, chunks, parentMaxTokens } = input
 
   const byPage = new Map<number, InspectedChunk[]>()
   for (const c of chunks) {
@@ -343,9 +366,38 @@ export function buildInspection(input: {
 
   const pages: InspectedPage[] = pageNumbers.map((n) => {
     const record = recorded.get(n)
-    const pageChunks = (byPage.get(n) ?? []).sort(
+    const sorted = (byPage.get(n) ?? []).sort(
       (a, b) => a.chunkIndex - b.chunkIndex,
     )
+    // Section runs, grouped exactly as parent assembly groups them. The
+    // heading box here is the reconciled one; every chunk of a section
+    // carries the same stored box, so it reconciles identically.
+    const runs = sectionRuns(
+      sorted.map((chunk) => ({
+        ...chunk,
+        headingBbox: chunk.headingBox,
+      })),
+    )
+    const runById = new Map<
+      string,
+      { run: number; runSize: number; runTooLarge?: true }
+    >()
+    runs.forEach((members, i) => {
+      // Retrieval also refuses a run over the size cap (`collapseParents`);
+      // without this the view would promise a parent no search can return.
+      const tooLarge = !runFitsParent(members, parentMaxTokens)
+      for (const member of members) {
+        runById.set(member.id, {
+          run: i + 1,
+          runSize: members.length,
+          ...(tooLarge ? { runTooLarge: true as const } : {}),
+        })
+      }
+    })
+    const pageChunks = sorted.map((chunk) => ({
+      ...chunk,
+      ...runById.get(chunk.id),
+    }))
     return {
       page: n,
       chunks: pageChunks,

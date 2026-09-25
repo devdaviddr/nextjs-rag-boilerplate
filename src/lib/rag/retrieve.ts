@@ -7,6 +7,12 @@ import type { ChunkKind } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
 import { hypotheticalQuery } from './hyde'
+import {
+  type PageRow,
+  collapseParents,
+  pagesToLoad,
+  parentMaxTokens,
+} from './parents'
 import { rerankChunks } from './rerank'
 
 /**
@@ -61,11 +67,34 @@ export interface RetrievedChunk {
    * reranking changed — its absence on every chunk means it did not run.
    */
   rerankScore?: number
+  /**
+   * The section heading the chunk was indexed under, and where it sits on the
+   * page (spec 0033, 1c). Together they are the SECTION KEY that parent
+   * assembly groups by — see `parents.ts`. Present only when the row has one,
+   * so a chunk without a heading is the same shape it always was.
+   */
+  heading?: string | null
+  headingBbox?: unknown
+  /**
+   * Set only on an assembled PARENT (spec 0033, 1c): every chunk of the
+   * section run, in reading order. `chunkId` is then the run's first chunk
+   * and `content` the whole run. Absent on an ordinary chunk — its absence is
+   * how every consumer tells the two apart.
+   */
+  memberChunkIds?: string[]
+  /** How many of the parent's members the gate admitted on their own. */
+  assembledFrom?: number
 }
 
 export interface RetrieveOptions {
   topK?: number
   minSimilarity?: number
+  /**
+   * Assemble parents from admitted children (spec 0033, 1c). Defaults to
+   * `RAG_PARENT_ASSEMBLY`. The evaluation harness turns it off to score the
+   * flat list and the assembled one from the same retrieval.
+   */
+  assembleParents?: boolean
 }
 
 /**
@@ -88,10 +117,24 @@ interface Row extends Record<string, unknown> {
   content: string
   page_number: number
   kind: ChunkKind
+  heading: string | null
+  heading_bbox: unknown
   similarity: number
   lexical_rank: number
   vec_rank: number | null
   lex_rank_pos: number | null
+}
+
+interface ParentPageRowRaw extends Record<string, unknown> {
+  id: string
+  content: string
+  heading: string | null
+  heading_bbox: unknown
+  kind: ChunkKind
+  chunk_index: number
+  token_count: number
+  page_number: number
+  document_id: string
 }
 
 interface DocumentChunkRow extends Record<string, unknown> {
@@ -318,6 +361,8 @@ export async function retrieveForOwner(
       c.content       AS content,
       c.page_number   AS page_number,
       c.kind          AS kind,
+      c.heading       AS heading,
+      c.heading_bbox  AS heading_bbox,
       1 - (c.embedding <=> ${queryVector}::halfvec) AS similarity,
       f.lexical_rank  AS lexical_rank,
       f.vec_rank      AS vec_rank,
@@ -348,6 +393,10 @@ export async function retrieveForOwner(
         : inVector
           ? 'vector'
           : 'lexical') as RetrievedChunk['source'],
+      // Only when present, so a heading-less chunk is byte-for-byte the shape
+      // it was before parent assembly existed.
+      ...(r.heading != null ? { heading: r.heading } : {}),
+      ...(r.heading_bbox != null ? { headingBbox: r.heading_bbox } : {}),
     }
   })
 
@@ -386,10 +435,84 @@ export async function retrieveForOwner(
     (r) => r.similarity >= minSimilarity,
   )
 
+  // Parent assembly (spec 0033, 1c), after the gate and before the cut. It
+  // only ever rewrites what the gate admitted — two or more children of one
+  // section run become that run — so an empty list stays empty and refusal
+  // cannot flip. With reranking off `admitted.length <= topK`, so assembling
+  // before the cut equals assembling after it.
+  const assemble = options.assembleParents ?? env.RAG_PARENT_ASSEMBLY
+  const assembled = assemble
+    ? await assembleParents(ownerId, knowledgeBaseIds, admitted)
+    : admitted
+
   // The cut to topK, last. With reranking off `admitted.length <= topK`
   // already, so this cannot change the disabled result — it is the step that
   // lets the pool be wider than the answer without the answer growing.
-  return admitted.slice(0, topK)
+  return assembled.slice(0, topK)
+}
+
+/**
+ * Replace admitted children with their section parent (spec 0033, 1c).
+ *
+ * Exported so the evaluation harness can score the flat list and the
+ * assembled one from a SINGLE retrieval (`--parents-ab`), with no second
+ * embedding call and so no second chance for the result to differ.
+ *
+ * No query runs unless two admitted chunks share a page and a section key —
+ * refusal and the common case cost nothing. When one does run, it is scoped
+ * exactly as every other query in this file: `owner_id` and
+ * `knowledge_base_id = ANY(...)` in the WHERE clause (spec 0028), never
+ * inferred from the chunk ids the caller already holds. Those ids came from
+ * this user's own retrieval, but a loader that trusted them would be one
+ * refactor away from reading any page by id. `chunks_document_id_idx` serves
+ * the `(document_id, page_number)` predicate.
+ */
+export async function assembleParents(
+  ownerId: string,
+  knowledgeBaseIds: readonly string[],
+  admitted: readonly RetrievedChunk[],
+): Promise<RetrievedChunk[]> {
+  if (knowledgeBaseIds.length === 0) return [...admitted]
+  const pages = pagesToLoad(admitted)
+  if (pages.length === 0) return [...admitted]
+
+  const rows = await db.execute<ParentPageRowRaw>(sql`
+    SELECT c.id           AS id,
+           c.content      AS content,
+           c.heading      AS heading,
+           c.heading_bbox AS heading_bbox,
+           c.kind         AS kind,
+           c.chunk_index  AS chunk_index,
+           c.token_count  AS token_count,
+           c.page_number  AS page_number,
+           c.document_id  AS document_id
+    FROM chunks c
+    WHERE c.owner_id = ${ownerId}
+      AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
+      AND (c.document_id, c.page_number) IN (${sql.join(
+        pages.map((p) => sql`(${p.documentId}, ${p.pageNumber}::int)`),
+        sql`, `,
+      )})
+    ORDER BY c.document_id, c.page_number, c.chunk_index
+  `)
+
+  const pageRows: PageRow[] = Array.from(rows).map((r) => ({
+    id: r.id,
+    documentId: r.document_id,
+    pageNumber: Number(r.page_number),
+    content: r.content,
+    heading: r.heading,
+    headingBbox: r.heading_bbox,
+    kind: r.kind,
+    chunkIndex: Number(r.chunk_index),
+    tokenCount: Number(r.token_count),
+  }))
+
+  // Derived, not configured: three chunks' worth. A run bigger than that is
+  // not one passage, and stays as the children the gate admitted.
+  return collapseParents(admitted, pageRows, {
+    maxTokens: parentMaxTokens(env.RAG_CHUNK_TOKENS),
+  })
 }
 
 /** The caller's indexed documents, for query scoping. */
