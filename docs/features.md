@@ -130,6 +130,14 @@ chose, what each search found, reranking, HyDE, and any provider errors and
 retries. Lines are kept in Postgres for `LOG_RETENTION_DAYS` (7 by default),
 with API keys and other secrets removed before they are stored.
 
+**Runs** lists every question answered and every document ingested, with its
+outcome (answered, no match, failed, cancelled), how long it took, time to the
+first word, tokens and best match. Open one to see its steps as a timeline you
+can replay: finding passages, each thing the planner decided, each search,
+writing the answer and checking its citations, each with the model it used,
+its tokens, and what it found. Runs are kept for `TELEMETRY_RETENTION_DAYS`
+(30 by default).
+
 ### Measured, not asserted
 
 A **retrieval evaluation harness** (`pnpm rag:eval`) runs a ground-truth corpus

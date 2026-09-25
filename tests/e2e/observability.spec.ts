@@ -78,3 +78,40 @@ test('an admin reads the logs: colours, filters, details, one request (FR7)', as
     .analyze()
   expect(results.violations).toEqual([])
 })
+
+test('an admin browses runs, and replays one when there is one (FR9)', async ({
+  page,
+}) => {
+  await signInAdmin(page)
+  await page.goto('/observability/runs')
+  await expect(page.getByRole('link', { name: 'Runs' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  const table = page.getByRole('table')
+  const empty = page.getByText(/No runs yet/)
+  await expect(table.or(empty)).toBeVisible()
+
+  let results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+
+  // CI has no model key, so only a local run with history gets this far.
+  if (await empty.isVisible()) return
+  await table.getByRole('link').first().click()
+  // The first visit compiles the page under `next dev`.
+  await expect(page).toHaveURL(/\/observability\/runs\/[\w-]+$/, {
+    timeout: 15_000,
+  })
+  const slider = page.getByRole('slider', { name: 'Replay position' })
+  await expect(slider).toBeVisible()
+  await page.getByRole('button', { name: 'Back to the start' }).click()
+  await expect(slider).toHaveValue('0')
+  await expect(page.getByLabel('Waiting').first()).toBeVisible()
+
+  results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+})

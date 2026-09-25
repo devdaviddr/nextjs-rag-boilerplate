@@ -25,14 +25,16 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_PHASE === 'phase-production-build') return
 
   // Logs first, so ingestion recovery's own lines are kept (spec 0042).
-  const [{ env }, { startLogStore }] = await Promise.all([
+  const [{ env }, { startLogStore }, { startRunStore }] = await Promise.all([
     import('@/lib/env'),
     import('@/lib/observability/log-store'),
+    import('@/lib/observability/run-store'),
   ])
   startLogStore({
     persist: env.LOG_PERSIST,
     retentionDays: env.LOG_RETENTION_DAYS,
   })
+  startRunStore({ retentionDays: env.TELEMETRY_RETENTION_DAYS })
 
   const { startIngestionRecovery } = await import('@/lib/rag/ingest')
   startIngestionRecovery()

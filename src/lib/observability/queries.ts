@@ -15,7 +15,7 @@ import {
 } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { appLogs } from '@/db/schema'
+import { appLogs, ragRuns, ragSpans } from '@/db/schema'
 import type { LogCategory } from '@/lib/logger'
 
 import { LOG_CATEGORIES } from './categorise'
@@ -152,4 +152,112 @@ export async function countLogsByLevel(
     if (r.level in out) out[r.level as LogLevel] = r.n
   }
   return out
+}
+
+export interface RunSummary {
+  id: string
+  kind: 'question' | 'ingest'
+  question: string | null
+  mode: string | null
+  status: string
+  termination: string | null
+  startedAt: string
+  durationMs: number
+  ttftMs: number | null
+  totalTokens: number
+  sourceCount: number | null
+  bestSimilarity: number | null
+  models: string[]
+  userId: string | null
+  conversationId: string | null
+  documentId: string | null
+  error: string | null
+}
+
+export interface RunStep {
+  key: number
+  parentKey: number | null
+  name: string
+  startedAt: string
+  durationMs: number
+  status: string
+  model: string | null
+  tokens: number | null
+  attributes: Record<string, unknown>
+}
+
+function toSummary(row: typeof ragRuns.$inferSelect): RunSummary {
+  return {
+    id: row.id,
+    kind: row.kind as RunSummary['kind'],
+    question: row.question,
+    mode: row.mode,
+    status: row.status,
+    termination: row.termination,
+    startedAt: row.startedAt.toISOString(),
+    durationMs: row.durationMs,
+    ttftMs: row.ttftMs,
+    totalTokens: row.totalTokens,
+    sourceCount: row.sourceCount,
+    bestSimilarity: row.bestSimilarity,
+    models: row.models ?? [],
+    userId: row.userId,
+    conversationId: row.conversationId,
+    documentId: row.documentId,
+    error: row.error,
+  }
+}
+
+export interface RunFilters {
+  kind?: 'question' | 'ingest'
+  status?: string
+  q?: string
+}
+
+/** Newest runs first (spec 0042 FR9). */
+export async function listRuns(
+  filters: RunFilters,
+  limit = 50,
+): Promise<RunSummary[]> {
+  const clauses: SQL[] = []
+  if (filters.kind) clauses.push(eq(ragRuns.kind, filters.kind))
+  if (filters.status) clauses.push(eq(ragRuns.status, filters.status))
+  if (filters.q) {
+    const pattern = `%${filters.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+    clauses.push(ilike(ragRuns.question, pattern))
+  }
+  const rows = await db
+    .select()
+    .from(ragRuns)
+    .where(and(...clauses))
+    .orderBy(desc(ragRuns.startedAt))
+    .limit(Math.min(Math.max(limit, 1), 200))
+  return rows.map(toSummary)
+}
+
+/** One run with its steps, in the order they started. */
+export async function getRun(
+  id: string,
+): Promise<{ run: RunSummary; steps: RunStep[] } | null> {
+  const [row] = await db.select().from(ragRuns).where(eq(ragRuns.id, id))
+  if (!row) return null
+  const spans = await db
+    .select()
+    .from(ragSpans)
+    .where(eq(ragSpans.runId, id))
+    .orderBy(ragSpans.key)
+  return {
+    run: toSummary(row),
+    steps: spans.map((s) => ({
+      key: s.key,
+      parentKey: s.parentKey,
+      name: s.name,
+      startedAt: s.startedAt.toISOString(),
+      durationMs: s.durationMs,
+      status: s.status,
+      model: s.model,
+      tokens: s.tokens,
+      attributes: s.attributes ?? {},
+    })),
+  }
 }

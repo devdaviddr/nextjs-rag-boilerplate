@@ -5,8 +5,11 @@ import { usePathname } from 'next/navigation'
 
 import { cn } from '@/lib/utils'
 
-// Overview and Runs join as they are built (spec 0042 FR9, FR10).
-const TABS = [{ href: '/observability/logs', label: 'Logs' }]
+// The Overview joins with the telemetry dashboard (spec 0042 FR10).
+const TABS = [
+  { href: '/observability/runs', label: 'Runs' },
+  { href: '/observability/logs', label: 'Logs' },
+]
 
 export function ObservabilityTabs() {
   const pathname = usePathname()

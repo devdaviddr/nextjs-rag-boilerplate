@@ -174,8 +174,11 @@ descriptions.
       answer" in the same live check
 - [x] FR7: the Logs page shows new lines live, filters, expands and groups
       by request — e2e `observability.spec.ts` _"an admin reads the logs"_
-- [ ] FR8–FR9: a question produces a run with its steps; the run view shows
-      the waterfall and replays it
+- [x] FR8–FR9: a question produces a run with its steps; the run view shows
+      the waterfall and replays it — live 2026-09-26: an agentic question
+      recorded retrieve / plan (failed: time budget) / search / embed-question
+      / search-index / draft / verify with models and tokens;
+      `tests/unit/observability-runs.test.ts`; e2e _"an admin browses runs"_
 - [ ] FR10: the dashboard shows the tiles and charts for 24 hours and 7 days
 - [ ] FR11: non-admins get 404 / 403 everywhere
 - [x] NFR1: a failing database does not fail a request (tested) —

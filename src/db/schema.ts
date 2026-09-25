@@ -863,3 +863,64 @@ export const appLogs = pgTable(
     index('app_logs_level_time_idx').on(table.level, table.time),
   ],
 )
+
+/**
+ * One row per question answered or document ingested (spec 0042 FR8): what
+ * was asked, how it went, and its totals. Its steps are in `rag_spans`. The
+ * id is the request id, so a run and its log lines join on it. Pruned after
+ * `TELEMETRY_RETENTION_DAYS`.
+ */
+export const ragRuns = pgTable(
+  'rag_runs',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(),
+    userId: text('user_id'),
+    conversationId: text('conversation_id'),
+    documentId: text('document_id'),
+    question: text('question'),
+    mode: text('mode'),
+    status: text('status').notNull(),
+    termination: text('termination'),
+    startedAt: timestamp('started_at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    durationMs: integer('duration_ms').notNull(),
+    ttftMs: integer('ttft_ms'),
+    promptTokens: integer('prompt_tokens'),
+    completionTokens: integer('completion_tokens'),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    bestSimilarity: real('best_similarity'),
+    sourceCount: integer('source_count'),
+    models: jsonb('models').$type<string[]>().notNull().default([]),
+    error: text('error'),
+  },
+  (table) => [
+    index('rag_runs_started_idx').on(table.startedAt.desc()),
+    index('rag_runs_kind_started_idx').on(table.kind, table.startedAt),
+  ],
+)
+
+/** The timed steps of a run, nested by `parent_key` (spec 0042 FR8). */
+export const ragSpans = pgTable(
+  'rag_spans',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    runId: text('run_id')
+      .notNull()
+      .references(() => ragRuns.id, { onDelete: 'cascade' }),
+    key: integer('key').notNull(),
+    parentKey: integer('parent_key'),
+    name: text('name').notNull(),
+    startedAt: timestamp('started_at', {
+      mode: 'date',
+      withTimezone: true,
+    }).notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    status: text('status').notNull(),
+    model: text('model'),
+    tokens: integer('tokens'),
+    attributes: jsonb('attributes').$type<Record<string, unknown>>(),
+  },
+  (table) => [index('rag_spans_run_idx').on(table.runId, table.key)],
+)

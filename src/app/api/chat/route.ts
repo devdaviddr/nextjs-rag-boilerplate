@@ -14,6 +14,7 @@ import { toStoredCitations } from '@/lib/chat/citations'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
+import { beginSpan, span, startRun } from '@/lib/observability/runs'
 import {
   annotateContext,
   newRequestId,
@@ -210,6 +211,15 @@ async function answer(request: Request, requestId: string) {
   }
 
   annotateContext({ conversationId })
+  // The run record for Observability (spec 0042 FR8): finished once, on
+  // whichever way this request ends.
+  const run = startRun({
+    id: requestId,
+    kind: 'question',
+    userId,
+    conversationId,
+    question,
+  })
 
   // Persisted BEFORE the model is called, so a question is never lost even if
   // generation fails outright.
@@ -391,9 +401,18 @@ async function answer(request: Request, requestId: string) {
       try {
         send({ type: 'conversation', conversationId, title: conversationTitle })
 
-        const retrieved = await gatherEvidence((phase, iteration) => {
-          send({ type: 'step', phase, iteration })
+        const retrieved = await span('retrieve', async (step) => {
+          const found = await gatherEvidence((phase, iteration) => {
+            send({ type: 'step', phase, iteration })
+          })
+          step.set({ mode: retrievalMode, passages: found.length })
+          return found
         })
+        const bestSimilarity = retrieved.reduce<number | null>(
+          (best, c) =>
+            best === null || c.similarity > best ? c.similarity : best,
+          null,
+        )
         // Section parents are flagged so the panel highlights the whole run.
         citations = toStoredCitations(retrieved)
         send({ type: 'citations', citations })
@@ -426,11 +445,19 @@ async function answer(request: Request, requestId: string) {
           await persistAnswer(answer)
           send({ type: 'done' })
           finish()
+          run.finish({
+            status: 'refused',
+            mode: retrievalMode,
+            termination: agenticTrace?.termination ?? 'no-evidence',
+            sourceCount: 0,
+            bestSimilarity,
+          })
           return
         }
 
         send({ type: 'step', phase: 'drafting' })
         const startedAt = Date.now()
+        const drafting = beginSpan('draft', { sources: citations.length })
         // Hoisted above the retry loop so a second attempt overwrites them
         // rather than shadowing, and so the empty-answer diagnostic below can
         // still see what the last attempt produced.
@@ -558,6 +585,16 @@ async function answer(request: Request, requestId: string) {
           send({ type: 'error', message: draftFailureMessage(upstreamError) })
           send({ type: 'done' })
           finish()
+          drafting.set({ finishReason, upstreamError })
+          drafting.end({ status: 'error', model: chatModelName() })
+          run.finish({
+            status: 'error',
+            mode: retrievalMode,
+            termination: agenticTrace?.termination ?? null,
+            sourceCount: citations.length,
+            bestSimilarity,
+            error: upstreamError?.message ?? 'Drafting produced no answer text',
+          })
           return
         }
 
@@ -565,6 +602,19 @@ async function answer(request: Request, requestId: string) {
         // verification: tokens/sec and total time describe the answer the user
         // watched stream in, not the post-hoc check that follows it (#42).
         const draftedAt = Date.now()
+        drafting.set({
+          finishReason,
+          ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
+          answerChars: answer.length,
+          answer,
+        })
+        drafting.end({
+          model: chatModelName(),
+          tokens:
+            promptTokens !== null || completionTokens !== null
+              ? (promptTokens ?? 0) + (completionTokens ?? 0)
+              : null,
+        })
 
         // The answer is complete: save it and send its metrics now. `metrics`
         // is the client's signal that the composer may unlock (#48) — it no
@@ -597,11 +647,15 @@ async function answer(request: Request, requestId: string) {
           answer.trim()
         ) {
           send({ type: 'step', phase: 'verifying' })
-          const unsupported = await verifyCitations(
-            answer,
-            retrieved,
-            request.signal,
-          )
+          const unsupported = await span('verify', async (step) => {
+            const found = await verifyCitations(
+              answer,
+              retrieved,
+              request.signal,
+            )
+            step.set({ unsupported: found.length })
+            return found
+          })
           const verified = stripUnsupported(answer, unsupported)
           if (verified.strippedIndices.length > 0) {
             logger.warn('Stripped unsupported citations', {
@@ -621,6 +675,16 @@ async function answer(request: Request, requestId: string) {
 
         send({ type: 'done' })
         finish()
+        run.finish({
+          status: 'ok',
+          mode: retrievalMode,
+          termination: agenticTrace?.termination ?? null,
+          ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
+          promptTokens,
+          completionTokens,
+          sourceCount: citations.length,
+          bestSimilarity,
+        })
       } catch (error) {
         const aborted =
           closed ||
@@ -632,6 +696,12 @@ async function answer(request: Request, requestId: string) {
             error: error instanceof Error ? error.message : String(error),
           })
         }
+        run.finish({
+          status: aborted ? 'cancelled' : 'error',
+          mode: retrievalMode,
+          termination: agenticTrace?.termination ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        })
         // Whatever was generated before the failure is still worth keeping.
         await persistAnswer(answer)
         send({
@@ -643,6 +713,7 @@ async function answer(request: Request, requestId: string) {
     },
     cancel() {
       closed = true
+      run.finish({ status: 'cancelled', mode: retrievalMode })
       void upstreamReader?.cancel().catch(() => undefined)
       void persistAnswer(answer)
     },

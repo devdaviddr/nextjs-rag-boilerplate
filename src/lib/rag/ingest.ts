@@ -11,7 +11,12 @@ import {
 } from '@/db/schema'
 import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
 import { aiSettings } from '@/lib/ai-settings'
-import { newRequestId, withRequestContext } from '@/lib/observability/context'
+import {
+  currentContext,
+  newRequestId,
+  withRequestContext,
+} from '@/lib/observability/context'
+import { span, startRun } from '@/lib/observability/runs'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
 import { buildEmbeddingText } from './chunk'
@@ -383,6 +388,15 @@ async function ingestOne(
 
   const { doc } = claim
   let token = claim.token
+  // Each ingestion is a run for Observability (spec 0042 FR8); its "question"
+  // is the document's title.
+  const run = startRun({
+    id: currentContext()?.requestId ?? newRequestId(),
+    kind: 'ingest',
+    userId: doc.ownerId,
+    documentId,
+    question: doc.title,
+  })
 
   try {
     const file = await db.query.files.findFirst({
@@ -392,27 +406,40 @@ async function ingestOne(
     if (!file)
       throw new ExtractionError('The uploaded file is no longer available.')
 
-    const buffer = await getObjectBuffer(file.bucketKey)
+    const buffer = await span('download', async (step) => {
+      const bytes = await getObjectBuffer(file.bucketKey)
+      step.set({ bytes: bytes.length })
+      return bytes
+    })
     const {
       chunks: pieces,
       pageCount,
       extraction,
-    } = await chunksFromPdf(buffer, {
-      chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
-      overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
-      documentTitle: doc.title,
-      // A resumed run re-walks every page and re-derives every chunk; what it
-      // does not re-pay for is the parse call on pages this or an earlier
-      // attempt already bought. Chunking and embedding are cheap and, crucially,
-      // still produce the whole document in memory — so the one transaction
-      // below stays exactly as wide as it was.
-      parseCache: parsedPageCache(doc.fileId),
-      onPageProcessed: async (processed, summarySoFar) => {
-        token = await renewClaim(documentId, token, {
-          pagesProcessed: processed,
-          extraction: summarySoFar,
-        })
-      },
+    } = await span('extract', async (step) => {
+      const out = await chunksFromPdf(buffer, {
+        chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
+        overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
+        documentTitle: doc.title,
+        // A resumed run re-walks every page and re-derives every chunk; what it
+        // does not re-pay for is the parse call on pages this or an earlier
+        // attempt already bought. Chunking and embedding are cheap and, crucially,
+        // still produce the whole document in memory — so the one transaction
+        // below stays exactly as wide as it was.
+        parseCache: parsedPageCache(doc.fileId),
+        onPageProcessed: async (processed, summarySoFar) => {
+          token = await renewClaim(documentId, token, {
+            pagesProcessed: processed,
+            extraction: summarySoFar,
+          })
+        },
+      })
+      step.set({
+        pages: out.pageCount,
+        chunks: out.chunks.length,
+        parseCalls: out.extraction?.parseCalls ?? 0,
+        cachedPages: out.extraction?.cachedPages ?? 0,
+      })
+      return out
     })
 
     if (pieces.length === 0) {
@@ -439,12 +466,15 @@ async function ingestOne(
     )
 
     const vectors: number[][] = []
-    for (let i = 0; i < texts.length; i += EMBED_HEARTBEAT_CHUNKS) {
-      vectors.push(
-        ...(await embedPassages(texts.slice(i, i + EMBED_HEARTBEAT_CHUNKS))),
-      )
-      token = await renewClaim(documentId, token)
-    }
+    await span('embed', async (step) => {
+      for (let i = 0; i < texts.length; i += EMBED_HEARTBEAT_CHUNKS) {
+        vectors.push(
+          ...(await embedPassages(texts.slice(i, i + EMBED_HEARTBEAT_CHUNKS))),
+        )
+        token = await renewClaim(documentId, token)
+      }
+      step.set({ passages: texts.length })
+    })
 
     // Delete-then-insert inside one transaction makes re-ingesting a failed
     // document idempotent — a retry can never double up chunks (NFR5). This is
@@ -452,37 +482,41 @@ async function ingestOne(
     // two workers that both finish this document both run this, and the second
     // commit replaces the first's rows wholesale. Nothing about resuming may
     // narrow this boundary to a page, or that stops being true.
-    await db.transaction(async (tx) => {
-      await tx.delete(chunksTable).where(eq(chunksTable.documentId, documentId))
-      await tx.insert(chunksTable).values(
-        pieces.map((piece, i) => ({
-          documentId,
-          ownerId: doc.ownerId,
-          // Denormalised from the document, never from the session: a chunk's
-          // KB must always be its document's KB, or retrieval filters on a
-          // value the document itself disagrees with. Recovery runs as the
-          // system with no session at all, so this is the only correct source.
-          knowledgeBaseId: doc.knowledgeBaseId,
-          content: piece.content,
-          heading: piece.heading,
-          // Spec 0038 FR1. The same string `buildEmbeddingText` just used, so
-          // the stored search key and the embedded one cannot disagree.
-          caption: piece.caption ?? null,
-          headingBbox: piece.headingBox ?? null,
-          captionBbox: piece.captionBox ?? null,
-          pageNumber: piece.pageNumber,
-          chunkIndex: piece.chunkIndex,
-          tokenCount: piece.tokenCount,
-          // 'text' when the text-layer path produced this chunk, which is
-          // also the column default — so nothing about an uncracked document
-          // changes shape.
-          kind: piece.kind ?? 'text',
-          bbox: piece.bbox ?? null,
-          boxes: piece.boxes?.length ? piece.boxes : null,
-          embedding: vectors[i] as number[],
-        })),
-      )
-    })
+    await span('store', () =>
+      db.transaction(async (tx) => {
+        await tx
+          .delete(chunksTable)
+          .where(eq(chunksTable.documentId, documentId))
+        await tx.insert(chunksTable).values(
+          pieces.map((piece, i) => ({
+            documentId,
+            ownerId: doc.ownerId,
+            // Denormalised from the document, never from the session: a chunk's
+            // KB must always be its document's KB, or retrieval filters on a
+            // value the document itself disagrees with. Recovery runs as the
+            // system with no session at all, so this is the only correct source.
+            knowledgeBaseId: doc.knowledgeBaseId,
+            content: piece.content,
+            heading: piece.heading,
+            // Spec 0038 FR1. The same string `buildEmbeddingText` just used, so
+            // the stored search key and the embedded one cannot disagree.
+            caption: piece.caption ?? null,
+            headingBbox: piece.headingBox ?? null,
+            captionBbox: piece.captionBox ?? null,
+            pageNumber: piece.pageNumber,
+            chunkIndex: piece.chunkIndex,
+            tokenCount: piece.tokenCount,
+            // 'text' when the text-layer path produced this chunk, which is
+            // also the column default — so nothing about an uncracked document
+            // changes shape.
+            kind: piece.kind ?? 'text',
+            bbox: piece.bbox ?? null,
+            boxes: piece.boxes?.length ? piece.boxes : null,
+            embedding: vectors[i] as number[],
+          })),
+        )
+      }),
+    )
 
     const landed = await finishDocument(documentId, token, 'ready', {
       pageCount,
@@ -506,11 +540,13 @@ async function ingestOne(
       budgetExhausted: extraction?.budgetExhausted ?? false,
       claimHeld: landed,
     })
+    run.finish({ status: 'ok', sourceCount: pieces.length })
   } catch (error) {
     if (error instanceof ClaimLostError) {
       // Not a failure of this document, only of this run. Say nothing about
       // `status` — the worker that owns it now is mid-flight.
       logger.warn('Ingestion abandoned — claim lost', { documentId, trigger })
+      run.finish({ status: 'cancelled', error: 'Claim lost to another worker' })
       return
     }
 
@@ -532,6 +568,10 @@ async function ingestOne(
     // The parse cache is deliberately kept on failure: it is what makes the
     // user's next Retry cheap, which is the second cost spec 0034 set out to
     // remove. It goes when the file goes, by cascade.
+    run.finish({
+      status: 'error',
+      error: error instanceof Error ? error.message : String(error),
+    })
     await finishDocument(documentId, token, 'failed', { error: message })
   }
 }

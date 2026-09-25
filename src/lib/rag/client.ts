@@ -8,6 +8,7 @@ import {
   modelFor,
 } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
+import { annotateSpan } from '@/lib/observability/runs'
 import type { EmbeddingInputType } from './constants'
 
 /**
@@ -239,6 +240,10 @@ export async function createEmbeddings(
   )
 
   const json = (await response.json()) as EmbeddingsResponse
+  annotateSpan({
+    model: modelFor('embed'),
+    attributes: { inputs: input.length },
+  })
   // The API is documented to preserve order, but sorting by `index` makes the
   // mapping back onto the input array explicit rather than assumed.
   return [...json.data]
@@ -385,9 +390,12 @@ export async function createChatCompletion(
       : {}),
   })
   const json = (await response.json()) as CompletionResponse
+  const tokens = json.usage?.total_tokens ?? 0
+  // Credit the model and tokens to whichever run step made this call.
+  annotateSpan({ model: String(body.model), tokens })
 
   return {
     choice: json.choices?.[0] ?? {},
-    tokens: json.usage?.total_tokens ?? 0,
+    tokens,
   }
 }

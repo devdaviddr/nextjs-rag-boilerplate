@@ -10,6 +10,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **See how each question was answered, step by step**
+  ([#78](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/78),
+  spec 0042). Every question and every document ingestion is now recorded as
+  a run of timed steps. Observability → Runs lists them; opening one shows a
+  replayable timeline of what happened, from the planner's decisions and each
+  search to writing and checking the answer, with the model, tokens and
+  results of every step, and a link to its log lines.
 - **Read the system's logs in the app**
   ([#77](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/77),
   spec 0042). Admins get an **Observability** item in the sidebar with a live

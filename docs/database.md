@@ -76,7 +76,7 @@ the `halfvec` choice is in
 
 ## How the schema is organised
 
-Eighteen tables in five groups.
+Twenty tables in five groups.
 
 **Accounts and access** — `users`, `accounts`, `sessions`,
 `verification_tokens`, `authenticators`, `roles`, `user_roles`. These follow the
@@ -99,9 +99,11 @@ the environment applies. It also records which connection each job uses
 Settings → AI provider, with the API key encrypted (AES-256-GCM) and its last
 four characters for display.
 
-**Observability** — `app_logs`: every log line, with its level, category,
-request id and details (secrets removed), kept for `LOG_RETENTION_DAYS` for
-Observability → Logs (spec 0042).
+**Observability** — `app_logs`, `rag_runs` and `rag_spans` (spec 0042).
+`app_logs` holds every log line, with its level, category, request id and
+details (secrets removed), kept for `LOG_RETENTION_DAYS`. `rag_runs` holds one
+row per question answered or document ingested, keyed by the request id, and
+`rag_spans` its timed steps; both are kept for `TELEMETRY_RETENTION_DAYS`.
 
 A **knowledge base** is a named collection of documents owned by one user. A
 **document** is one uploaded PDF, and it lives in exactly one knowledge base. A
@@ -304,6 +306,8 @@ sit on the same row as the text a citation displays.
 | `ai_settings`                  | AI settings saved from Settings, overriding the matching `RAG_*` env var             |
 | `ai_connections`               | Inference endpoints added in Settings; API key encrypted at rest                     |
 | `app_logs`                     | Log lines for Observability → Logs, pruned after `LOG_RETENTION_DAYS`                |
+| `rag_runs`                     | One row per question or ingestion: outcome, timings, tokens, best match              |
+| `rag_spans`                    | The timed steps of a run (search, plan, draft…), with model, tokens and details      |
 
 `sessions` is empty in practice. The Auth.js Drizzle adapter requires the table,
 but `session.strategy` stays `'jwt'` so that edge route protection in
