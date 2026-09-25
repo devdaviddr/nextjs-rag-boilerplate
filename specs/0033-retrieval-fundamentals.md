@@ -308,6 +308,22 @@ believes it was measured.
 > `pnpm rag:eval` after the migration is identical per question to the 1d
 > baseline, as expected at the eval corpus's size.
 
+> **1c — measured (2026-09-25).** `pnpm rag:eval --label parents`, cracking
+> off, fixed pipeline, `RAG_PARENT_ASSEMBLY=true`, corpus now including
+> `eval/corpus/records-policy.pdf` (the one document with several chunks per
+> section). Section slice (n=3, 2 gating): `section-records-disposal` rank 1 as
+> a parent assembled from 4 chunks, `section-records-retention` rank 1 from 2;
+> the diagnostic `section-downtime-table` (a text-layer table) is not retrieved
+> and does not gate. Single-hop (the control): hit@1 0.941, hit@3 0.941, MRR
+> 0.941, **refusal 1.000**, cross-KB leakage 0. Assembly only replaces two or
+> more chunks that each already passed the similarity gate, so it cannot turn a
+> refusal into an answer, and nothing new is embedded or stored — no re-ingest.
+>
+> **1g was not completed.** A run of `scope.ts` alone and of neither both scored
+> hit@1 0.941 and refusal 1.000 on 2026-09-25; the HyDE-alone and both runs were
+> stopped part-way at the owner's request, and the whole-document questions
+> they needed were not merged. The 1g criteria stay open (#27).
+
 ### 1g — HyDE versus `scope.ts`
 
 Both address "the question does not look like the passage that answers it".
@@ -379,9 +395,11 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
       measured (2026-09-25)_; `drizzle/0017_hnsw_iterative_scan.sql`
 - [x] `pnpm rag:eval` after 1e alone, recorded — identical per question to
       the 1d baseline (hit@1 0.882, MRR 0.912, refusal 1.000, leakage 0)
-- [ ] A question answered by a whole section retrieves the parent rather than
-      three adjacent children — `eval/questions.json`
-- [ ] `pnpm rag:eval` after 1c alone, recorded
+- [x] A question answered by a whole section retrieves the parent rather than
+      three adjacent children — `eval/questions.json` `section-*`: both gating
+      questions return an assembled parent at rank 1 (parent@1 2/2, 2026-09-25)
+- [x] `pnpm rag:eval` after 1c alone, recorded — single-hop hit@1 0.941,
+      MRR 0.941, refusal 1.000, cross-KB leakage 0 (see _1c — measured_)
 - [ ] HyDE measured alone, `scope.ts` measured alone, and both together, on the
       same questions — the loser removed or disabled with numbers stated
 - [ ] Refusal accuracy is 1.000 at every one of those checkpoints
@@ -398,8 +416,8 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
 > run, and none has been done:
 >
 > - **The four `pnpm rag:eval` checkpoints and the refusal-accuracy line.**
->   _(1d and 1e have since been measured — see 2026-09-25 above; this bullet
->   stands for 1c and 1g.)_ 1d
+>   _(1d, 1e and 1c have since been measured — see 2026-09-25 above; this
+>   bullet stands for 1g.)_ 1d
 >   was in the tree and **had not been measured**, which is the one thing the
 >   Design section's ordering argument said must not happen. Table chunks got
 >   roughly twice as small, `RAG_MIN_SIMILARITY` (0.35) was calibrated against
