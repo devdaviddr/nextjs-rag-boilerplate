@@ -21,6 +21,8 @@ test('signed-out visitors are sent to sign in', async ({ page, request }) => {
   await expect(page).toHaveURL(/\/login/)
   const image = await request.get('/docs-assets/answer.png')
   expect(image.status()).toBe(401)
+  const index = await request.get('/docs/search-index', { maxRedirects: 0 })
+  expect(index.status()).not.toBe(200)
 })
 
 test('the index lists every section, reachable from the sidebar', async ({
@@ -74,7 +76,33 @@ test('a page renders its diagrams, contents and in-app links', async ({
   // A relative doc link stays inside the app.
   await page.locator('.prose-docs a[href^="/docs/"]').first().click()
   await expect(page).toHaveURL(/\/docs\/[a-z-]+/)
-  await expect(page.locator('.prose-docs h1')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+})
+
+test('search finds a heading and jumps to it (FR7)', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/docs')
+  // "/" focuses the box from anywhere on the page.
+  await page.locator('body').press('/')
+  const box = page.getByRole('combobox', { name: 'Search the docs' })
+  await expect(box).toBeFocused()
+  await box.fill('halfvec')
+  const results = page.getByRole('listbox', { name: 'Search results' })
+  await expect(
+    results.getByRole('option', { name: /What pgvector adds/ }),
+  ).toBeVisible()
+  await expect(
+    results.getByRole('option', { name: /Why halfvec\(2048\)/ }),
+  ).toBeVisible()
+  await results.getByRole('option', { name: /What pgvector adds/ }).click()
+  await expect(page).toHaveURL(/\/docs\/database#what-pgvector-adds$/)
+
+  // A word the docs never use says so, rather than showing an empty box.
+  await page.goto('/docs')
+  await page
+    .getByRole('combobox', { name: 'Search the docs' })
+    .fill('zzqxnotaword')
+  await expect(page.getByText(/Nothing in the docs matches/)).toBeVisible()
 })
 
 test('diagrams also render in the dark theme', async ({ page }) => {

@@ -284,3 +284,37 @@
   height: auto;
   margin: 0 auto;
 }
+
+/*
+ * The first paragraph of a doc is its lead ("What this covers: …"): larger,
+ * quieter, and ruled off from the body below.
+ */
+.prose-docs > p:first-child {
+  font-size: 1.125rem;
+  line-height: 1.65;
+  color: var(--muted-foreground);
+  padding-bottom: 1.75rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Card art on the docs index: a violet grid that fades out at the edges. */
+.docs-card-art {
+  --grid: color-mix(in oklch, oklch(0.606 0.25 292.717) 18%, transparent);
+  background-color: color-mix(
+    in oklch,
+    oklch(0.606 0.25 292.717) 7%,
+    transparent
+  );
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: center;
+  mask-image: radial-gradient(
+    ellipse 90% 100% at 50% 50%,
+    #000 55%,
+    transparent 100%
+  );
+  border-bottom: 1px solid var(--border);
+}
