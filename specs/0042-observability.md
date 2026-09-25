@@ -14,7 +14,9 @@ Tracked in [#75](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/75)
 help),
 [#77](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/77) (logs),
 [#78](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/78) (runs),
-[#79](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/79) (telemetry).
+[#79](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/79) (telemetry),
+[#80](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/80) (live
+activity in chat).
 
 ## Summary
 
@@ -99,6 +101,15 @@ plain-language explanation.
   error rate); charts over time; how agentic runs ended; the distribution of
   best similarity against the floor; failures by model; ingestion outcomes;
   a list of recent runs.
+- **FR12 — Live activity in chat.** Under every answer, anyone can open an
+  **Agent activity** drawer. While the answer is written it shows, as they
+  happen, each step with its timing and a plain-language line for each thing
+  that happened (the planner's decisions, what each search found, retries).
+  Reopening an old answer shows what was recorded then. People see only their
+  own answers' activity, as plain lines; admins also see each line's redacted
+  details and a link to the full run. The drawer is closed by default. Events
+  still travel with the answer, capped at 300, because a stream cannot be
+  joined halfway; they are drawn only when the drawer is opened.
 - **FR11 — Access.** Admins only: the pages, their data routes and the
   sidebar item. Non-admins get a 404 for the pages and 403 for the data.
 
@@ -185,6 +196,13 @@ descriptions.
 - [x] FR11: non-admins get 404 / 403 everywhere — e2e _"non-admins cannot
       see or reach Observability"_ (all three pages 404, the data route 403,
       no sidebar item)
+- [x] FR12: the drawer shows an answer's steps and lines live, and an old
+      answer's recorded activity; non-admins get plain lines for their own
+      answers only; the stream is capped — checked live 2026-09-26 (8 steps
+      and 4 lines streamed, kept across the move to the thread's URL, and
+      reloaded from history); `tests/unit/observability-activity.test.ts`,
+      `tests/unit/chat-activity-route.test.ts` (owner / stranger / admin);
+      axe clean with the drawer open
 - [x] NFR1: a failing database does not fail a request (tested) —
       _"drops a batch the database refuses"_, _"never lets a failing sink
       break the caller"_, and the bounded queue
@@ -216,7 +234,9 @@ descriptions.
 1. Logs are stored in Postgres, kept 7 days by default.
 2. Telemetry is built in, and runs keep the full question and passage text.
 3. The pages live under an **Observability** sidebar item, admins only.
-4. Custom components follow 21st.dev designs, built here rather than
+4. Live activity in chat (FR12) is for everyone, inline under each answer,
+   and closed until opened. Raw details stay admin-only.
+5. Custom components follow 21st.dev designs, built here rather than
    installed, so no 21st.dev account is needed.
 
 ## References

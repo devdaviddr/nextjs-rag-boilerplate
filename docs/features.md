@@ -118,6 +118,17 @@ holds that model's vectors and changing it means re-indexing (#56). Choosing a
 provider also chooses who sees your document text: the questions and the
 retrieved passages go to it.
 
+### Watching an answer being built
+
+Every answer in a chat has an **Agent activity** link under it. Open it while
+the answer is being written and it follows along live: each step with its
+timing (finding passages, each thing the planner decided, each search, writing
+the answer, checking its citations) and a plain line for each thing that
+happened, such as "Decided to search for 'leave policy'" or "Found 5 passages
+(best match 0.73)". Open it on an older answer and it shows what was recorded
+then. Everyone sees this for their own answers; admins also get each line's
+raw details and links to the full run and its log lines (spec 0042 FR12).
+
 ### Observability: what the pipeline is doing
 
 Admins get an **Observability** item in the sidebar (spec 0042). **Logs** shows

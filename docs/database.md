@@ -301,7 +301,7 @@ sit on the same row as the text a citation displays.
 | `documents`                    | A PDF in one knowledge base + its ingestion status                                   |
 | `chunks`                       | Indexed passages: `halfvec(2048)` embedding + generated `tsvector` for hybrid search |
 | `conversations`                | Chat threads, ordered in Recents by `updated_at`                                     |
-| `messages`                     | Turns, with stored citations and generation metrics                                  |
+| `messages`                     | Turns, with stored citations, generation metrics and the request id of each answer   |
 | `conversation_knowledge_bases` | Which knowledge bases a thread may search — fixed at creation                        |
 | `ai_settings`                  | AI settings saved from Settings, overriding the matching `RAG_*` env var             |
 | `ai_connections`               | Inference endpoints added in Settings; API key encrypted at rest                     |

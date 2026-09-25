@@ -2,6 +2,8 @@ import 'server-only'
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 
+import { hasListeners, publish } from './bus'
+
 /**
  * Runs and their steps (spec 0042 FR8): every question, and every ingestion,
  * recorded as a run of timed steps, in the shape OpenTelemetry uses for a
@@ -145,6 +147,28 @@ export function currentRun(): Run | null {
   return storage.getStore()?.run ?? null
 }
 
+/** Tell a live chat drawer that a step started or ended (FR12). */
+function announce(run: Run, record: SpanRecord, phase: 'start' | 'end'): void {
+  const requestId = run.init.id
+  if (!hasListeners(requestId)) return
+  publish(requestId, {
+    kind: 'step',
+    phase,
+    key: record.key,
+    parentKey: record.parentKey,
+    name: record.name,
+    offsetMs: Math.max(0, record.startedAt.getTime() - run.startedAt.getTime()),
+    ...(phase === 'end'
+      ? {
+          durationMs: record.durationMs,
+          status: record.status,
+          model: record.model,
+          tokens: record.tokens,
+        }
+      : {}),
+  })
+}
+
 export interface SpanHandle {
   /** Add details to this step: a query, a count, a score. */
   set(attributes: Record<string, unknown>): void
@@ -180,6 +204,7 @@ export async function span<T>(
   const handle: SpanHandle = {
     set: (more) => Object.assign(record.attributes, more),
   }
+  announce(run, record, 'start')
   try {
     return await storage.run({ run, span: record }, () => fn(handle))
   } catch (error) {
@@ -190,6 +215,7 @@ export async function span<T>(
   } finally {
     record.durationMs = Math.round(performance.now() - started)
     run.spans.push(record)
+    announce(run, record, 'end')
   }
 }
 
@@ -225,6 +251,7 @@ export function beginSpan(
   }
   const started = performance.now()
   let ended = false
+  announce(run, record, 'start')
   return {
     set: (more) => Object.assign(record.attributes, more),
     end: (result = {}) => {
@@ -235,6 +262,7 @@ export function beginSpan(
       record.model = result.model ?? record.model
       record.tokens = result.tokens ?? record.tokens
       run.spans.push(record)
+      announce(run, record, 'end')
     },
   }
 }

@@ -14,6 +14,12 @@ import { toStoredCitations } from '@/lib/chat/citations'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
+import {
+  MAX_ACTIVITY_EVENTS,
+  toActivityLine,
+  worthShowing,
+} from '@/lib/observability/activity'
+import { subscribe } from '@/lib/observability/bus'
 import { beginSpan, span, startRun } from '@/lib/observability/runs'
 import {
   annotateContext,
@@ -78,6 +84,8 @@ interface ChatRequestBody {
   // permitted. Sending it with an existing conversationId is ignored, not an
   // error — the client has no way to change it.
   knowledgeBaseIds?: unknown
+  /** Stream this answer's activity for the chat's drawer (spec 0042 FR12). */
+  activity?: unknown
 }
 
 function line(payload: unknown): Uint8Array {
@@ -132,6 +140,9 @@ async function answer(request: Request, requestId: string) {
   }
 
   const question = typeof body.question === 'string' ? body.question.trim() : ''
+  // Whether to stream this answer's activity for the chat's drawer (FR12).
+  const wantsActivity = body.activity === true
+  const isAdmin = (session.user.roles ?? []).includes('admin')
   if (question.length === 0) {
     return NextResponse.json(
       { error: 'A question is required.' },
@@ -327,6 +338,7 @@ async function answer(request: Request, requestId: string) {
           content,
           citations,
           metrics,
+          requestId,
         })
         .returning({ id: messages.id })
       persistedId = row?.id ?? null
@@ -371,6 +383,9 @@ async function answer(request: Request, requestId: string) {
   let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
   let answer = ''
 
+  // Hoisted so `cancel()` and a dropped connection can stop it too.
+  let stopActivity: () => void = () => {}
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (payload: unknown): void => {
@@ -381,7 +396,28 @@ async function answer(request: Request, requestId: string) {
           closed = true
         }
       }
+      // The Agent activity drawer (spec 0042 FR12): this answer's steps and
+      // log lines, forwarded as they happen. Plain lines for everyone; the
+      // redacted details for admins only. Capped, and never allowed to fail
+      // the answer.
+      let forwarded = 0
+      stopActivity = wantsActivity
+        ? subscribe(requestId, (event) => {
+            if (forwarded >= MAX_ACTIVITY_EVENTS) return
+            if (event.kind === 'log' && !worthShowing(event.message)) return
+            forwarded++
+            send({
+              type: 'activity',
+              event:
+                event.kind === 'log'
+                  ? toActivityLine(event, isAdmin)
+                  : { ...event, kind: 'step' },
+            })
+          })
+        : () => {}
+
       const finish = (): void => {
+        stopActivity()
         if (closed) return
         closed = true
         try {
@@ -395,11 +431,13 @@ async function answer(request: Request, requestId: string) {
       // socket mid-stream, so react to the request signal directly.
       request.signal.addEventListener('abort', () => {
         closed = true
+        stopActivity()
         void upstreamReader?.cancel().catch(() => undefined)
       })
 
       try {
         send({ type: 'conversation', conversationId, title: conversationTitle })
+        send({ type: 'request', requestId })
 
         const retrieved = await span('retrieve', async (step) => {
           const found = await gatherEvidence((phase, iteration) => {
@@ -713,6 +751,7 @@ async function answer(request: Request, requestId: string) {
     },
     cancel() {
       closed = true
+      stopActivity()
       run.finish({ status: 'cancelled', mode: retrievalMode })
       void upstreamReader?.cancel().catch(() => undefined)
       void persistAnswer(answer)

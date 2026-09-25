@@ -88,8 +88,8 @@ function LogRow({
       className={cn(
         'hover:bg-muted/60 border-l-[3px]',
         category.stripe,
-        line.level === 'error' && 'bg-red-50/60 dark:bg-red-500/5',
-        line.level === 'warn' && 'bg-amber-50/50 dark:bg-amber-500/5',
+        line.level === 'error' && 'bg-red-50/30 dark:bg-red-500/5',
+        line.level === 'warn' && 'bg-amber-50/30 dark:bg-amber-500/5',
       )}
     >
       <div className="flex items-start gap-2 px-2 py-1">

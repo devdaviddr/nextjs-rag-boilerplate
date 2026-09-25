@@ -4,6 +4,7 @@ import { lt } from 'drizzle-orm'
 
 import { type LogRecord, setLogContext, setLogSink } from '@/lib/logger'
 
+import { hasListeners, publish } from './bus'
 import { categorise } from './categorise'
 import { currentContext } from './context'
 import { redact } from './redact'
@@ -36,6 +37,21 @@ export interface LogRow {
 }
 
 export type Writer = (rows: LogRow[]) => Promise<void>
+
+/** Hand a line to the chat drawer watching its request, if one is. */
+export function publishLine(record: LogRecord): void {
+  const requestId = record.context?.requestId
+  if (!requestId || !hasListeners(requestId)) return
+  const row = toRow(record)
+  publish(requestId, {
+    kind: 'log',
+    time: row.time.toISOString(),
+    level: record.level,
+    category: row.category,
+    message: row.message,
+    meta: row.meta,
+  })
+}
 
 export function toRow(record: LogRecord): LogRow {
   const { context, meta } = record
@@ -139,10 +155,14 @@ export function startLogStore({
   if (state.__appLogStoreStarted) return
   state.__appLogStoreStarted = true
   setLogContext(currentContext)
-  if (!persist) return
 
-  const queue = createLogQueue(writeRows)
-  setLogSink((record) => queue.enqueue(record))
+  // Every line goes to anyone watching its request live (FR12), stored or not.
+  const queue = persist ? createLogQueue(writeRows) : null
+  setLogSink((record) => {
+    publishLine(record)
+    queue?.enqueue(record)
+  })
+  if (!queue) return
   setInterval(() => void queue.flush(), FLUSH_MS).unref()
 
   const runPrune = () =>

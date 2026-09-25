@@ -29,6 +29,8 @@ export interface ConversationMessage {
   content: string
   citations: StoredCitation[]
   metrics: StoredMetrics | null
+  /** The request that produced an answer, for its Agent activity drawer. */
+  requestId: string | null
 }
 
 /**
@@ -122,6 +124,7 @@ export async function getConversation(conversationId: string): Promise<{
       content: messages.content,
       citations: messages.citations,
       metrics: messages.metrics,
+      requestId: messages.requestId,
     })
     .from(messages)
     .where(

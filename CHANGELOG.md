@@ -10,6 +10,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Watch an answer being built, live**
+  ([#80](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/80),
+  spec 0042). Every chat answer has an **Agent activity** drawer. Opened while
+  the answer is written, it follows each step and says in plain words what
+  happened (what the planner decided, what each search found, retries);
+  opened on an older answer, it shows what was recorded. Everyone sees it for
+  their own answers; admins also see each line's details and links to the
+  full run.
 - **Watch RAG and agent health over time**
   ([#79](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/79),
   spec 0042). Observability → Overview shows the last 24 hours or 7 days

@@ -675,6 +675,10 @@ export const messages = pgTable(
     // Generation metrics (tokens, tok/s, latency). Null for user messages and
     // for assistant messages answered without calling the model.
     metrics: jsonb('metrics').$type<StoredMetrics>(),
+    // The request that produced this answer (spec 0042 FR12): the key of its
+    // log lines and its run, so the chat's Agent activity drawer can show
+    // what happened. Null for user messages and for older answers.
+    requestId: text('request_id'),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
