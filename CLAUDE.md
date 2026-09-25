@@ -31,6 +31,7 @@ pnpm docker:db                           # local Postgres
 pnpm db:generate | db:migrate | db:seed | db:studio
 pnpm gen:icons                           # regenerate PWA icons
 pnpm specs:index | specs:check           # regenerate · verify the spec index
+pnpm docs:check                          # in-app docs: index + every link/anchor
 pnpm release:next | release:check        # suggest the next version · check a release
 pnpm pr:check                            # the PR check, locally (PR_TITLE / PR_BODY env)
 ```
@@ -127,6 +128,9 @@ Do not start a change that has no issue.
   `docs/usage.md`, auth/OAuth/email → `docs/features.md`, `docs/oauth.md`,
   `docs/email.md`, deploy/CI → `docs/self-hosting.md`, `docs/ci-cd.md`,
   `docs/workflow.md`. Also update `CLAUDE.md` when a convention here changes.
+  `docs/*.md` is also the in-app **Docs** section (spec 0041): a new doc must
+  be added to `DOC_SECTIONS` in `scripts/docs-lib.mjs`, and `pnpm docs:check`
+  fails on any broken relative link or `#anchor`.
 
 ## Releasing
 

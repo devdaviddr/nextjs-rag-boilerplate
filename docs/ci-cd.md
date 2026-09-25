@@ -64,8 +64,8 @@ and code scanning was unavailable; restoring it is a separate decision.
 A `changes` job classifies each pull request. When every changed file is
 under `specs/` or `docs/`, or ends in `.md`, the PR is **docs-only**:
 
-- **Lint · Typecheck · Unit** runs only install, `format:check` and
-  `specs:check`.
+- **Lint · Typecheck · Unit** runs only install, `format:check`,
+  `specs:check` and `docs:check`.
 - **E2E (Playwright)** and **Build image** are skipped. A job skipped by an
   `if:` counts as passing for the ruleset's required checks, so the PR stays
   mergeable in about a minute instead of several.
@@ -94,6 +94,7 @@ pnpm lint
 pnpm typecheck
 pnpm test:coverage
 pnpm specs:check
+pnpm docs:check                 # every docs/*.md indexed, every link and anchor resolves
 pnpm audit --audit-level=high   # continue-on-error: advisory, non-blocking
 ```
 

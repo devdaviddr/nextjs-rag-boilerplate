@@ -8,6 +8,20 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Documentation inside the app**
+  ([#60](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/60),
+  [#61](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/61),
+  [#59](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/59),
+  spec 0041). A **Docs** item in the sidebar opens the platform's
+  documentation — the same `docs/*.md` the repo maintains — grouped as About,
+  Using the app, Features, Architecture & retrieval, Data and Operations. Pages
+  have a table of contents, links that stay in the app (or go to GitHub at the
+  running commit for README, specs and source), and all 12 architecture
+  diagrams drawn, in light and dark. Signed-in users only. `pnpm docs:check`,
+  now in CI, fails on an unindexed doc or any broken link or anchor.
+
 ## [0.22.0] - 2026-09-25
 
 ### Added

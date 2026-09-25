@@ -113,17 +113,44 @@ or deployment are in the same position.
 
 ## Acceptance criteria
 
-- [ ] FR1: every file in `docs/` is reachable from `/docs` in its section; a test
-      fails for an unmapped doc
-- [ ] FR2: all 16 pages render with anchors and a table of contents; no raw HTML
-      is rendered
-- [ ] FR3: every relative link resolves in-app (`pnpm docs:check`, 0 failures);
-      out-of-docs links go to GitHub at `APP_GIT_SHA`; images load
-- [ ] FR4: all 12 Mermaid diagrams render in light and dark themes; a broken one
-      shows its source
-- [ ] FR5: pages are static; `pnpm docs:check` runs in CI
-- [ ] FR6: signed-out users are redirected to sign in
-- [ ] NFR1: Mermaid is absent from the bundle of pages without diagrams
+- [x] FR1: every file in `docs/` is reachable from `/docs` in its section; a test
+      fails for an unmapped doc — `tests/unit/docs-lib.test.ts` _"maps every
+      docs/\*.md exactly once"_, `pnpm docs:check`, `tests/e2e/docs.spec.ts`
+      _"the index lists every section"_
+- [x] FR2: all 16 pages render with anchors and a table of contents; no raw HTML
+      is rendered — `DocMarkdown` uses remark-gfm + rehype-slug with no
+      `rehype-raw`; ids match `docs:check`'s (_"produces the ids rehype-slug
+      gives"_); TOC tested in _"a page renders its diagrams, contents and in-app
+      links"_
+- [x] FR3: every relative link resolves in-app (`pnpm docs:check`: 16 docs, 351
+      links, 0 failures); out-of-docs links go to GitHub at `APP_GIT_SHA`
+      (`resolveDocHref`, unit-tested); images are served by `/docs-assets`
+      (no current doc embeds one — README's screenshots live in `docs/images`)
+- [x] FR4: all 12 Mermaid diagrams render in light and dark themes; a broken one
+      shows its source — e2e checks every diagram on database, rag and
+      architecture (light) and rag (dark) with no CSP errors;
+      `tests/unit/docs-mermaid.test.tsx` covers the fallback
+- [x] FR5: `pnpm docs:check` runs in CI (quality job, docs-only PRs included);
+      docs ship in the image via `outputFileTracingIncludes` — see _As built_
+- [x] FR6: signed-out users are redirected to sign in; `/docs-assets` returns
+      401 — e2e _"signed-out visitors are sent to sign in"_
+- [x] NFR1: Mermaid is absent from the bundle of pages without diagrams —
+      imported only by `import('mermaid')` inside `MermaidDiagram`, which only
+      `DocMarkdown` renders
+
+### As built (2026-09-25)
+
+**FR5 deviates from "static at build time".** The docs live under the
+dashboard route group, whose layout reads the session on every request, so the
+pages render per request. `src/lib/docs` reads `docs/*.md` once per process and
+keeps it in memory (re-read in development, so edits show live); the files are
+traced into the image by `outputFileTracingIncludes`, with `turbopackIgnore` on
+the `process.cwd()` path so the tracer does not copy the whole project (#16).
+Same guarantee — the content ships with the build — for one ~250 KB read per
+process.
+
+**`/docs-assets` checks the session itself**: the proxy's matcher skips paths
+with an image extension, so the protected-prefix check never ran for them.
 
 ## Security & privacy
 
