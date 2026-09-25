@@ -56,7 +56,9 @@ git switch -c release/vX.Y.Z
 2. **`CHANGELOG.md`** — rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
    (today), and add a fresh empty `## [Unreleased]` above it. Read the moved
    section against `git log vPREV..HEAD --oneline`: every `feat`/`fix`/`perf`
-   should have an entry. Add missing ones in the existing style (a bold lead
+   should have an entry. Renovate's `fix(deps)`/`chore(deps)` PRs carry
+   `no-changelog`, so add one `### Changed` line summarising the notable
+   dependency updates since `vPREV` instead. Add missing ones in the existing style (a bold lead
    sentence, then what changed and why it matters to a user of the template).
 3. **Specs** — for every spec with all acceptance criteria ticked and status
    `Proposed`, set `status: Shipped`, `release: vX.Y.Z`, `updated:` today.
