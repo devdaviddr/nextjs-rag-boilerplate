@@ -1,10 +1,10 @@
 ---
 id: 0037
 title: Let a user inspect what was actually indexed
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.21.0
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-25
 ---
 
 # 0037 — Let a user inspect what was actually indexed

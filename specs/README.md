@@ -95,15 +95,15 @@ other — one isn't a substitute for the other.
 | [0028](0028-independent-knowledge-bases.md)           | Independent knowledge bases                                                          | Shipped  | v0.20.0 |
 | [0029](0029-agentic-retrieval-loop.md)                | Agentic retrieval loop                                                               | Shipped  | v0.20.0 |
 | [0030](0030-invalidate-sessions-for-deleted-users.md) | Invalidate sessions whose user no longer exists                                      | Shipped  | v0.20.1 |
-| [0031](0031-tables-figures-and-complex-layouts.md)    | Index tables, figures and complex layouts                                            | Proposed | —       |
+| [0031](0031-tables-figures-and-complex-layouts.md)    | Index tables, figures and complex layouts                                            | Shipped  | v0.21.0 |
 | [0032](0032-settle-the-agentic-trade.md)              | Settle whether the agentic path should be the default                                | Proposed | —       |
 | [0033](0033-retrieval-fundamentals.md)                | The retrieval fundamentals that were skipped                                         | Proposed | —       |
-| [0034](0034-resumable-ingestion.md)                   | Resumable ingestion                                                                  | Proposed | —       |
-| [0035](0035-span-level-citations.md)                  | Highlight the cited span, not just the page                                          | Proposed | —       |
+| [0034](0034-resumable-ingestion.md)                   | Resumable ingestion                                                                  | Shipped  | v0.21.0 |
+| [0035](0035-span-level-citations.md)                  | Highlight the cited span, not just the page                                          | Shipped  | v0.21.0 |
 | [0036](0036-reranking.md)                             | Reranking, without waiting for the account                                           | Proposed | —       |
-| [0037](0037-inspect-what-was-indexed.md)              | Let a user inspect what was actually indexed                                         | Proposed | —       |
-| [0038](0038-store-the-search-key.md)                  | Store the search key, and show what the page contributed                             | Proposed | —       |
-| [0039](0039-structure-from-the-text-layer.md)         | Find a document's structure in its text layer                                        | Proposed | —       |
+| [0037](0037-inspect-what-was-indexed.md)              | Let a user inspect what was actually indexed                                         | Shipped  | v0.21.0 |
+| [0038](0038-store-the-search-key.md)                  | Store the search key, and show what the page contributed                             | Shipped  | v0.21.0 |
+| [0039](0039-structure-from-the-text-layer.md)         | Find a document's structure in its text layer                                        | Shipped  | v0.21.0 |
 
 <!-- specs:index:end -->
 

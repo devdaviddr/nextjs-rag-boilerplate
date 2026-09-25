@@ -20,7 +20,7 @@ term from scratch.
 
 ## Quick stats
 
-- **Version:** 0.20.0
+- **Version:** 0.21.0
 - **License:** MIT
 - **Type:** Full-stack Next.js 16 application template (not a library)
 - **Target:** Single-box production (Docker + Cloudflare Tunnel)
@@ -29,12 +29,12 @@ term from scratch.
 
 | Layer            | Technology        | Version               |
 | ---------------- | ----------------- | --------------------- |
-| Framework        | Next.js           | 16.2.10               |
+| Framework        | Next.js           | 16.3.6                |
 | Runtime          | React             | 19.2.7                |
 | Language         | TypeScript        | 5.9.3                 |
 | Database         | PostgreSQL        | 17 (+ pgvector)       |
 | ORM              | Drizzle           | 0.45.2                |
-| Auth             | Auth.js v5        | 5.0.0-beta.31         |
+| Auth             | Auth.js v5        | 5.0.0-beta.32         |
 | Password Hashing | Argon2id          | @node-rs/argon2 2.0.2 |
 | UI               | Tailwind CSS      | v4 + shadcn/ui        |
 | Storage          | S3-compatible     | MinIO (or R2/S3)      |

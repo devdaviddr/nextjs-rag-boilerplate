@@ -1,10 +1,10 @@
 ---
 id: 0038
 title: Store the search key, and show what the page contributed
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.21.0
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-25
 ---
 
 # 0038 — Store the search key, and show what the page contributed
@@ -189,7 +189,9 @@ make this view the thing it exists to prevent.
       with the composed text marked as recomputed
 - [x] A document ingested before this spec renders as it did, with no invented
       caption or heading box
-- [ ] `pnpm rag:eval` is run and the refusal rate is unchanged
+- [x] `pnpm rag:eval` is run and the refusal rate is unchanged — recorded
+      in `CHANGELOG.md` [0.21.0] under spec 0039: after 0038 and 0039, hit@1
+      0.882, MRR 0.912, refusal accuracy 1.000, identical to the run before both
 
 ## Security & privacy
 
