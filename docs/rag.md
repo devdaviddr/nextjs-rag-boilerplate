@@ -722,7 +722,7 @@ the client acts on each as it arrives.
 | `citations`    | Once evidence is gathered                                                                        | `citations[]`, before any prose           |
 | `token`        | Per streamed delta                                                                               | `value`                                   |
 | `revision`     | If verification stripped anything                                                                | `value` — the full corrected answer       |
-| `metrics`      | After the stream                                                                                 | tokens, tok/s, time to first token, model |
+| `metrics`      | As soon as drafting ends — the answer is saved; the composer unlocks                             | tokens, tok/s, time to first token, model |
 | `error`        | Instead of an answer                                                                             | `message`                                 |
 | `done`         | Last, always                                                                                     | —                                         |
 
@@ -1396,12 +1396,16 @@ token streaming and makes time-to-first-token meaningless on every answer — a
 permanent regression to avoid a brief exposure the revision then removes. The
 persisted record is always the verified text.
 
-The stream — and so the composer — stays open until verification returns, so
-it gets **one attempt with a 12-second deadline** (`VERIFY_TIMEOUT_MS`), not
-the client's default of 60s × 4 retries. It fails open: a timeout strips
-nothing. Before this, a hanging planner kept the send button locked for up to
-~110s after the answer was on screen (#42). The answer's metrics (total time,
-tokens/sec) stop at the end of drafting and do not include verification.
+The answer is **saved and its `metrics` frame sent the moment drafting ends**,
+and `metrics` is the client's signal to unlock the composer (#48). Verification
+then runs while the stream stays open; if it strips a claim, it updates the
+saved row and sends `revision`, which the client applies to that answer by id
+(a next question may already be streaming). It gets **one attempt with a
+12-second deadline** (`VERIFY_TIMEOUT_MS`) rather than the client default of
+60s × 4, and fails open: a timeout strips nothing (#42). The answer's metrics
+(total time, tokens/sec) cover drafting only. The saved draft can be seen
+unverified for those few seconds if the thread is reopened mid-check; once
+verification returns, the saved record is the verified text.
 
 ---
 

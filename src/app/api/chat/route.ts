@@ -269,9 +269,10 @@ export async function POST(request: Request) {
    * Commit the answer. Called on normal completion AND on a client
    * disconnect: a conversation showing a question with no answer is a worse
    * failure than a truncated one (spec 0026 NFR3). Guarded so it can only run
-   * once.
+   * once; a later citation revision updates the same row (`reviseAnswer`).
    */
   let persisted = false
+  let persistedId: string | null = null
   const persistAnswer = async (
     content: string,
     metrics: MessageMetrics | null = null,
@@ -287,14 +288,18 @@ export async function POST(request: Request) {
     if (content.length === 0) return
     persisted = true
     try {
-      await db.insert(messages).values({
-        conversationId,
-        ownerId: userId,
-        role: 'assistant',
-        content,
-        citations,
-        metrics,
-      })
+      const [row] = await db
+        .insert(messages)
+        .values({
+          conversationId,
+          ownerId: userId,
+          role: 'assistant',
+          content,
+          citations,
+          metrics,
+        })
+        .returning({ id: messages.id })
+      persistedId = row?.id ?? null
       // Recents is ordered by activity, not creation.
       await db
         .update(conversations)
@@ -302,6 +307,29 @@ export async function POST(request: Request) {
         .where(eq(conversations.id, conversationId))
     } catch (error) {
       logger.error('Failed to persist the assistant message', {
+        userId,
+        conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  /**
+   * Replace the persisted answer with its verified text (#48). The draft is
+   * saved BEFORE verification so the composer can unlock the moment drafting
+   * ends without a quick next question being stored ahead of this answer;
+   * this keeps the "persisted record is the verified text" guarantee once
+   * verification returns.
+   */
+  const reviseAnswer = async (content: string): Promise<void> => {
+    if (!persistedId) return
+    try {
+      await db
+        .update(messages)
+        .set({ content })
+        .where(and(eq(messages.id, persistedId), eq(messages.ownerId, userId)))
+    } catch (error) {
+      logger.error('Failed to persist the verified answer', {
         userId,
         conversationId,
         error: error instanceof Error ? error.message : String(error),
@@ -518,7 +546,24 @@ export async function POST(request: Request) {
         // watched stream in, not the post-hoc check that follows it (#42).
         const draftedAt = Date.now()
 
-        // Verify citations before the answer is committed (spec 0029 FR6).
+        // The answer is complete: save it and send its metrics now. `metrics`
+        // is the client's signal that the composer may unlock (#48) — it no
+        // longer waits for verification, which continues below and revises
+        // this same row if it strips anything.
+        const metrics = computeMetrics({
+          model: chatModelName(),
+          promptTokens,
+          completionTokens,
+          startedAt,
+          firstTokenAt,
+          finishedAt: draftedAt,
+          sourceCount: citations.length,
+          retrieval: retrievalMode,
+        })
+        await persistAnswer(answer, metrics)
+        send({ type: 'metrics', metrics })
+
+        // Verify citations (spec 0029 FR6), after the answer is readable.
         //
         // This runs AFTER streaming rather than before it. Verifying first
         // would mean buffering the whole answer, which kills token streaming
@@ -545,6 +590,7 @@ export async function POST(request: Request) {
               stripped: verified.strippedIndices,
             })
             answer = verified.empty ? NO_CONTEXT_ANSWER : verified.text
+            await reviseAnswer(answer)
             send({
               type: 'revision',
               value: answer,
@@ -553,18 +599,6 @@ export async function POST(request: Request) {
           }
         }
 
-        const metrics = computeMetrics({
-          model: chatModelName(),
-          promptTokens,
-          completionTokens,
-          startedAt,
-          firstTokenAt,
-          finishedAt: draftedAt,
-          sourceCount: citations.length,
-          retrieval: retrievalMode,
-        })
-        await persistAnswer(answer, metrics)
-        send({ type: 'metrics', metrics })
         send({ type: 'done' })
         finish()
       } catch (error) {

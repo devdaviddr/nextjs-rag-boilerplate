@@ -10,6 +10,18 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- **You can ask the next question as soon as the answer is written**
+  ([#48](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/48)).
+  The composer stayed locked until citation verification finished — up to
+  12s after the answer and its metrics were on screen. The answer is now
+  saved and its metrics sent the moment drafting ends, and that unlocks the
+  composer; verification continues in the background, shows "Checking
+  sources…" on that answer, and revises it in place if it strips a claim, even
+  if the next question is already streaming. Measured on the live endpoint:
+  unlock at 17.0s instead of 29.0s.
+
+### Fixed
+
 - **An overloaded model is reported as overloaded**
   ([#43](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/43)).
   The chat endpoint can answer `200` and then stream an error frame
