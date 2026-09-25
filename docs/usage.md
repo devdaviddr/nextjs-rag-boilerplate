@@ -100,6 +100,9 @@ control stay inert until you set them.
 | `APP_URL`                    |    –     | Public origin for OG/`metadataBase`, `robots`/`sitemap`, and OAuth callback URLs. Default `http://localhost:3000`            |
 | `NODE_ENV`                   |    –     | `development` \| `test` \| `production`                                                                                      |
 | `LOG_LEVEL`                  |    –     | `debug` \| `info` \| `warn` \| `error`                                                                                       |
+| `LOG_PERSIST`                |    –     | `false` stops keeping log lines in Postgres for Observability → Logs (stdout is unaffected). Default on                      |
+| `LOG_RETENTION_DAYS`         |    –     | Days of log lines kept for Observability → Logs. Default `7`                                                                 |
+| `TELEMETRY_RETENTION_DAYS`   |    –     | Days of runs (questions and ingestions, step by step) kept for Observability. Default `30`                                   |
 | `RATE_LIMIT_DISABLED`        |    –     | `true` to disable the in-memory auth rate limiter                                                                            |
 | `EMAIL_ENABLED`              |    –     | `true` to turn on email; requires the SMTP vars below                                                                        |
 | `EMAIL_FROM`                 |    †     | From address (required when `EMAIL_ENABLED=true`)                                                                            |

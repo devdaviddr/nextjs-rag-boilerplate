@@ -10,6 +10,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Read the system's logs in the app**
+  ([#77](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/77),
+  spec 0042). Admins get an **Observability** item in the sidebar with a live
+  Logs page: colour-coded by level and by area (agent, retrieval, inference,
+  ingestion, auth, settings, system), searchable, with each line's details
+  and every line of one question a click away. The agents now log what they
+  decide as they decide it. Lines are kept in Postgres for 7 days
+  (`LOG_RETENTION_DAYS`; `LOG_PERSIST=false` turns it off), with secrets
+  removed first.
 - **Choose the AI provider and models from Settings**
   ([#54](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/54),
   [#55](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/55),

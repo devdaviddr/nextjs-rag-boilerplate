@@ -76,7 +76,7 @@ the `halfvec` choice is in
 
 ## How the schema is organised
 
-Seventeen tables in four groups.
+Eighteen tables in five groups.
 
 **Accounts and access** — `users`, `accounts`, `sessions`,
 `verification_tokens`, `authenticators`, `roles`, `user_roles`. These follow the
@@ -98,6 +98,10 @@ the environment applies. It also records which connection each job uses
 (`connection:chat` and so on). `ai_connections` holds the endpoints added in
 Settings → AI provider, with the API key encrypted (AES-256-GCM) and its last
 four characters for display.
+
+**Observability** — `app_logs`: every log line, with its level, category,
+request id and details (secrets removed), kept for `LOG_RETENTION_DAYS` for
+Observability → Logs (spec 0042).
 
 A **knowledge base** is a named collection of documents owned by one user. A
 **document** is one uploaded PDF, and it lives in exactly one knowledge base. A
@@ -299,6 +303,7 @@ sit on the same row as the text a citation displays.
 | `conversation_knowledge_bases` | Which knowledge bases a thread may search — fixed at creation                        |
 | `ai_settings`                  | AI settings saved from Settings, overriding the matching `RAG_*` env var             |
 | `ai_connections`               | Inference endpoints added in Settings; API key encrypted at rest                     |
+| `app_logs`                     | Log lines for Observability → Logs, pruned after `LOG_RETENTION_DAYS`                |
 
 `sessions` is empty in practice. The Auth.js Drizzle adapter requires the table,
 but `session.strategy` stays `'jwt'` so that edge route protection in

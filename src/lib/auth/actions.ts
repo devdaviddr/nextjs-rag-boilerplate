@@ -169,6 +169,7 @@ export async function registerAction(
     logger.error('Registration insert failed', { error: String(error) })
     return { status: 'error', message: 'Could not create your account.' }
   }
+  logger.info('User registered', { category: 'auth' })
 
   // Kick off email verification (no-op when email is disabled). A send failure
   // is swallowed inside sendVerificationEmail so it never blocks sign-in.

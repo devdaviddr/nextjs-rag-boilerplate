@@ -118,6 +118,18 @@ holds that model's vectors and changing it means re-indexing (#56). Choosing a
 provider also chooses who sees your document text: the questions and the
 retrieved passages go to it.
 
+### Observability: what the pipeline is doing
+
+Admins get an **Observability** item in the sidebar (spec 0042). **Logs** shows
+every log line the server writes, live, newest at the bottom: the level as a
+coloured badge (error, warn, info, debug), the area as a coloured stripe
+(agent, retrieval, inference, ingestion, auth, settings, system), and the full
+details a click away. Every line written while answering one question shares a
+request id, so one click shows that question's whole story: what the planner
+chose, what each search found, reranking, HyDE, and any provider errors and
+retries. Lines are kept in Postgres for `LOG_RETENTION_DAYS` (7 by default),
+with API keys and other secrets removed before they are stored.
+
 ### Measured, not asserted
 
 A **retrieval evaluation harness** (`pnpm rag:eval`) runs a ground-truth corpus

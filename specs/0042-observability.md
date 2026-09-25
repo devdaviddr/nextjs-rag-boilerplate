@@ -152,8 +152,9 @@ are wrapped at their call sites, so their unit tests do not change.
 
 **Pages.** `src/app/(dashboard)/observability/` with tabs Overview · Runs ·
 Logs, and a sidebar item for admins. Charts use shadcn's chart primitives
-over Recharts, loaded only on the Overview. The log list is virtualised
-(`@tanstack/react-virtual`). The run waterfall, the log console, the
+over Recharts, loaded only on the Overview. The log list keeps at most 2,000
+lines in the browser, with older pages loaded on request, which made
+virtualisation unnecessary. The run waterfall, the log console, the
 partition bar and the stat tiles follow the designs of 21st.dev's _Agent
 Trace_ (NIMA MZ), _Log Viewer_ (hirael), _Partition Bar_ (8starlabs) and
 _Stats Grid_ (shadcnui-blocks), all MIT, built here from their published
@@ -164,17 +165,24 @@ descriptions.
 - [x] FR1–FR2: one Configuration tab; every setting has help that opens by
       hover, click or tap, and the keyboard — e2e `settings-ai.spec.ts`
       _"every AI setting explains itself"_; axe clean with the model list open
-- [ ] FR3–FR5: a chat request's log lines are in `app_logs` with its request
-      id and a category; retention deletes old lines
-- [ ] FR6: an agentic answer logs the planner's decisions and each search
-- [ ] FR7: the Logs page shows new lines live, filters, expands and groups
-      by request
+- [x] FR3–FR5: a chat request's log lines are in `app_logs` with its request
+      id and a category; retention deletes old lines — checked live
+      2026-09-26 (one question: 7 lines, one request id, categories agent /
+      retrieval / inference); `tests/unit/observability-logs.test.ts`
+- [x] FR6: an agentic answer logs the planner's decisions and each search —
+      "Planner chose to search", "Search found 5 passages", "Planner chose to
+      answer" in the same live check
+- [x] FR7: the Logs page shows new lines live, filters, expands and groups
+      by request — e2e `observability.spec.ts` _"an admin reads the logs"_
 - [ ] FR8–FR9: a question produces a run with its steps; the run view shows
       the waterfall and replays it
 - [ ] FR10: the dashboard shows the tiles and charts for 24 hours and 7 days
 - [ ] FR11: non-admins get 404 / 403 everywhere
-- [ ] NFR1: a failing database does not fail a request (tested)
-- [ ] NFR2: secrets are redacted before storage (tested)
+- [x] NFR1: a failing database does not fail a request (tested) —
+      _"drops a batch the database refuses"_, _"never lets a failing sink
+      break the caller"_, and the bounded queue
+- [x] NFR2: secrets are redacted before storage (tested) — _"redact
+      (NFR2)"_
 - [ ] NFR5: axe finds no violations on the three pages
 
 ## Security & privacy
