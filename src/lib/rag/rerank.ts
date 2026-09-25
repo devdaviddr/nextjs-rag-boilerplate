@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { createChatCompletion } from './client'
 import { localReranker } from './rerank-local'
@@ -387,7 +387,7 @@ export const llmReranker: RerankerBackend = {
           },
         ],
         {
-          model: env.RAG_PLANNER_MODEL,
+          model: aiSettings().RAG_PLANNER_MODEL,
           tools: [RERANK_TOOL],
           maxTokens: RERANK_MAX_TOKENS,
           temperature: 0,
@@ -451,9 +451,9 @@ export async function rerankChunks(
   const ordered = [...chunks]
 
   // Nothing to reorder, and no reason to spend a call finding that out.
-  if (!env.RAG_RERANK_ENABLED || ordered.length < 2) return ordered
+  if (!aiSettings().RAG_RERANK_ENABLED || ordered.length < 2) return ordered
 
-  const window = Math.min(env.RAG_RERANK_CANDIDATES, ordered.length)
+  const window = Math.min(aiSettings().RAG_RERANK_CANDIDATES, ordered.length)
   if (window < 2) return ordered
 
   const head = ordered.slice(0, window)
@@ -463,7 +463,7 @@ export async function rerankChunks(
   // partially mocked env (as in tests) keeps the historical behaviour.
   const backend =
     options.backend ??
-    (env.RAG_RERANK_BACKEND === 'local' ? localReranker : llmReranker)
+    (aiSettings().RAG_RERANK_BACKEND === 'local' ? localReranker : llmReranker)
 
   let scores: number[] | null = null
   try {

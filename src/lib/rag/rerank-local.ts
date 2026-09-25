@@ -3,7 +3,7 @@ import 'server-only'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 
 import type { RerankerBackend } from './rerank'
@@ -213,9 +213,12 @@ export function createLocalReranker(
     if (loading) return loading
     if (failedAt !== null && now() - failedAt < RETRY_AFTER_MS) return null
 
-    const modelId = env.RAG_RERANK_LOCAL_MODEL
+    const modelId = aiSettings().RAG_RERANK_LOCAL_MODEL
     const started = now()
-    loading = loader(modelId, modelCacheDir(env.RAG_RERANK_MODEL_DIR)).then(
+    loading = loader(
+      modelId,
+      modelCacheDir(aiSettings().RAG_RERANK_MODEL_DIR),
+    ).then(
       (loaded) => {
         failedAt = null
         logger.info('local reranker loaded', {

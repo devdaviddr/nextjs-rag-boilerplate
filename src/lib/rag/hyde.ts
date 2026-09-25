@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { createChatCompletion } from './client'
 
@@ -318,7 +318,7 @@ export const llmHyde: HydeBackend = {
           { role: 'user', content: `Question:\n${question}` },
         ],
         {
-          model: env.RAG_HYDE_MODEL,
+          model: aiSettings().RAG_HYDE_MODEL,
           tools: [HYDE_TOOL],
           maxTokens: HYDE_MAX_TOKENS,
           // Not 0. A hypothetical is a guess at the vocabulary of an unseen
@@ -368,7 +368,7 @@ export async function hypotheticalQuery(
   question: string,
   options: HydeOptions = {},
 ): Promise<string | null> {
-  if (!env.RAG_HYDE_ENABLED) return null
+  if (!aiSettings().RAG_HYDE_ENABLED) return null
   if (!question.trim()) return null
 
   const backend = options.backend ?? llmHyde

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { ChunkBox } from '@/db/schema'
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { type ChatMessage, createChatCompletion } from './client'
 import { cropPng, redactUnlabelledNumbers } from './figure'
@@ -92,7 +92,7 @@ export async function describeFigure(
     ]
 
     const { choice, tokens } = await createChatCompletion(messages, {
-      model: env.RAG_VISION_MODEL,
+      model: aiSettings().RAG_VISION_MODEL,
       // Short on purpose. A long budget invites the transcription this is
       // specifically not asking for.
       maxTokens: 120,
@@ -135,7 +135,7 @@ export function boxArea(bbox: ChunkBox): number {
  */
 export function isDescribableFigure(
   bbox: ChunkBox,
-  minArea = env.RAG_CRACK_MIN_FIGURE_AREA,
+  minArea = aiSettings().RAG_CRACK_MIN_FIGURE_AREA,
 ): boolean {
   return boxArea(bbox) >= minArea
 }

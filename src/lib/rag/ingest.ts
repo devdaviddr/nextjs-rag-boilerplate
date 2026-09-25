@@ -10,7 +10,7 @@ import {
   parsedPages,
 } from '@/db/schema'
 import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
 import { buildEmbeddingText } from './chunk'
@@ -318,7 +318,7 @@ const EMBED_HEARTBEAT_CHUNKS = 128
  * keeps them out of the chunk transaction's way.
  */
 function parsedPageCache(fileId: string): ParsedPageCache {
-  const renderScale = env.RAG_CRACK_RENDER_SCALE
+  const renderScale = aiSettings().RAG_CRACK_RENDER_SCALE
   return {
     async get(page) {
       const row = await db.query.parsedPages.findFirst({
@@ -383,8 +383,8 @@ export async function ingestDocument(
       pageCount,
       extraction,
     } = await chunksFromPdf(buffer, {
-      chunkTokens: env.RAG_CHUNK_TOKENS,
-      overlapTokens: env.RAG_CHUNK_OVERLAP_TOKENS,
+      chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
+      overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
       documentTitle: doc.title,
       // A resumed run re-walks every page and re-derives every chunk; what it
       // does not re-pay for is the parse call on pages this or an earlier

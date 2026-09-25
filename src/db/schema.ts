@@ -792,3 +792,20 @@ export type Conversation = typeof conversations.$inferSelect
 export type NewConversation = typeof conversations.$inferInsert
 export type Message = typeof messages.$inferSelect
 export type NewMessage = typeof messages.$inferInsert
+
+/**
+ * AI settings saved from Settings (spec 0040 FR6), one row per key. A key is
+ * an environment variable name from `src/lib/ai-env.ts` and the value is the
+ * string you would put in `.env`, so it is parsed and bounded by the same
+ * zod field. A row overrides the environment variable; no row means the
+ * environment (or its default) applies. API keys never live here — they
+ * belong to encrypted connections (#54).
+ */
+export const aiSettings = pgTable('ai_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedBy: text('updated_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+})

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import type { EmbeddingInputType } from './constants'
 
@@ -16,7 +16,7 @@ import type { EmbeddingInputType } from './constants'
  * unavailable rather than throwing at boot, so builds and CI work without
  * secrets — same posture as OAuth/email/push in this boilerplate. */
 export function isRagConfigured(): boolean {
-  return Boolean(env.NVIDIA_API_KEY)
+  return Boolean(aiSettings().NVIDIA_API_KEY)
 }
 
 export class RagNotConfiguredError extends Error {
@@ -38,7 +38,7 @@ export class RagUpstreamError extends Error {
 }
 
 function requireKey(): string {
-  const key = env.NVIDIA_API_KEY
+  const key = aiSettings().NVIDIA_API_KEY
   if (!key) throw new RagNotConfiguredError()
   return key
 }
@@ -123,7 +123,7 @@ async function post(
 ): Promise<Response> {
   const attempts = Math.min(MAX_ATTEMPTS, Math.max(1, Math.floor(maxAttempts)))
   const key = requireKey()
-  const url = `${env.RAG_LLM_BASE_URL.replace(/\/$/, '')}${path}`
+  const url = `${aiSettings().RAG_LLM_BASE_URL.replace(/\/$/, '')}${path}`
 
   let lastDetail = 'no response'
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -206,7 +206,7 @@ export async function createEmbeddings(
 
   const response = await post('/embeddings', {
     input,
-    model: env.RAG_EMBED_MODEL,
+    model: aiSettings().RAG_EMBED_MODEL,
     input_type: inputType,
   })
 
@@ -250,7 +250,7 @@ export async function createChatStream(
   const response = await post(
     '/chat/completions',
     {
-      model: env.RAG_CHAT_MODEL,
+      model: aiSettings().RAG_CHAT_MODEL,
       messages,
       stream: true,
       temperature: 0.2,
@@ -270,12 +270,12 @@ export async function createChatStream(
 
 /** The chat model in use, for display alongside an answer. */
 export function chatModelName(): string {
-  return env.RAG_CHAT_MODEL
+  return aiSettings().RAG_CHAT_MODEL
 }
 
 /** The planner model in use, for the trace. */
 export function plannerModelName(): string {
-  return env.RAG_PLANNER_MODEL
+  return aiSettings().RAG_PLANNER_MODEL
 }
 
 export interface CompletionChoice {
@@ -330,7 +330,7 @@ export async function createChatCompletion(
   options: CompletionOptions = {},
 ): Promise<{ choice: CompletionChoice; tokens: number }> {
   const body: Record<string, unknown> = {
-    model: options.model ?? env.RAG_CHAT_MODEL,
+    model: options.model ?? aiSettings().RAG_CHAT_MODEL,
     messages,
     stream: false,
     temperature: options.temperature ?? 0.2,

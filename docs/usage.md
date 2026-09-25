@@ -66,6 +66,12 @@ which validates the whole environment with Zod when the module is first
 imported — so a missing or malformed value fails fast at boot with a readable
 error rather than surfacing as `undefined` deep inside a request.
 
+The AI variables (`NVIDIA_API_KEY`, `RAG_LLM_BASE_URL` and every `RAG_*`) are
+defined in `src/lib/ai-env.ts` and read through `aiSettings()` in
+`src/lib/ai-settings`. A value saved from Settings takes precedence over the
+variable, and without one the variable (or its default) applies, as before. Code
+must not read `env.RAG_*` directly; `pnpm lint` fails if it does.
+
 A variable marked **required** has no default and the app will not start
 without it. Everything else is optional and defaulted; the features they
 control stay inert until you set them.
@@ -307,6 +313,7 @@ generate the migration, review it, commit it, apply it.
 | Change upload limits        | Adjust `UPLOAD_MAX_SIZE_MB` / `MAX_STORAGE_PER_USER_MB` / `UPLOAD_ALLOWED_MIME_TYPES` in `.env`                                |
 | Point storage at real S3/R2 | Set `S3_ENDPOINT`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_BUCKET` — `src/lib/storage/client.ts` is unmodified either way |
 | Add an env var              | Add it to the schema in `src/lib/env.ts` and to `.env.example`                                                                 |
+| Add an AI setting           | Add the field to `src/lib/ai-env.ts` and `.env.example`; read it with `aiSettings().RAG_X`                                     |
 | Turn on agentic retrieval   | `RAG_AGENTIC_ENABLED=true` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus first — see [RAG](rag.md)          |
 | Go fully offline            | Point `RAG_LLM_BASE_URL` at Ollama/llama.cpp; the embedding model must emit 2048 dims, the planner must emit native tool calls |
 | Tune the agentic loop       | `RAG_MAX_SEARCHES` / `RAG_MAX_LOOP_MS` / `RAG_MAX_LOOP_TOKENS` / `RAG_AGENTIC_FLOOR_STEP` — [RAG → Tuning](rag.md#tuning)      |

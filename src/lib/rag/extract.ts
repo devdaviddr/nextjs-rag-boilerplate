@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { env } from '@/lib/env'
+import { aiSettings } from '@/lib/ai-settings'
 import type { PageText, PositionedItem } from './chunk'
 import { positionedItemsByPage } from './signals'
 
@@ -92,9 +92,9 @@ export async function extractPdf(
   }
 
   const pageCount = pdf.numPages
-  if (pageCount > env.RAG_MAX_DOCUMENT_PAGES) {
+  if (pageCount > aiSettings().RAG_MAX_DOCUMENT_PAGES) {
     throw new ExtractionError(
-      `This PDF has ${pageCount} pages, over the ${env.RAG_MAX_DOCUMENT_PAGES}-page limit.`,
+      `This PDF has ${pageCount} pages, over the ${aiSettings().RAG_MAX_DOCUMENT_PAGES}-page limit.`,
     )
   }
 
@@ -104,7 +104,10 @@ export async function extractPdf(
     text: (pageText ?? '').replace(/\r\n/g, '\n').trim(),
   }))
 
-  if (!allowImageOnly && isImageOnly(pages, env.RAG_MIN_CHARS_PER_PAGE)) {
+  if (
+    !allowImageOnly &&
+    isImageOnly(pages, aiSettings().RAG_MIN_CHARS_PER_PAGE)
+  ) {
     throw new ExtractionError(
       'No selectable text found — this looks like a scanned PDF. OCR is not supported yet, so it cannot be added to your knowledge base.',
     )
