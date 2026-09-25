@@ -42,7 +42,7 @@ or deployment are in the same position.
 ## Non-goals
 
 - Editing docs in the app.
-- A public, unauthenticated docs site (see open questions).
+- A public, unauthenticated docs site (decision 3).
 - Answering questions about the docs with the RAG itself — a good idea, and a
   separate spec.
 
@@ -80,8 +80,8 @@ or deployment are in the same position.
     filesystem reads at request time.
   - `pnpm docs:check` fails on any relative link or `#anchor` that does not
     resolve, and runs in CI's quality job.
-- **FR6 — Access.** Signed-in users only (the dashboard route group). Whether
-  the **Operations** section is admin-only is open (below).
+- **FR6 — Access.** Signed-in users only (the dashboard route group); every
+  section, Operations included, is visible to every signed-in user.
 - **FR7 — Search (phase 2).** A build-time index (page, heading, text) searched
   in the browser; results link to the page and heading.
 
@@ -130,8 +130,7 @@ or deployment are in the same position.
 - The docs describe the system in detail, including self-hosting, backups and
   the security model. They are already public in the repository, so exposing
   them to signed-in users adds nothing an attacker could not read on GitHub.
-  But an instance built from a private fork may not want that — hence FR6 and
-  the open question.
+  An instance built from a private fork keeps them behind sign-in (FR6).
 - No raw HTML rendering, so a doc cannot inject script.
 
 ## Alternatives considered
@@ -143,16 +142,16 @@ or deployment are in the same position.
 - **Render at request time from the filesystem.** Needs the docs traced into the
   image and a read per request; static generation is simpler and faster.
 
-## Open questions (for review)
+## Decisions (reviewed 2026-09-25)
 
-1. Who can read the **Operations** section (self-hosting, deployment, CI/CD,
-   workflow)? Proposed: every signed-in user, since it is public in the repo.
-   The alternative is admin-only.
-2. Should the design specs in `specs/` be browsable too, as a **Design specs**
-   section?
-3. Should `/docs` be readable without signing in, like a public help centre? A
-   template user may want that; it is off by default here.
-4. Is search (FR7) in the first release or phase 2?
+1. **Every signed-in user sees every section, Operations included.** The content
+   is public in the repository, and an admin-only split adds rules for little
+   gain (FR6).
+2. **`specs/` is not browsable in the app.** Specs are design records for
+   contributors; docs link to them on GitHub (FR3).
+3. **`/docs` requires sign-in in v1.** A public-docs flag can follow if wanted.
+4. **Search is phase 2** (FR7, #62). Sixteen pages with a grouped index are
+   navigable without it.
 
 ## Out of scope / future
 

@@ -86,7 +86,8 @@ The Settings page today shows the user's account and the build (two cards).
   in-process, invalidated on save, with a short TTL so another instance catches
   up.
 - **FR7 — Access.** Only admins can see or change the AI sections; the server
-  actions call `requireRole('admin')`.
+  actions call `requireRole('admin')`. Other roles see one read-only line under
+  About: the active chat model and provider name, never a URL or key.
 - **FR8 — Layout.** Settings is split into sections: **Account · AI provider ·
   Models · Retrieval & answering · About** (build info).
 
@@ -106,8 +107,8 @@ The Settings page today shows the user's account and the build (two cards).
 base_url, api_key_ciphertext, created/updated by/at) and `ai_settings` (key,
 value jsonb, updated_by, updated_at), plus `ai_settings_audit`. Keys are
 encrypted with AES-256-GCM under a key derived from `AUTH_SECRET` via HKDF
-(info `ai-settings/v1`). Rotating `AUTH_SECRET` therefore invalidates saved keys;
-the page says so and asks for them again.
+(info `ai-settings/v1`), or from `SETTINGS_ENCRYPTION_KEY` when set. Rotating
+that secret invalidates saved keys; the page says so and asks for them again.
 
 **Resolution.** `src/lib/ai-settings.ts` (server-only) exports
 `getAiSettings()`, returning one typed object shaped like today's `env` subset.
@@ -167,19 +168,25 @@ default next to the floor, and the eval must be run after an embedding switch.
 - **Per-user settings.** A different product; instance-wide is what the
   boilerplate needs.
 
-## Open questions (for review)
+## Decisions (reviewed 2026-09-25)
 
-1. Should a saved setting override an env var, or should env always win when
-   set (with the UI read-only for those keys)? Proposed: saved wins, with
-   `AI_SETTINGS_LOCKED` for code-managed deployments.
-2. Encryption key: derive from `AUTH_SECRET` (proposed, zero setup) or require a
-   separate `SETTINGS_ENCRYPTION_KEY`?
-3. Is v1's 2048-dimension limit acceptable, or should FR3 include the schema
-   change for other sizes (e.g. OpenAI `text-embedding-3-small` = 1536)?
-4. Should members/viewers see a read-only summary of the active models?
+1. **A saved setting overrides the env var.** Otherwise the page could change
+   nothing on a deployment that already sets those variables.
+   `AI_SETTINGS_LOCKED=true` makes the page read-only for deployments that keep
+   config in code (FR5).
+2. **The encryption key derives from `AUTH_SECRET`** (HKDF), overridable with an
+   optional `SETTINGS_ENCRYPTION_KEY`. Rotating whichever is in use means
+   re-entering the saved API keys; the page says so.
+3. **v1 keeps the 2048-dimension embedding limit** (FR3). Chat, planner and the
+   other roles can move to any provider in v1; embeddings in practice stay on a
+   2048-dimension model. Supporting other sizes is tracked separately in
+   [#64](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/64).
+4. **Non-admins see a read-only line under About** — the active chat model and
+   provider name, never URLs or keys (FR7).
 
 ## Out of scope / future
 
+- Embedding models of other sizes (#64).
 - Provider adapters for non-OpenAI-compatible APIs.
 - Non-AI settings (quotas, auth, email).
 - Import/export of settings.
