@@ -809,3 +809,28 @@ export const aiSettings = pgTable('ai_settings', {
   }),
   updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
 })
+
+/**
+ * Endpoints the app can send inference to (spec 0040 FR1): NVIDIA NIM,
+ * OpenRouter, a llama.cpp server, or any OpenAI-compatible URL. The API key
+ * is AES-256-GCM ciphertext (`src/lib/ai-settings/crypto.ts`) and is never
+ * sent back to the browser. Which job uses which connection is an
+ * `ai_settings` row, `connection:<role>`. The `.env` endpoint is not a row:
+ * it is always available as the built-in "Environment" connection.
+ */
+export const aiConnections = pgTable('ai_connections', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  preset: text('preset').notNull(),
+  baseUrl: text('base_url').notNull(),
+  apiKeyCiphertext: text('api_key_ciphertext'),
+  /** Last four characters of the key, so the page can show `••••1a2b`. */
+  apiKeyHint: text('api_key_hint'),
+  createdBy: text('created_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+})

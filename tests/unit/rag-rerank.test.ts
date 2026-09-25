@@ -382,7 +382,8 @@ describe('llmReranker', () => {
 
     const [messages, options] = createChatCompletion.mock.calls[0] ?? []
     expect(messages).toHaveLength(2)
-    expect(options.model).toBe('planner')
+    // The planner's job, so its connection and RAG_PLANNER_MODEL (spec 0040 FR2).
+    expect(options.role).toBe('planner')
     expect(options.temperature).toBe(0)
   })
 

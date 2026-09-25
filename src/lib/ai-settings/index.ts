@@ -4,6 +4,9 @@ import { AI_ENV_KEYS, type AiEnvKey, aiEnvShape } from '@/lib/ai-env'
 import { env, type Env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 
+import { decryptSecret } from './crypto'
+import { type PresetId, presetForUrl } from './presets'
+
 /**
  * The one place the app reads its AI settings (spec 0040 FR6): a value saved
  * from Settings, else the environment variable, else its default.
@@ -40,9 +43,74 @@ export const SAVABLE_KEYS: readonly AiSettingKey[] = AI_ENV_KEYS.filter(
 
 export const TTL_MS = 30_000
 
+/**
+ * The jobs the app sends to a model (spec 0040 FR2). Each has a model
+ * setting; all but embeddings can also be pointed at a saved connection.
+ * The reranker's `llm` backend is the planner's job.
+ */
+export const AI_ROLES = [
+  'chat',
+  'planner',
+  'hyde',
+  'vision',
+  'parse',
+  'embed',
+] as const
+export type AiRole = (typeof AI_ROLES)[number]
+
+export const ROLE_MODEL_KEY = {
+  chat: 'RAG_CHAT_MODEL',
+  planner: 'RAG_PLANNER_MODEL',
+  hyde: 'RAG_HYDE_MODEL',
+  vision: 'RAG_VISION_MODEL',
+  parse: 'RAG_PARSE_MODEL',
+  embed: 'RAG_EMBED_MODEL',
+} as const satisfies Record<AiRole, AiSettingKey>
+
+/**
+ * Embeddings stay on the `.env` endpoint for now: the index holds one
+ * model's vectors, and moving it is a re-index (FR3, #56).
+ */
+export const CONNECTABLE_ROLES = [
+  'chat',
+  'planner',
+  'hyde',
+  'vision',
+  'parse',
+] as const satisfies readonly AiRole[]
+export type ConnectableRole = (typeof CONNECTABLE_ROLES)[number]
+
+/** The `.env` endpoint, always available and never stored. */
+export const ENV_CONNECTION_ID = 'env'
+
+const ROLE_KEY_PREFIX = 'connection:'
+
+/** An endpoint as the server uses it: the key decrypted, in memory only. */
+export interface ResolvedConnection {
+  id: string
+  name: string
+  preset: PresetId
+  baseUrl: string
+  apiKey: string | undefined
+  /** A key was saved but cannot be decrypted (the secret changed). */
+  keyUnreadable: boolean
+}
+
+export interface ConnectionRow {
+  id: string
+  name: string
+  preset: string
+  baseUrl: string
+  apiKeyCiphertext: string | null
+}
+
 interface Loaded {
   /** Parsed saved values, already validated. */
   saved: Partial<AiSettings>
+  /** Saved connections, by id. */
+  connections: Map<string, ResolvedConnection>
+  /** Which saved connection each job uses; absent means `.env`. */
+  roleConnection: Partial<Record<ConnectableRole, string>>
   /**
    * `saved` over `env`, built once per load since reads sit on hot paths.
    * Null when nothing is saved: then reads go straight to `env`.
@@ -53,6 +121,10 @@ interface Loaded {
 
 let state: Loaded | null = null
 let inflight: Promise<void> | null = null
+
+function isConnectableRole(role: string): role is ConnectableRole {
+  return (CONNECTABLE_ROLES as readonly string[]).includes(role)
+}
 
 function isSavable(key: string): key is AiSettingKey {
   return (SAVABLE_KEYS as readonly string[]).includes(key)
@@ -107,11 +179,18 @@ export function aiSettings(): AiSettings {
 }
 
 /** Validate the saved rows; a row that no longer parses is skipped, loudly. */
-function parseRows(
-  rows: { key: string; value: string }[],
-): Partial<AiSettings> {
+function parseRows(rows: { key: string; value: string }[]): {
+  saved: Partial<AiSettings>
+  roleConnection: Partial<Record<ConnectableRole, string>>
+} {
   const saved: Partial<Record<AiSettingKey, unknown>> = {}
+  const roleConnection: Partial<Record<ConnectableRole, string>> = {}
   for (const row of rows) {
+    if (row.key.startsWith(ROLE_KEY_PREFIX)) {
+      const role = row.key.slice(ROLE_KEY_PREFIX.length)
+      if (isConnectableRole(role)) roleConnection[role] = row.value
+      continue
+    }
     if (!isSavable(row.key)) {
       logger.warn('ai-settings: ignoring unknown saved key', { key: row.key })
       continue
@@ -133,7 +212,77 @@ function parseRows(
     delete typed.RAG_CHUNK_TOKENS
     delete typed.RAG_CHUNK_OVERLAP_TOKENS
   }
-  return typed
+  return { saved: typed, roleConnection }
+}
+
+function resolveRows(rows: ConnectionRow[]): Map<string, ResolvedConnection> {
+  const out = new Map<string, ResolvedConnection>()
+  for (const row of rows) {
+    const apiKey = row.apiKeyCiphertext
+      ? decryptSecret(row.apiKeyCiphertext)
+      : null
+    if (row.apiKeyCiphertext && apiKey === null) {
+      logger.warn('ai-settings: a saved API key cannot be decrypted', {
+        connection: row.id,
+      })
+    }
+    out.set(row.id, {
+      id: row.id,
+      name: row.name,
+      preset: row.preset as PresetId,
+      baseUrl: row.baseUrl,
+      apiKey: apiKey ?? undefined,
+      keyUnreadable: Boolean(row.apiKeyCiphertext) && apiKey === null,
+    })
+  }
+  return out
+}
+
+/** The `.env` endpoint as a connection. */
+export function envConnection(): ResolvedConnection {
+  const s = fromEnv()
+  return {
+    id: ENV_CONNECTION_ID,
+    name: 'Environment (.env)',
+    preset: presetForUrl(s.RAG_LLM_BASE_URL),
+    baseUrl: s.RAG_LLM_BASE_URL,
+    apiKey: s.NVIDIA_API_KEY,
+    keyUnreadable: false,
+  }
+}
+
+/** Saved connections, in no particular order. Server only: keys included. */
+export function savedConnections(): ResolvedConnection[] {
+  return [...(state?.connections.values() ?? [])]
+}
+
+/** The connection id a job uses: a saved one, or `.env`. */
+export function connectionIdFor(role: AiRole): string {
+  if (!isConnectableRole(role)) return ENV_CONNECTION_ID
+  const id = state?.roleConnection[role]
+  return id && state?.connections.has(id) ? id : ENV_CONNECTION_ID
+}
+
+/** Where a job's requests go. A saved connection that was deleted falls back to `.env`. */
+export function connectionFor(role: AiRole): ResolvedConnection {
+  const id = connectionIdFor(role)
+  return id === ENV_CONNECTION_ID
+    ? envConnection()
+    : (state?.connections.get(id) ?? envConnection())
+}
+
+/** The model a job uses. */
+export function modelFor(role: AiRole): string {
+  return aiSettings()[ROLE_MODEL_KEY[role]]
+}
+
+/** The keys with a saved value, for "saved" / "env" / "default" badges. */
+export function savedKeys(): Set<string> {
+  const keys = new Set<string>(Object.keys(state?.saved ?? {}))
+  for (const role of Object.keys(state?.roleConnection ?? {})) {
+    keys.add(ROLE_KEY_PREFIX + role)
+  }
+  return keys
 }
 
 /**
@@ -150,13 +299,29 @@ export function refreshAiSettings({
   if (inflight) return inflight
   inflight = (async () => {
     try {
-      const { readSavedRows } = await import('./store')
-      const saved = parseRows(await readSavedRows())
-      state = { saved, merged: mergedOrNull(saved), loadedAt: Date.now() }
+      const { readSavedRows, readConnectionRows } = await import('./store')
+      const [rows, connectionRows] = await Promise.all([
+        readSavedRows(),
+        readConnectionRows(),
+      ])
+      const { saved, roleConnection } = parseRows(rows)
+      state = {
+        saved,
+        connections: resolveRows(connectionRows),
+        roleConnection,
+        merged: mergedOrNull(saved),
+        loadedAt: Date.now(),
+      }
     } catch (err) {
       logger.error('ai-settings: could not load saved settings', { err })
       const saved = state?.saved ?? {}
-      state = { saved, merged: mergedOrNull(saved), loadedAt: Date.now() }
+      state = {
+        saved,
+        connections: state?.connections ?? new Map(),
+        roleConnection: state?.roleConnection ?? {},
+        merged: mergedOrNull(saved),
+        loadedAt: Date.now(),
+      }
     } finally {
       inflight = null
     }
@@ -197,6 +362,32 @@ export async function resetAiSetting(key: string): Promise<SaveResult> {
   }
   const { deleteSavedRow } = await import('./store')
   await deleteSavedRow(key)
+  await refreshAiSettings({ force: true })
+  return { ok: true }
+}
+
+/**
+ * Point a job at a connection (or back at `.env`). The connection must
+ * exist; embeddings cannot be moved here (#56).
+ */
+export async function saveRoleConnection(
+  role: string,
+  connectionId: string,
+  userId: string | null,
+): Promise<SaveResult> {
+  if (!isConnectableRole(role)) {
+    return { ok: false, error: `The ${role} job cannot change connection` }
+  }
+  const store = await import('./store')
+  if (connectionId === ENV_CONNECTION_ID) {
+    await store.deleteSavedRow(ROLE_KEY_PREFIX + role)
+  } else {
+    await refreshAiSettings({ force: true })
+    if (!state?.connections.has(connectionId)) {
+      return { ok: false, error: 'That connection no longer exists' }
+    }
+    await store.writeSavedRow(ROLE_KEY_PREFIX + role, connectionId, userId)
+  }
   await refreshAiSettings({ force: true })
   return { ok: true }
 }

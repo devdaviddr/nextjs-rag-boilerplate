@@ -387,7 +387,7 @@ export const llmReranker: RerankerBackend = {
           },
         ],
         {
-          model: aiSettings().RAG_PLANNER_MODEL,
+          role: 'planner',
           tools: [RERANK_TOOL],
           maxTokens: RERANK_MAX_TOKENS,
           temperature: 0,

@@ -10,6 +10,11 @@ import { getLinkedAccounts } from '@/lib/auth/account-actions'
 import { getVapidPublicKey } from '@/lib/push'
 import { listMyFiles } from '@/lib/storage/actions'
 import { env } from '@/lib/env'
+import { connectionFor, modelFor, refreshAiSettings } from '@/lib/ai-settings'
+import {
+  type AiSettingsView,
+  getAiSettingsView,
+} from '@/lib/ai-settings/actions'
 import { SettingsClient } from './settings-client'
 
 export const metadata: Metadata = { title: 'Settings' }
@@ -22,8 +27,10 @@ export default async function SettingsPage() {
 
   const isAdmin = (session.user.roles ?? []).includes('admin')
 
+  await refreshAiSettings()
+
   // Fetch data in parallel
-  const [users, roles, files, linkedAccounts] = await Promise.all([
+  const [users, roles, files, linkedAccounts, ai] = await Promise.all([
     isAdmin ? getAllUsersWithRoles() : Promise.resolve([] as UserWithRoles[]),
     isAdmin
       ? getAllRoles()
@@ -32,6 +39,9 @@ export default async function SettingsPage() {
         ),
     listMyFiles(),
     getLinkedAccounts(),
+    isAdmin
+      ? getAiSettingsView().then((r) => (r.ok ? r.data : null))
+      : Promise.resolve(null as AiSettingsView | null),
   ])
 
   // Ensure user properties are never undefined (they're required by auth)
@@ -58,6 +68,12 @@ export default async function SettingsPage() {
       isAdmin={isAdmin}
       buildVersion={env.APP_VERSION}
       buildSha={env.APP_GIT_SHA}
+      ai={ai}
+      // Everyone may see which model answers; never a URL or key (FR7).
+      activeModel={{
+        model: modelFor('chat'),
+        provider: connectionFor('chat').name,
+      }}
     />
   )
 }

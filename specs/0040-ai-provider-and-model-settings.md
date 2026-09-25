@@ -163,9 +163,13 @@ default next to the floor, and the eval must be run after an embedding switch.
 
 ## Acceptance criteria
 
-- [ ] FR1: connections can be added, tested and removed; the key appears in no
-      response (tested)
-- [ ] FR2: a changed role applies to the next request without restart
+- [x] FR1: connections can be added, tested and removed; the key appears in no
+      response (tested) — `tests/unit/ai-settings-actions.test.ts` _"FR1 / NFR3"_,
+      e2e `tests/e2e/settings-ai.spec.ts` checks every response body
+- [x] FR2: a changed role applies to the next request without restart — the
+      client resolves `connectionFor(role)` / `modelFor(role)` per call; a save
+      reloads at once (`tests/unit/ai-settings.test.ts` _"connections"_); tried
+      live 2026-09-25: chat, planner (tool call) and embeddings tests pass on NIM
 - [ ] FR3: a wrong-dimension model is rejected; after a switch every document
       re-embeds and retrieval never mixes generations; eval refusal 1.000
 - [ ] FR4: every listed setting applies on the next request; out-of-range values
@@ -175,7 +179,10 @@ default next to the floor, and the eval must be run after an embedding switch.
 - [x] FR6: no direct `env.RAG_*` reads remain outside the resolver (lint rule or
       grep check in CI) — `no-restricted-syntax` in `eslint.config.mjs`, run by
       `pnpm lint` in CI; resolver behaviour in `tests/unit/ai-settings.test.ts`
-- [ ] FR7: non-admins get 403 from every AI settings action
+- [x] FR7: non-admins get 403 from every AI settings action — each returns
+      _"Only admins can change AI settings."_ before touching anything
+      (`ai-settings-actions.test.ts` _"FR7"_); the page renders the AI sections
+      for admins only
 - [ ] FR9: chat and planner through OpenRouter with embeddings on NIM, and
       chat on a llama.cpp server, both work; a llama.cpp planner without tool
       support fails its test with the `--jinja` hint; an existing `.env`
@@ -209,6 +216,29 @@ above.
 
 With nothing saved, `aiSettings()` reads `env` directly, so behaviour is the
 environment's exactly.
+
+### As built: connections and jobs (#54, #55)
+
+- **Connections** live in `ai_connections`; the key is AES-256-GCM under an
+  HKDF key from `SETTINGS_ENCRYPTION_KEY` or `AUTH_SECRET`
+  (`src/lib/ai-settings/crypto.ts`), with its last four characters kept for
+  display. The `.env` endpoint is not a row: it is the built-in "Environment"
+  connection, read-only on the page, which is what an existing deployment sees
+  with no setup (FR9).
+- **Jobs** are chat, planner, HyDE, vision, parse and embed. Each call site
+  names its job (`createChatCompletion(…, { role: 'planner' })`) and the
+  client resolves the connection and model, so a saved change applies to the
+  next request. Which connection a job uses is an `ai_settings` row,
+  `connection:<job>`; a deleted connection falls back to `.env`.
+- **Embeddings cannot move yet.** Their connection is fixed to `.env` and
+  their model is read-only until FR3's re-index exists (#56); a different
+  model's vectors would not be comparable with the index.
+- **Tests** send what the app sends: the planner test uses the real planner
+  prompt and search tool with an 800-token budget (it is a reasoning model;
+  a 3-token probe never reaches the tool call), and retries once on a 429 or
+  5xx. Only status, latency and model ids reach the browser.
+- **FR8** has four of its five sections: Retrieval & answering arrives with
+  #57. A **Users** section holds the existing user admin.
 
 ## Security & privacy
 

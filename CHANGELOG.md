@@ -10,6 +10,17 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Choose the AI provider and models from Settings**
+  ([#54](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/54),
+  [#55](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/55),
+  spec 0040). Admins can add connections to NVIDIA NIM, OpenRouter, a
+  llama.cpp server, OpenAI, Ollama, vLLM / LM Studio or any OpenAI-compatible
+  URL, test them, and choose the connection and model for each job (chat,
+  planner, HyDE, vision, page parsing). Changes apply to the next request,
+  with no restart and no `.env` edit. API keys are encrypted at rest and never
+  sent back to the browser. Settings is now split into sections: Account, AI
+  provider, Models, Users and About. Embeddings stay on the `.env` endpoint
+  until re-indexing lands (#56).
 - **Documentation inside the app**
   ([#60](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/60),
   [#61](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/61),

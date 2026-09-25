@@ -75,6 +75,10 @@ Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
   (spec 0040 FR6), never `env.RAG_*`: a value saved in Settings overrides the
   env var, and `pnpm lint` rejects a direct read. Entry points (the chat route,
   the document actions, the eval) `await refreshAiSettings()` first.
+- **Inference calls name their job**, not a model: `createChatCompletion(msgs,
+{ role: 'planner' })`. The client resolves the job to its connection
+  (endpoint + decrypted key) and model (`connectionFor`, `modelFor`), so a
+  change in Settings → Models applies without touching call sites.
 - **DB changes:** edit `src/db/schema.ts` → `pnpm db:generate` → commit the
   migration → `pnpm db:migrate`. Emails are stored lower-cased.
 - **`server-only`** guards `src/db` and `src/lib/auth/password.ts` — never import

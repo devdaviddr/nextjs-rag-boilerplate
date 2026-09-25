@@ -97,6 +97,27 @@ Citation verification then strips claims their sources do not support. It is
 roughly ten times slower and markedly better on follow-ups — the measured A/B
 is in [RAG → The agentic path](rag.md#the-agentic-path).
 
+### Choosing the provider and models from Settings
+
+Admins get two sections in **Settings** (spec 0040):
+
+- **AI provider** lists the endpoints the app can send questions to. The
+  `.env` endpoint is always there. Add more with a preset (NVIDIA NIM,
+  OpenRouter, a llama.cpp server, OpenAI, Ollama, vLLM / LM Studio) or any
+  OpenAI-compatible URL. API keys are encrypted at rest (AES-256-GCM) and never
+  sent back to the browser; the page shows the last four characters at most.
+  **Test** lists the endpoint's models.
+- **Models** sets the connection and model for each job: chat, planner, HyDE,
+  vision and page parsing. A change applies to the next request, with no
+  restart. **Test** tries the job as configured: a short completion, a tool
+  call for the planner (a llama.cpp planner without `--jinja` is told so), or
+  one embedding of the size the index needs. **Use .env** removes the change.
+
+Embeddings stay on the `.env` endpoint and model for now, because the index
+holds that model's vectors and changing it means re-indexing (#56). Choosing a
+provider also chooses who sees your document text: the questions and the
+retrieved passages go to it.
+
 ### Measured, not asserted
 
 A **retrieval evaluation harness** (`pnpm rag:eval`) runs a ground-truth corpus

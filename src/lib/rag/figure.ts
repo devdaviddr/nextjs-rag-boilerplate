@@ -4,7 +4,6 @@ import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
 import type { ChunkBox } from '@/db/schema'
-import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
 import { type ChatMessage, createChatCompletion } from './client'
@@ -322,7 +321,7 @@ export async function readFigure(
     ]
 
     const { choice, tokens } = await createChatCompletion(messages, {
-      model: aiSettings().RAG_VISION_MODEL,
+      role: 'vision',
       maxTokens: 300,
       signal,
     })

@@ -117,6 +117,11 @@ const envSchema = z
       .optional()
       .default('image/png,image/jpeg,image/webp,image/gif,application/pdf'),
 
+    // Encrypts the API keys saved from Settings (spec 0040). Optional: without
+    // it the key is derived from AUTH_SECRET. Changing whichever is in use
+    // makes saved keys unreadable, and Settings asks for them again.
+    SETTINGS_ENCRYPTION_KEY: optionalStr,
+
     // --- RAG / NVIDIA NIM (spec 0025) — the fields live in ai-env.ts ------
     ...aiEnvShape,
 

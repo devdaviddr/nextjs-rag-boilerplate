@@ -60,7 +60,7 @@ export const FIGURE_LOOP_FLOOR_MS = 45_000
  */
 export const FIGURE_LOOP_FLOOR_TOKENS = 30_000
 
-const PLANNER_SYSTEM_PROMPT = `You plan document searches for a retrieval system.
+export const PLANNER_SYSTEM_PROMPT = `You plan document searches for a retrieval system.
 
 Call search_documents when answering needs information from the user's documents.
 The search has NO memory of the conversation. Resolve pronouns and references from the conversation before searching: "what about carrying it over?" after a question about annual leave must be searched as "carrying over annual leave", never as the literal words the user typed.
@@ -208,7 +208,7 @@ export async function runAgenticRetrieval(input: {
             { role: 'user', content: historyPrompt(question, turns, steps) },
           ],
           {
-            model: aiSettings().RAG_PLANNER_MODEL,
+            role: 'planner',
             tools: figureReadingEnabled
               ? [SEARCH_TOOL, READ_FIGURE_TOOL]
               : [SEARCH_TOOL],
@@ -356,7 +356,7 @@ export async function verifyCitations(
         { role: 'user', content: `Sources:\n${sources}\n\nAnswer:\n${answer}` },
       ],
       {
-        model: aiSettings().RAG_PLANNER_MODEL,
+        role: 'planner',
         maxTokens: 500,
         temperature: 0,
         signal,

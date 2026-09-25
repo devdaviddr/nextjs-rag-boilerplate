@@ -72,6 +72,11 @@ defined in `src/lib/ai-env.ts` and read through `aiSettings()` in
 variable, and without one the variable (or its default) applies, as before. Code
 must not read `env.RAG_*` directly; `pnpm lint` fails if it does.
 
+`SETTINGS_ENCRYPTION_KEY` (optional) encrypts API keys saved in Settings →
+AI provider. Without it they are encrypted under a key derived from
+`AUTH_SECRET`. Changing whichever is in use makes the saved keys unreadable, and
+Settings asks for them again.
+
 A variable marked **required** has no default and the app will not start
 without it. Everything else is optional and defaulted; the features they
 control stay inert until you set them.
@@ -316,6 +321,7 @@ generate the migration, review it, commit it, apply it.
 | Add an AI setting           | Add the field to `src/lib/ai-env.ts` and `.env.example`; read it with `aiSettings().RAG_X`                                     |
 | Turn on agentic retrieval   | `RAG_AGENTIC_ENABLED=true` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus first — see [RAG](rag.md)          |
 | Go fully offline            | Point `RAG_LLM_BASE_URL` at Ollama/llama.cpp; the embedding model must emit 2048 dims, the planner must emit native tool calls |
+| Use another provider        | Settings → AI provider → Add connection, then pick it for a job under Models. Embeddings stay on the `.env` endpoint for now   |
 | Tune the agentic loop       | `RAG_MAX_SEARCHES` / `RAG_MAX_LOOP_MS` / `RAG_MAX_LOOP_TOKENS` / `RAG_AGENTIC_FLOOR_STEP` — [RAG → Tuning](rag.md#tuning)      |
 
 ## Production checklist

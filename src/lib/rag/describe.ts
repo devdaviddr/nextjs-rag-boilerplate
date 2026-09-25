@@ -92,7 +92,7 @@ export async function describeFigure(
     ]
 
     const { choice, tokens } = await createChatCompletion(messages, {
-      model: aiSettings().RAG_VISION_MODEL,
+      role: 'vision',
       // Short on purpose. A long budget invites the transcription this is
       // specifically not asking for.
       maxTokens: 120,
