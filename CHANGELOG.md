@@ -8,6 +8,19 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Follow-up questions survive a planner outage**
+  ([#41](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/41)).
+  Only the planner resolved "what about Sweden Central?" from the
+  conversation, so when it was down the fallback searched the words alone and
+  refused. The fallback now also searches the previous user question together
+  with the new one, and keeps a passage found only that way when the new
+  question made it more relevant than the previous question did on its own —
+  otherwise "And can it be extended?" would be answered with the probation
+  length. With the planner forced down: follow-up hit@1 0 → 0.563, all 4
+  unanswerable follow-ups still refused, single-hop unchanged.
+
 ### Changed
 
 - **Filtered vector search keeps its recall on large corpora**

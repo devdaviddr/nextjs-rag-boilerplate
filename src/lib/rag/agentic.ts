@@ -135,6 +135,28 @@ export interface LoopDeps {
    * enough from the second call onwards, when there is evidence to judge.
    */
   fallbackQuery?: string
+  /**
+   * What to search when the planner is unavailable before the first search.
+   * Defaults to `[fallbackQuery]`.
+   *
+   * Only the planner resolves references from the conversation, so on an
+   * outage a follow-up like "what about Sweden Central?" searched on its own
+   * finds nothing and is refused (#41). The caller can pass the literal
+   * question PLUS a context-carrying variant; each is searched and the results
+   * merged, and every chunk still has to clear the attempt-scaled floor, which
+   * rises with each extra search. Bounded by the search budget.
+   */
+  outageQueries?: readonly string[]
+  /**
+   * The previous user question on its own, as a yardstick for the context
+   * variants in `outageQueries` (#41). A chunk found ONLY by a context variant
+   * is kept only if it is more similar to the variant than to this — i.e. the
+   * new question made it more relevant. Otherwise it is the answer to the
+   * previous question, and admitting it turns "And can it be extended?" into
+   * a confident answer about probation length. Searched once, not counted as a
+   * search (it is not evidence) and never added to the results.
+   */
+  outageBaseline?: string
   /** Injected for deterministic tests. */
   now?: () => number
 }
@@ -291,23 +313,52 @@ export async function runAgenticLoop(
    * retrieval — and the answer is grounded in that instead.
    */
   const unavailable = async (): Promise<LoopOutcome> => {
-    if (searches === 0 && chunks.length === 0 && deps.fallbackQuery) {
+    const queries = (
+      deps.outageQueries?.length
+        ? deps.outageQueries
+        : deps.fallbackQuery
+          ? [deps.fallbackQuery]
+          : []
+    )
+      .map((q) => q.trim())
+      .filter((q, i, all) => q.length > 0 && all.indexOf(q) === i)
+      .slice(0, Math.max(1, budget.maxSearches))
+    if (searches === 0 && chunks.length === 0 && queries.length > 0) {
       deps.onPlanFailure?.(
-        'planner unavailable before searching; falling back to one search',
+        `planner unavailable before searching; falling back to ${queries.length === 1 ? 'one search' : `${queries.length} searches`}`,
       )
-      searches += 1
-      const found = await deps.search(deps.fallbackQuery, undefined)
-      chunks = accumulate(chunks, found)
-      steps.push({
-        iteration: searches,
-        query: deps.fallbackQuery,
-        resultCount: found.length,
-        bestSimilarity: found.length
-          ? Math.max(...found.map((c) => c.similarity))
-          : null,
-        found: '',
-        elapsedMs: elapsed(),
-      })
+      const literal = new Set<string>()
+      let baseline: Map<string, number> | null = null
+      for (const [i, query] of queries.entries()) {
+        searches += 1
+        let found = await deps.search(query, undefined)
+        if (i === 0) {
+          found.forEach((c) => literal.add(c.chunkId))
+        } else if (deps.outageBaseline?.trim()) {
+          baseline ??= new Map(
+            (await deps.search(deps.outageBaseline.trim(), undefined)).map(
+              (c) => [c.chunkId, c.similarity],
+            ),
+          )
+          const yardstick = baseline
+          found = found.filter(
+            (c) =>
+              literal.has(c.chunkId) ||
+              c.similarity > (yardstick.get(c.chunkId) ?? -Infinity),
+          )
+        }
+        chunks = accumulate(chunks, found)
+        steps.push({
+          iteration: searches,
+          query,
+          resultCount: found.length,
+          bestSimilarity: found.length
+            ? Math.max(...found.map((c) => c.similarity))
+            : null,
+          found: '',
+          elapsedMs: elapsed(),
+        })
+      }
     }
     return finish('planner-unavailable')
   }

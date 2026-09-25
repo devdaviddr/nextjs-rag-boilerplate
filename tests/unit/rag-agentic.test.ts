@@ -371,6 +371,141 @@ describe('runAgenticLoop — planner failure', () => {
     expect(out.chunks).toEqual([])
   })
 
+  /**
+   * #41: only the planner resolves "what about X?" from the conversation. On
+   * an outage the caller passes the literal question plus a context-carrying
+   * variant; both are searched and merged.
+   */
+  it('searches every outage query when the planner is down, merging results', async () => {
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([chunk('a', 0.47)])
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({
+        plan: vi.fn().mockRejectedValue(new Error('timeout')),
+        search,
+        fallbackQuery: 'what about sweden central?',
+        outageQueries: [
+          'what about sweden central?',
+          'can i tune a model in australia south east what about sweden central?',
+        ],
+      }),
+      signal,
+    )
+    expect(search).toHaveBeenNthCalledWith(
+      1,
+      'what about sweden central?',
+      undefined,
+    )
+    expect(search).toHaveBeenNthCalledWith(
+      2,
+      'can i tune a model in australia south east what about sweden central?',
+      undefined,
+    )
+    expect(out.searches).toBe(2)
+    expect(out.chunks.map((c) => c.chunkId)).toEqual(['a'])
+    expect(out.steps.map((s) => s.resultCount)).toEqual([0, 1])
+    expect(out.termination).toBe('planner-unavailable')
+  })
+
+  /**
+   * #41's refusal guard, from the eval's own traps: "And can it be extended?"
+   * after "How long is the probation period?" pulls in the probation-length
+   * passage, which answers the PREVIOUS question (0.514 against the variant,
+   * 0.556 against the previous question alone) and must not be admitted.
+   */
+  describe('outage baseline (previous question as a yardstick)', () => {
+    const run = (
+      literal: RetrievedChunk[],
+      contextual: RetrievedChunk[],
+      previous: RetrievedChunk[],
+    ) => {
+      const search = vi.fn(async (q: string) =>
+        q === 'lit' ? literal : q === 'ctx lit' ? contextual : previous,
+      )
+      return runAgenticLoop(
+        BUDGET,
+        deps({
+          plan: vi.fn().mockRejectedValue(new Error('down')),
+          search,
+          outageQueries: ['lit', 'ctx lit'],
+          outageBaseline: 'ctx',
+        }),
+        signal,
+      ).then((out) => ({ out, search }))
+    }
+
+    it('drops a context-only chunk the previous question alone scores higher', async () => {
+      const { out } = await run(
+        [],
+        [chunk('probation', 0.514)],
+        [chunk('probation', 0.556)],
+      )
+      expect(out.chunks).toEqual([])
+    })
+
+    it('keeps a context-only chunk the new question made more relevant', async () => {
+      const { out } = await run(
+        [],
+        [chunk('carryover', 0.587)],
+        [chunk('carryover', 0.558)],
+      )
+      expect(out.chunks.map((c) => c.chunkId)).toEqual(['carryover'])
+    })
+
+    it('keeps a chunk the previous question never surfaced', async () => {
+      const { out } = await run([], [chunk('new', 0.45)], [chunk('other', 0.9)])
+      expect(out.chunks.map((c) => c.chunkId)).toEqual(['new'])
+    })
+
+    it('never filters what the literal question found', async () => {
+      const { out } = await run(
+        [chunk('a', 0.5)],
+        [chunk('a', 0.5)],
+        [chunk('a', 0.9)],
+      )
+      expect(out.chunks.map((c) => c.chunkId)).toEqual(['a'])
+    })
+
+    it('searches the yardstick once and does not count it as a search', async () => {
+      const { out, search } = await run([], [chunk('x', 0.6)], [])
+      expect(search).toHaveBeenCalledTimes(3)
+      expect(out.searches).toBe(2)
+      expect(out.steps.map((s) => s.query)).toEqual(['lit', 'ctx lit'])
+    })
+  })
+
+  it('deduplicates outage queries and never exceeds the search budget', async () => {
+    const search = vi.fn().mockResolvedValue([])
+    await runAgenticLoop(
+      { ...BUDGET, maxSearches: 2 },
+      deps({
+        plan: vi.fn().mockRejectedValue(new Error('down')),
+        search,
+        outageQueries: ['q', ' q ', 'x q', 'y q'],
+      }),
+      signal,
+    )
+    expect(search.mock.calls.map((c) => c[0])).toEqual(['q', 'x q'])
+  })
+
+  it('does not use outage queries when the planner merely answers early', async () => {
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 1 })
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 1 })
+    const search = vi.fn().mockResolvedValue([chunk('a', 0.6)])
+    await runAgenticLoop(
+      BUDGET,
+      deps({ plan, search, fallbackQuery: 'q', outageQueries: ['q', 'ctx q'] }),
+      signal,
+    )
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(search).toHaveBeenCalledWith('q', undefined)
+  })
+
   it('stops on a search decision with an empty query', async () => {
     const out = await runAgenticLoop(
       BUDGET,

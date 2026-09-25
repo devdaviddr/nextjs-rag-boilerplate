@@ -10,7 +10,7 @@ import {
   SEARCH_TOOL,
   parseToolCallDecision,
 } from './planner'
-import type { RewriteTurn } from './rewrite'
+import { outageQueries, previousUserTurn, type RewriteTurn } from './rewrite'
 import {
   type RetrievedChunk,
   retrieveDocumentChunks,
@@ -221,6 +221,8 @@ export async function runAgenticRetrieval(input: {
         return { decision, tokens: used }
       },
       fallbackQuery: question,
+      outageQueries: outageQueries(question, turns),
+      outageBaseline: previousUserTurn(turns) ?? undefined,
       onPlanFailure: (reason, error) => {
         // Capture the SHAPE, not just `.message`. An empty message told us
         // nothing, and this failure silently degrades an answer to a refusal —
