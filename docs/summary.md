@@ -20,7 +20,7 @@ term from scratch.
 
 ## Quick stats
 
-- **Version:** 0.21.0
+- **Version:** 0.21.1
 - **License:** MIT
 - **Type:** Full-stack Next.js 16 application template (not a library)
 - **Target:** Single-box production (Docker + Cloudflare Tunnel)
