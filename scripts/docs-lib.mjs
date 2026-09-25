@@ -165,9 +165,12 @@ export function docSummary(markdown) {
   return first === -1 ? '' : text(first)
 }
 
-/** Drop the "[← Back to README](../README.md)" lines; the app has its own index. */
+/**
+ * Drop the "[← Back to README](../README.md)" lines, and anything after the
+ * link on the same line (such as "· Specs: …"); the app has its own index.
+ */
 export function stripBackLinks(markdown) {
-  return markdown.replace(/^\[← Back to [^\]]*\]\([^)]*\)\s*\n+/gm, '')
+  return markdown.replace(/^\[← Back to [^\]]*\]\([^)]*\)[^\n]*\n+/gm, '')
 }
 
 /**

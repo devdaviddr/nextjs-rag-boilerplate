@@ -115,6 +115,14 @@ describe('titles, summaries and back links', () => {
   it('drops the Back-to-README line', () => {
     expect(stripBackLinks(md)).not.toContain('Back to README')
   })
+
+  it('drops the whole line, including a Specs list after the link', () => {
+    expect(
+      stripBackLinks(
+        '# T\n\n[← Back to README](../README.md) · Specs: [`0025`](../specs/0025-x.md)\n\nBody',
+      ),
+    ).toBe('# T\n\nBody')
+  })
 })
 
 describe('markdownLinks', () => {
