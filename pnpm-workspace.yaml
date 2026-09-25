@@ -6,6 +6,9 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+  # Pulled in by onnxruntime-web (local reranker, spec 0036). Its postinstall
+  # is only a version check; nothing needs it.
+  protobufjs: false
 
 # Security floors for transitive dependencies that the direct ones have not
 # picked up yet (#11). Remove an entry once `pnpm why <pkg>` shows every path

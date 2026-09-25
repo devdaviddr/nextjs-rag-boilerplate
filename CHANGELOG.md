@@ -8,6 +8,20 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **A local reranker that needs no account**
+  ([#16](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/16),
+  spec 0036). `RAG_RERANK_BACKEND=local` — now the default backend — scores
+  retrieved passages with a 23 MB cross-encoder
+  (`Xenova/ms-marco-MiniLM-L-6-v2`) running in-process as WebAssembly: no API
+  calls, no rate limit, no document text sent anywhere. The model downloads
+  once into `RAG_RERANK_MODEL_DIR`. Measured with reranking on: hit@1 and MRR
+  0.882 → 0.941, refusal accuracy 1.000, at about +1.5s of retrieval per
+  question, which is why reranking itself (`RAG_RERANK_ENABLED`) stays off by
+  default. It runs on the Alpine image, where the native ONNX runtime does not
+  load, and adds 14.6 MB to it.
+
 ## [0.21.1] - 2026-09-25
 
 ### Fixed

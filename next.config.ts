@@ -17,7 +17,23 @@ const nextConfig: NextConfig = {
   // placeable asset ... doesn't have a module id" — because the binding is not
   // JavaScript and cannot be placed in an ESM chunk. It fails at BUILD time,
   // not at run time, so it cannot slip through unnoticed.
-  serverExternalPackages: ['@node-rs/argon2', '@napi-rs/canvas'],
+  // onnxruntime-web: the local reranker (spec 0036), which loads a WASM
+  // runtime at run time and must not be bundled.
+  serverExternalPackages: [
+    '@node-rs/argon2',
+    '@napi-rs/canvas',
+    'onnxruntime-web',
+  ],
+  // onnxruntime-web locates its .wasm and loader at run time, which the
+  // standalone tracer cannot follow — without this the Docker image ships no
+  // runtime and the local reranker fails open on every query: reranking "on",
+  // nothing reranked. Only the three files Node uses are included (the package
+  // carries ~140 MB of browser and WebGPU variants).
+  outputFileTracingIncludes: {
+    '/api/chat': [
+      './node_modules/.pnpm/onnxruntime-web@*/node_modules/onnxruntime-web/dist/{ort.node.min.mjs,ort-wasm-simd-threaded.mjs,ort-wasm-simd-threaded.wasm}',
+    ],
+  },
   // File uploads go through a Server Action (src/lib/storage/actions.ts) as a
   // multipart body — the 1 MB default is far too small. Matches the app's own
   // UPLOAD_MAX_SIZE_MB ceiling (see src/lib/env.ts); bump both together.

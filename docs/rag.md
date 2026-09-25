@@ -1599,21 +1599,29 @@ Named rather than hidden.
   destructive corpora, it did not: the chat model reconstructed both reliably.
   Cracking still produces better chunks; it has not been shown to produce better
   answers for those two cases.
-- **Reranking exists but is unmeasured, and off.** A reranker is a second,
-  slower model that re-scores retrieved candidates by reading question and
-  passage together. No dedicated reranker endpoint is reachable on a free NIM
-  account, so what shipped instead is a stage that asks the **chat model** to
-  score the fused candidates, between fusion and the similarity gate, behind
-  `RAG_RERANK_ENABLED` (default off). It is failure-open: a backend that throws,
-  times out or is disabled leaves the fusion order exactly as it was.
+- **Reranking is measured, helps, and is off by default.** A reranker is a
+  second model that re-scores retrieved candidates by reading question and
+  passage together. It sits between fusion and the similarity gate, behind
+  `RAG_RERANK_ENABLED` (default off), and is failure-open: a backend that
+  throws, times out or is disabled leaves the fusion order exactly as it was.
+  Two backends, chosen by `RAG_RERANK_BACKEND`:
 
-  Nothing about it has been measured — not hit@1, not MRR, not refusal
-  accuracy — and the evaluation harness cannot yet run with it on. One hand
-  probe put a single call at a median of **8.4s**, with a tail past 30s, which
-  is comparable to the entire agentic loop's budget. So in practice retrieval
-  quality still rests on chunking and `top_k`, and turning this on is an
-  experiment rather than an upgrade. The local cross-encoder that would need no
-  account at all, and would send nothing anywhere, has not been built.
+  - **`local`** (the default backend) — `Xenova/ms-marco-MiniLM-L-6-v2`, a 23 MB
+    cross-encoder run in-process as WebAssembly. No account, no rate limit,
+    nothing sent anywhere; the model downloads once into
+    `RAG_RERANK_MODEL_DIR`. Measured 2026-09-25 on the fixed pipeline: hit@1
+    and MRR **0.882 → 0.941**, refusal accuracy **1.000** unchanged, leakage 0.
+    The cost is latency: retrieval went from ~0.55s to ~2.05s per question,
+    because WebAssembly runs the model far slower than a native runtime would
+    — and the native runtime does not load on the Alpine image.
+  - **`llm`** — asks `RAG_PLANNER_MODEL` to score the candidates in one
+    completion, over the same NIM account the answer uses. A hand probe put
+    one call at a median of **8.4s** with a tail past 30s; it has not been run
+    through the eval.
+
+  So turning reranking on is now a measured trade — about 1.5s of retrieval
+  latency for one more question at rank 1 on this corpus, with refusal held —
+  rather than an experiment.
 
 - **An exact identifier below the similarity floor still refuses.** A lexical
   hit is not allowed to admit a chunk on its own, because on the evaluation
