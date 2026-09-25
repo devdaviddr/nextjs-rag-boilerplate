@@ -492,12 +492,26 @@ asymmetry as everything else structural:
 A heading set in body type — ALL CAPS at the body's own point size, as in
 `eval/corpus`'s original three documents — is not detected, so each of those
 pages is one chunk and assembly changes nothing there. **No re-ingest is
-needed**: rows ingested before 0039 have no heading position and group at page
-level, which is coarser but still single-page and still gated.
+needed**, and what existing rows get depends on how they were ingested:
+
+- cracked rows ingested since spec 0038 store the heading's position, so they
+  group by section, as new ones do;
+- cracked rows from before 0038 have per-element headings but no position, so
+  they group by heading text: still by section, except that adjacent sections
+  sharing a title on one page merge;
+- text-layer rows from before 0039 have one heading line per page, so they
+  group at page level, like the `chunkPages` row above.
+
+All three stay single-page and gated. Re-ingesting gives the second exact
+sections, and the third sections when the PDF reports point sizes.
 
 The agentic loop dedupes by the same rule: a parent absorbs any lone chunk of
 its run found by another search, and keeps the best score either was seen with,
-so the attempt-scaled floor treats a parent exactly as it would its best child.
+so the attempt-scaled floor scores a parent exactly as it would its best child.
+That bounds the score, not the text: a parent kept on its best child carries its
+whole section, including paragraphs whose own score is under the raised floor.
+Refusal cannot move (the list is empty exactly when its best score is under the
+floor), but after several searches the floor filters less text than it did.
 Whole-document requests are untouched — they already return every chunk.
 `RAG_PARENT_ASSEMBLY=false` turns it off; `pnpm rag:eval --parents-ab` scores
 one retrieval both ways (see [Evaluation](#evaluation)).
@@ -1055,8 +1069,10 @@ pnpm rag:eval --parents-ab --label 1c  # one retrieval, scored flat and assemble
 assembly off, scores that list as **flat**, then assembles parents from the
 same list and scores it as **1c** — no second embedding call, so the columns
 differ only by assembly. It saves `eval/results/<label>-flat.json` and
-`<label>.json` and fails unless every unanswerable question is refused, in
-both columns, identically. It refuses to run with reranking on, where the
+`<label>.json` and fails unless single-hop refusal accuracy is 1.000 in both
+columns and every unanswerable question, of every type, gets the same outcome
+in both. (Some unanswerable multi-hop and layout questions already admit a
+chunk before assembly; the gate checks that assembly does not change them.) It refuses to run with reranking on, where the
 wider pool would make the two columns different retrievals. The **section**
 slice (`type: "section"`) is what it exists for: a section question passes
 only when the first right-page result is a parent holding every

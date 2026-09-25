@@ -404,11 +404,14 @@ const envSchema = z
     // what they decided before; see src/lib/rag/parents.ts. Read by
     // `retrieveForOwner` as the default for `RetrieveOptions.assembleParents`.
     // The parent's size cap is derived (3 x RAG_CHUNK_TOKENS), not configured.
+    // Default ON, so only an explicit 'false' turns it off, as with
+    // RAG_AGENTIC_ENABLED: `.default()` covers only an unset variable, and an
+    // empty or '1' value must not silently mean flat retrieval.
     RAG_PARENT_ASSEMBLY: z
       .string()
       .optional()
       .default('true')
-      .transform((v) => v === 'true'),
+      .transform((v) => v !== 'false'),
     // --- HyDE (spec 0033 FR6, 0027 1g) -------------------------------------
     // Embed a hypothetical ANSWER instead of the question, because an answer
     // looks more like the passage containing it than a question does.

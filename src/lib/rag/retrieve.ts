@@ -7,7 +7,12 @@ import type { ChunkKind } from '@/db/schema'
 import { env } from '@/lib/env'
 import { embedQuery } from './embed'
 import { hypotheticalQuery } from './hyde'
-import { type PageRow, collapseParents, pagesToLoad } from './parents'
+import {
+  type PageRow,
+  collapseParents,
+  pagesToLoad,
+  parentMaxTokens,
+} from './parents'
 import { rerankChunks } from './rerank'
 
 /**
@@ -506,7 +511,7 @@ export async function assembleParents(
   // Derived, not configured: three chunks' worth. A run bigger than that is
   // not one passage, and stays as the children the gate admitted.
   return collapseParents(admitted, pageRows, {
-    maxTokens: 3 * env.RAG_CHUNK_TOKENS,
+    maxTokens: parentMaxTokens(env.RAG_CHUNK_TOKENS),
   })
 }
 

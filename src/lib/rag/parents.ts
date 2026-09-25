@@ -75,10 +75,18 @@ function stableJson(value: unknown): string {
  *
  * The heading string alone would merge two different sections that share a
  * title on one page ("Notes", "Scope"). The heading's box separates them and
- * costs nothing — it is already stored (spec 0038 FR2). Rows with no box
- * (the `chunkPages` fallback, whose heading is the page's first line, and
- * every row ingested before 0039) key on the string alone, which groups them
- * at page granularity: coarser, still single-page, still gated.
+ * costs nothing — it is already stored (spec 0038 FR2). Rows with no box key
+ * on the string alone, and what that means depends on where the heading came
+ * from:
+ *
+ * - the `chunkPages` fallback (and every text-layer row ingested before 0039)
+ *   has one heading per page, its first line, so the run is the page;
+ * - a cracked row ingested before 0038 has its element's real heading but no
+ *   box, so the run is still the section, except that two adjacent sections
+ *   sharing a title on one page merge.
+ *
+ * Cracked rows ingested since 0038 carry the box and group exactly. Every
+ * case is still single-page and still gated.
  */
 export function sectionKey(row: {
   heading?: string | null
@@ -211,11 +219,28 @@ export function pagesToLoad(
   return [...pages.values()]
 }
 
+/**
+ * The largest parent, summed over the run's stored `token_count`: three
+ * chunks' worth. Derived, not configured — a run bigger than that is not one
+ * passage. One function so retrieval and the inspector cannot disagree on it.
+ */
+export function parentMaxTokens(chunkTokens: number): number {
+  return 3 * chunkTokens
+}
+
+/** Whether a run is small enough to be returned as one parent. */
+export function runFitsParent(
+  run: readonly { tokenCount: number }[],
+  maxTokens: number,
+): boolean {
+  return run.reduce((sum, row) => sum + row.tokenCount, 0) <= maxTokens
+}
+
 export interface CollapseOptions {
   /**
    * Largest parent, summed over the run's stored `token_count`. Derived by the
-   * caller as `3 * RAG_CHUNK_TOKENS` rather than configured: a run too big to
-   * be one passage stays as the separate children the gate admitted.
+   * caller with `parentMaxTokens` rather than configured: a run too big to be
+   * one passage stays as the separate children the gate admitted.
    */
   maxTokens: number
 }
@@ -234,8 +259,9 @@ export interface CollapseOptions {
  *
  * The parent's `similarity` is the best admitted member's real cosine, never a
  * blend: every downstream consumer that re-filters on similarity (the agentic
- * loop's attempt-scaled floor) treats a parent exactly as it treats its best
- * child.
+ * loop's attempt-scaled floor) scores a parent exactly as it scores its best
+ * child. The parent's TEXT is the whole run, so a raised floor that keeps the
+ * parent keeps members it would have dropped on their own (see `accumulate`).
  */
 export function collapseParents(
   admitted: readonly RetrievedChunk[],
@@ -281,8 +307,7 @@ export function collapseParents(
   const parents = new Map<PageRow[], RetrievedChunk>()
   for (const [run, members] of admittedByRun) {
     if (members.length < 2) continue
-    const tokens = run.reduce((sum, row) => sum + row.tokenCount, 0)
-    if (tokens > options.maxTokens) continue
+    if (!runFitsParent(run, options.maxTokens)) continue
 
     const best = members[0] as RetrievedChunk
     const first = run[0] as PageRow

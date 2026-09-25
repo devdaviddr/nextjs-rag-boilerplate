@@ -357,6 +357,7 @@ export function DocumentInspector({
                               match. Grouped by the same code retrieval uses. */}
                           {chunk.run !== undefined &&
                             ` · section run ${chunk.run} · ${chunk.runSize} chunk${chunk.runSize === 1 ? '' : 's'}`}
+                          {chunk.runTooLarge && ' · too large to return whole'}
                         </p>
                         {/* FR6. The stored record, verbatim. A view that says
                             "this is what was indexed" should be checkable

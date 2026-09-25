@@ -22,7 +22,8 @@ const citation: StoredCitation = {
 }
 
 function mockLocation(location: Partial<CitationLocation> | null) {
-  const fetchMock = vi.fn(async () =>
+  // Typed with fetch's arguments so a test can read the URL it was called with.
+  const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) =>
     location === null
       ? ({ ok: false, json: async () => ({}) } as Response)
       : ({
@@ -221,6 +222,27 @@ describe('SourceViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close source' }))
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks for the chunk alone when the citation is not a parent', async () => {
+    const fetchMock = mockLocation({})
+    render(<SourceViewer citation={citation} onClose={() => {}} />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/citations/chunk-1')
+  })
+
+  // Spec 0033 1c: a parent's chunkId is its run's FIRST chunk, often not one
+  // the gate admitted. Without `?parent=1` the panel would highlight only it.
+  it('asks for the whole run when the citation is a section parent', async () => {
+    const fetchMock = mockLocation({})
+    render(
+      <SourceViewer
+        citation={{ ...citation, parent: true }}
+        onClose={() => {}}
+      />,
+    )
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/citations/chunk-1?parent=1')
   })
 
   it('links out to the real PDF at the page being viewed', async () => {

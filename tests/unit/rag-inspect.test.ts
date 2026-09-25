@@ -9,6 +9,10 @@ import {
   describePage,
   indexingCompleteness,
 } from '@/lib/rag/inspect'
+import { parentMaxTokens, runFitsParent } from '@/lib/rag/parents'
+
+// Retrieval's parent size cap at the default RAG_CHUNK_TOKENS of 512.
+const CAP = parentMaxTokens(512)
 
 /**
  * Spec 0037: "an inspection tool that rounds up is worse than none". Every
@@ -224,10 +228,51 @@ describe('indexingCompleteness', () => {
 })
 
 describe('buildInspection — section runs (spec 0033, 1c)', () => {
+  // The chunkPages fallback makes a whole page one run. Five 400-token chunks
+  // are 2000 tokens against a 1536 cap: retrieval returns them only as
+  // children, so the view must not present them as one returnable parent.
+  it('marks a run over the parent size cap, as retrieval refuses it', () => {
+    const page = Array.from({ length: 5 }, (_, i) =>
+      chunk(1, {
+        id: `p${i}`,
+        chunkIndex: i,
+        heading: 'PAGE',
+        tokenCount: 400,
+      }),
+    )
+    const result = buildInspection({
+      parentMaxTokens: CAP,
+      pageCount: 1,
+      extraction: null,
+      chunks: page,
+    })
+    for (const c of result.pages[0]!.chunks) {
+      expect(c).toMatchObject({ run: 1, runSize: 5, runTooLarge: true })
+    }
+    // The same rows under the same cap, through retrieval's own check.
+    expect(runFitsParent(page, CAP)).toBe(false)
+  })
+
+  it('does not mark a run that fits', () => {
+    const result = buildInspection({
+      parentMaxTokens: CAP,
+      pageCount: 1,
+      extraction: null,
+      chunks: [
+        chunk(1, { id: 'a', chunkIndex: 0, heading: 'H', tokenCount: 500 }),
+        chunk(1, { id: 'b', chunkIndex: 1, heading: 'H', tokenCount: 500 }),
+      ],
+    })
+    for (const c of result.pages[0]!.chunks) {
+      expect(c).not.toHaveProperty('runTooLarge')
+    }
+  })
+
   it("numbers each page's section runs the way retrieval groups them", () => {
     const box = { xmin: 0.1, ymin: 0.1, xmax: 0.5, ymax: 0.12 }
     const other = { xmin: 0.1, ymin: 0.5, xmax: 0.5, ymax: 0.52 }
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 1,
       extraction: null,
       chunks: [
@@ -257,6 +302,7 @@ describe('buildInspection — section runs (spec 0033, 1c)', () => {
 describe('buildInspection', () => {
   it('lists a page that produced no chunks — the whole point of the view (FR6)', () => {
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 2,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },
@@ -277,6 +323,7 @@ describe('buildInspection', () => {
     // A page with chunks but no record still appears — dropping it would hide
     // indexed content — but the page list's shape comes from the record.
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 3,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },
@@ -288,6 +335,7 @@ describe('buildInspection', () => {
 
   it('falls back to the page count with no record, and says so (FR8)', () => {
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 3,
       extraction: null,
       chunks: [chunk(2)],
@@ -307,6 +355,7 @@ describe('buildInspection', () => {
     // nothing on the page marks it — while `buildEmbeddingText` prepends it
     // before embedding. Dropping it here would say it was not indexed.
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 1,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },
@@ -319,6 +368,7 @@ describe('buildInspection', () => {
   it('draws one heading region however many chunks sit under it (0038 FR4)', () => {
     const box = { xmin: 0.1, ymin: 0.1, xmax: 0.5, ymax: 0.15 }
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 1,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },
@@ -336,6 +386,7 @@ describe('buildInspection', () => {
 
   it('keeps two same-named headings that sit in different places', () => {
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 1,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },
@@ -358,6 +409,7 @@ describe('buildInspection', () => {
 
   it('marks a caption region and never invents one (FR4, FR7)', () => {
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 2,
       extraction: summary([
         { page: 1, route: 'image-heavy', outcome: 'parsed' },
@@ -387,6 +439,7 @@ describe('buildInspection', () => {
 
   it('orders chunks by their position in the document, not by id', () => {
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 1,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },
@@ -403,6 +456,7 @@ describe('buildInspection', () => {
 
   it('groups every chunk under its own page', () => {
     const result = buildInspection({
+      parentMaxTokens: CAP,
       pageCount: 2,
       extraction: summary([
         { page: 1, route: 'clean-text', outcome: 'text-layer' },

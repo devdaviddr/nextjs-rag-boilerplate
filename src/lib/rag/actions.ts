@@ -13,6 +13,7 @@ import { toCitationBoxes } from '@/lib/citations/boxes'
 import { logger } from '@/lib/logger'
 import { buildEmbeddingText } from './chunk'
 import { type InspectedDocument, buildInspection } from './inspect'
+import { parentMaxTokens } from './parents'
 import { UPLOAD_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
 import { deleteObject, putObject } from '@/lib/storage/client'
@@ -349,6 +350,7 @@ export async function inspectDocument(documentId: string): Promise<{
     pageCount: doc.pageCount,
     knowledgeBaseId: doc.knowledgeBaseId,
     inspection: buildInspection({
+      parentMaxTokens: parentMaxTokens(env.RAG_CHUNK_TOKENS),
       pageCount: doc.pageCount,
       extraction: doc.extraction ?? null,
       chunks: rows.map((r) => ({

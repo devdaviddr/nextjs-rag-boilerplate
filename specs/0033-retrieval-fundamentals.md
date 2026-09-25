@@ -103,9 +103,15 @@ the same problem, neither measured against the other.
   citation resolve to an exact page (spec 0025 FR6) and it is not negotiable
   for a recall gain.
 - **NFR4** — Any change requiring a re-ingest says so, and existing documents
-  keep working until re-ingested. 1c requires none: pre-0039 rows carry no
-  heading position and group at page granularity — coarser, still
-  single-page, still gated.
+  keep working until re-ingested. 1c requires none. What existing rows get
+  depends on how they were ingested: cracked rows ingested since 0038 carry
+  `heading_bbox` and group by section; cracked rows from before 0038 carry
+  per-element headings but no box, so they group by heading text — section
+  level, except that adjacent sections sharing a title on one page merge;
+  text-layer rows from before 0039 have one `detectHeading` line per page and
+  group at page level. Every case is still single-page and still gated;
+  re-ingesting brings the first two cases to exact sections and gives the
+  third sections when the PDF reports point sizes.
 
 ## Design / approach
 
@@ -227,6 +233,17 @@ when several children of the same parent match.
 > children clear the floor on their own can never surface as a parent. No
 > migration and no re-ingest (NFR4). Code: `src/lib/rag/parents.ts`, with
 > `assembleParents` in `retrieve.ts`.
+>
+> **A second cost, in the agentic loop.** The attempt-scaled floor (0.35 +
+> 0.04 per extra search) re-filters on `similarity`, and a parent's is its
+> best member's, including a member absorbed from another search. So the
+> floor scores a parent as it would its best child, and refusal cannot move:
+> a list is empty exactly when its best score is under the floor. The text is
+> another matter. A parent kept on its best child carries its whole run,
+> members under the raised floor and members never admitted included. Before
+> parents, only the passing child's text survived. The raised floor therefore
+> bounds scores, not text; accepted, because a parent's text is the whole
+> section at the base floor too, and pinned in `rag-agentic.test.ts`.
 
 ~~The text-layer path has no elements, so it needs a heading-run equivalent from
 `detectHeading` — weaker, and that asymmetry should be stated rather than

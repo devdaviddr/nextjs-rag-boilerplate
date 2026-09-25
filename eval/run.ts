@@ -1918,9 +1918,11 @@ async function main(): Promise<void> {
  * the new document entering the pool, not 1c. The flat column is what
  * separates the two.
  *
- * Refusal is the gate, as everywhere in this harness: 1.000 in both columns,
- * and the SAME questions refused in both. Assembly only rewrites a non-empty
- * list, so a difference would be a bug, not a trade.
+ * Refusal is the gate, as everywhere in this harness: single-hop refusal
+ * accuracy 1.000 in both columns (NFR2's line, as in --baseline), and the SAME
+ * unanswerable questions refused in both across every question type.
+ * Assembly only rewrites a non-empty list, so a difference would be a bug,
+ * not a trade.
  */
 function reportParentsAb(
   label: string,
@@ -1985,28 +1987,34 @@ function reportParentsAb(
       `${sectionLine(assembled)}, flat ${sectionLine(flat).replace('parent@1 ', '')}`,
   )
 
-  // Refusal: 1.000 in both, and the same questions refused in both.
+  // Two checks. `identical` covers every unanswerable question of every type:
+  // assembly must not change which of them refuse, and that is the real guard.
+  // `perfect` is NFR2's line, which like the --baseline gate is the
+  // single-hop `refusalAccuracy`. It is NOT every unanswerable row: the fixed
+  // pipeline this A/B runs already admits a chunk for some unanswerable
+  // multi-hop and layout questions before any assembly, so demanding 1.000
+  // there would fail every run and stop the gate meaning anything.
   const refusedIn = (rows: readonly QuestionResult[]) =>
     rows
       .filter((r) => !r.answerable)
       .map((r) => `${r.id}:${r.passed}`)
       .join(',')
-  const allRefusal = (rows: readonly QuestionResult[]) =>
-    rows.filter((r) => !r.answerable).every((r) => r.passed)
   const identical = refusedIn(flat) === refusedIn(assembled)
-  const perfect = allRefusal(flat) && allRefusal(assembled)
+  const perfect =
+    flatCore.refusalAccuracy === 1 && assembledCore.refusalAccuracy === 1
   if (!identical || !perfect) {
     console.error(`\n${'!'.repeat(72)}`)
     console.error(
       'REFUSAL CHANGED UNDER PARENT ASSEMBLY (spec 0033 NFR2) — HARD FAIL. ' +
-        `identical: ${identical}, 1.000 in both: ${perfect}.`,
+        `identical across every unanswerable question: ${identical}, ` +
+        `single-hop refusal 1.000 in both: ${perfect}.`,
     )
     console.error('!'.repeat(72))
     return true
   }
   console.log(
-    '\nRefusal gate (0033 NFR2): every unanswerable question refused in both ' +
-      'columns, identically — OK',
+    '\nRefusal gate (0033 NFR2): single-hop refusal 1.000 in both columns, and ' +
+      'every unanswerable question refused identically in both — OK',
   )
   return false
 }

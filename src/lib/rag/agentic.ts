@@ -173,9 +173,17 @@ export function effectiveFloor(
  * - the same parent from two searches is one entry;
  * - either way the survivor keeps the BEST similarity it was seen with. Every
  *   one of those scores is a real child cosine that cleared the gate, so the
- *   attempt-scaled floor applied after the loop treats the parent exactly as
- *   it would have treated its best child — never worse, which is what keeps
- *   absorbing a chunk from ever losing it.
+ *   attempt-scaled floor applied after the loop SCORES the parent exactly as
+ *   it would its best child — never worse, which is what keeps absorbing a
+ *   chunk from ever losing it, and why refusal cannot move: the list is empty
+ *   exactly when its best score is under the floor, parents or not.
+ *
+ * What the raised floor no longer bounds is the TEXT. A parent that passes on
+ * its best child carries its whole run, including members whose own cosine is
+ * under the raised floor and members no search admitted. That is the parent's
+ * design at the base floor too (spec 0033 1c); under the agentic floor it
+ * means the floor filters less text than it did before parents. Stated in the
+ * spec's 1c amendment and pinned in rag-agentic.test.ts.
  */
 export function accumulate(
   existing: readonly RetrievedChunk[],

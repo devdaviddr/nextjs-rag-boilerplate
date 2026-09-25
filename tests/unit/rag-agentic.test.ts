@@ -98,6 +98,29 @@ describe('accumulate — section parents (spec 0033, 1c)', () => {
     expect(merged).toHaveLength(1)
     expect(merged[0]?.similarity).toBe(0.55)
   })
+
+  // The stated trade (spec 0033 1c, "the agentic floor bounds the score, not
+  // the text"). Pinned so that changing it is a decision, not an accident.
+  it('lets the raised floor keep a parent on its best child, text and all', () => {
+    const floor = effectiveFloor(0.35, 3, 0.04) // 0.43 after three searches
+    // Search 2 admitted run R's children at 0.44 and 0.36; they collapsed into
+    // one parent scored 0.44 whose text is the whole run.
+    const merged = accumulate(
+      [chunk('z', 0.4)],
+      [parent('r', ['r', 's'], 0.44)],
+    )
+    const kept = merged.filter((c) => c.similarity >= floor)
+    expect(kept.map((c) => c.chunkId)).toEqual(['r'])
+    // The 0.36 child's words reach the drafter inside the parent, though on
+    // its own it would have been dropped by this floor.
+    expect(kept[0]?.content).toContain('content s')
+  })
+
+  it('still empties the list exactly when the best score is under the floor', () => {
+    const floor = effectiveFloor(0.35, 3, 0.04)
+    const merged = accumulate([], [parent('r', ['r', 's'], 0.42)])
+    expect(merged.filter((c) => c.similarity >= floor)).toEqual([])
+  })
 })
 
 describe('runAgenticLoop — termination', () => {
