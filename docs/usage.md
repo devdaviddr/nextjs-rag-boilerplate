@@ -190,7 +190,7 @@ pnpm test:e2e        # E2E (needs a migrated DB + running/built app)
   down), and the RAG product end to end — ingestion, citations, refusal,
   conversation history, and cross-knowledge-base isolation (`rag.spec.ts`,
   `chat.spec.ts`, `knowledge-bases.spec.ts`, self-skip without
-  `NVIDIA_API_KEY`).
+  `NVIDIA_API_KEY`, and always skip in CI — run them locally).
 - **RAG unit** tests cover chunking, scope resolution, the router, the planner
   adapters, the bounded loop and its budgets, citation stripping, and the
   SQL-text assertions that both tenant and knowledge-base isolation are present

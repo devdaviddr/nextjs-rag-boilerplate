@@ -125,9 +125,11 @@ jobs:
       - name: Run E2E tests
         run: pnpm test:e2e
         env:
-          # Optional: with no secret configured the RAG suite self-skips and
-          # the rest of the E2E run is unaffected.
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          # The RAG suites (rag, knowledge-bases, the inference parts of chat)
+          # always skip in CI: they call the rate-limited NIM endpoint, so they
+          # run locally only. Set empty on purpose, so a repository secret of
+          # the same name can never switch them on here (#22).
+          NVIDIA_API_KEY:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
