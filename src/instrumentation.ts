@@ -1,7 +1,8 @@
 /**
  * Server-process startup hook (Next.js `register`).
  *
- * The only thing here is ingestion recovery (spec 0034 FR1). A document is
+ * Two things start here: the log store (spec 0042 FR3), and ingestion
+ * recovery (spec 0034 FR1). A document is
  * ingested by `after()`, in the same process that served the upload — so when
  * that process goes away mid-run, nothing is left holding the work. This
  * project's deploy model is a pull timer that restarts the container, which
@@ -22,6 +23,18 @@ export async function register(): Promise<void> {
   // `next build` boots a server to prerender. Sweeping there would mutate a
   // production database from a build machine, which is never intended.
   if (process.env.NEXT_PHASE === 'phase-production-build') return
+
+  // Logs first, so ingestion recovery's own lines are kept (spec 0042).
+  const [{ env }, { startLogStore }, { startRunStore }] = await Promise.all([
+    import('@/lib/env'),
+    import('@/lib/observability/log-store'),
+    import('@/lib/observability/run-store'),
+  ])
+  startLogStore({
+    persist: env.LOG_PERSIST,
+    retentionDays: env.LOG_RETENTION_DAYS,
+  })
+  startRunStore({ retentionDays: env.TELEMETRY_RETENTION_DAYS })
 
   const { startIngestionRecovery } = await import('@/lib/rag/ingest')
   startIngestionRecovery()

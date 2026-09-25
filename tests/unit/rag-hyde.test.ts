@@ -167,7 +167,9 @@ describe('parseHypothetical', () => {
 // ---------------------------------------------------------------------------
 
 describe('llmHyde', () => {
-  it('asks the configured HyDE model, not the chat or planner model', async () => {
+  // The job, not a model name: the client resolves the job to its connection
+  // and its model (RAG_HYDE_MODEL), spec 0040 FR2.
+  it('asks as the HyDE job, not the chat or planner job', async () => {
     createChatCompletion.mockResolvedValue(
       toolReply(JSON.stringify({ passage: PASSAGE })),
     )
@@ -175,7 +177,7 @@ describe('llmHyde', () => {
     await llmHyde.generate('How much annual leave?')
 
     const [, options] = createChatCompletion.mock.calls[0] ?? []
-    expect(options.model).toBe('hyde-model')
+    expect(options.role).toBe('hyde')
   })
 
   it('sends the scoring tool so the reasoning does not land in content', async () => {

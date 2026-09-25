@@ -1,7 +1,14 @@
 import 'server-only'
 
-import { aiSettings } from '@/lib/ai-settings'
+import {
+  type AiRole,
+  ENV_CONNECTION_ID,
+  aiSettings,
+  connectionFor,
+  modelFor,
+} from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
+import { annotateSpan } from '@/lib/observability/runs'
 import type { EmbeddingInputType } from './constants'
 
 /**
@@ -17,6 +24,24 @@ import type { EmbeddingInputType } from './constants'
  * secrets — same posture as OAuth/email/push in this boilerplate. */
 export function isRagConfigured(): boolean {
   return Boolean(aiSettings().NVIDIA_API_KEY)
+}
+
+/**
+ * The key for a job's endpoint. The `.env` endpoint keeps its old rule — no
+ * key, no RAG — while a saved connection may legitimately have none (a local
+ * llama.cpp or Ollama server).
+ */
+function keyFor(role: AiRole): { url: string; key: string | undefined } {
+  const connection = connectionFor(role)
+  const url = connection.baseUrl.replace(/\/$/, '')
+  if (connection.id === ENV_CONNECTION_ID) return { url, key: requireKey() }
+  if (connection.keyUnreadable) {
+    throw new RagUpstreamError(
+      401,
+      `the API key saved for "${connection.name}" can no longer be read; enter it again in Settings`,
+    )
+  }
+  return { url, key: connection.apiKey }
 }
 
 export class RagNotConfiguredError extends Error {
@@ -110,20 +135,24 @@ async function post(
   path: string,
   body: unknown,
   {
+    role,
     stream = false,
     signal,
     timeoutMs = REQUEST_TIMEOUT_MS,
     maxAttempts = MAX_ATTEMPTS,
   }: {
+    /** Which job this is: it picks the connection (spec 0040 FR2). */
+    role: AiRole
     stream?: boolean
     signal?: AbortSignal
     timeoutMs?: number
     maxAttempts?: number
-  } = {},
+  },
 ): Promise<Response> {
   const attempts = Math.min(MAX_ATTEMPTS, Math.max(1, Math.floor(maxAttempts)))
-  const key = requireKey()
-  const url = `${aiSettings().RAG_LLM_BASE_URL.replace(/\/$/, '')}${path}`
+  const endpoint = keyFor(role)
+  const key = endpoint.key
+  const url = `${endpoint.url}${path}`
 
   let lastDetail = 'no response'
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -133,7 +162,7 @@ async function post(
       response = await fetch(url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${key}`,
+          ...(key ? { Authorization: `Bearer ${key}` } : {}),
           'Content-Type': 'application/json',
           Accept: stream ? 'text/event-stream' : 'application/json',
         },
@@ -204,13 +233,17 @@ export async function createEmbeddings(
 ): Promise<number[][]> {
   if (input.length === 0) return []
 
-  const response = await post('/embeddings', {
-    input,
-    model: aiSettings().RAG_EMBED_MODEL,
-    input_type: inputType,
-  })
+  const response = await post(
+    '/embeddings',
+    { input, model: modelFor('embed'), input_type: inputType },
+    { role: 'embed' },
+  )
 
   const json = (await response.json()) as EmbeddingsResponse
+  annotateSpan({
+    model: modelFor('embed'),
+    attributes: { inputs: input.length },
+  })
   // The API is documented to preserve order, but sorting by `index` makes the
   // mapping back onto the input array explicit rather than assumed.
   return [...json.data]
@@ -250,7 +283,7 @@ export async function createChatStream(
   const response = await post(
     '/chat/completions',
     {
-      model: aiSettings().RAG_CHAT_MODEL,
+      model: modelFor('chat'),
       messages,
       stream: true,
       temperature: 0.2,
@@ -259,7 +292,7 @@ export async function createChatStream(
       // thing as counting tokens.
       stream_options: { include_usage: true },
     },
-    { stream: true, signal },
+    { role: 'chat', stream: true, signal },
   )
 
   if (!response.body) {
@@ -270,12 +303,12 @@ export async function createChatStream(
 
 /** The chat model in use, for display alongside an answer. */
 export function chatModelName(): string {
-  return aiSettings().RAG_CHAT_MODEL
+  return modelFor('chat')
 }
 
 /** The planner model in use, for the trace. */
 export function plannerModelName(): string {
-  return aiSettings().RAG_PLANNER_MODEL
+  return modelFor('planner')
 }
 
 export interface CompletionChoice {
@@ -302,7 +335,12 @@ export interface CompletionOptions {
    * verification — passes 1: a retry only adds another full deadline (#42).
    */
   maxAttempts?: number
-  /** Defaults to the chat model; the planner passes `RAG_PLANNER_MODEL`. */
+  /**
+   * The job, which picks the connection and the model (spec 0040 FR2).
+   * Defaults to `chat`.
+   */
+  role?: AiRole
+  /** Overrides the job's model on its connection. Rarely wanted. */
   model?: string
   /** Advertise tools. With these present, reasoning models split their
    *  chain-of-thought into `reasoning_content` and leave `content` clean —
@@ -330,7 +368,7 @@ export async function createChatCompletion(
   options: CompletionOptions = {},
 ): Promise<{ choice: CompletionChoice; tokens: number }> {
   const body: Record<string, unknown> = {
-    model: options.model ?? aiSettings().RAG_CHAT_MODEL,
+    model: options.model ?? modelFor(options.role ?? 'chat'),
     messages,
     stream: false,
     temperature: options.temperature ?? 0.2,
@@ -342,6 +380,7 @@ export async function createChatCompletion(
   }
 
   const response = await post('/chat/completions', body, {
+    role: options.role ?? 'chat',
     signal: options.signal,
     ...(options.timeoutMs !== undefined
       ? { timeoutMs: options.timeoutMs }
@@ -351,9 +390,12 @@ export async function createChatCompletion(
       : {}),
   })
   const json = (await response.json()) as CompletionResponse
+  const tokens = json.usage?.total_tokens ?? 0
+  // Credit the model and tokens to whichever run step made this call.
+  annotateSpan({ model: String(body.model), tokens })
 
   return {
     choice: json.choices?.[0] ?? {},
-    tokens: json.usage?.total_tokens ?? 0,
+    tokens,
   }
 }

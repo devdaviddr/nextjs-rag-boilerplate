@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * table is replaced by a map, so no database is involved.
  */
 
-const { mockEnv, rows, store } = vi.hoisted(() => {
+const { mockEnv, rows, connectionRows, store } = vi.hoisted(() => {
   const rows = new Map<string, string>()
+  const connectionRows: unknown[] = []
   return {
     mockEnv: {} as Record<string, unknown>,
     rows,
+    connectionRows,
     store: {
       readSavedRows: vi.fn(async () =>
         [...rows].map(([key, value]) => ({ key, value })),
@@ -21,6 +23,7 @@ const { mockEnv, rows, store } = vi.hoisted(() => {
       deleteSavedRow: vi.fn(async (key: string) => {
         rows.delete(key)
       }),
+      readConnectionRows: vi.fn(async () => connectionRows),
     },
   }
 })
@@ -31,8 +34,13 @@ vi.mock('@/lib/logger', () => ({
 }))
 vi.mock('@/lib/ai-settings/store', () => store)
 
+import { encryptSecret } from '@/lib/ai-settings/crypto'
 import {
+  ENV_CONNECTION_ID,
   SAVABLE_KEYS,
+  connectionFor,
+  modelFor,
+  saveRoleConnection,
   TTL_MS,
   __resetAiSettingsForTests,
   aiSettings,
@@ -43,6 +51,7 @@ import {
 } from '@/lib/ai-settings'
 
 const ENV = {
+  AUTH_SECRET: 'auth-secret-for-tests',
   NVIDIA_API_KEY: 'env-key',
   RAG_LLM_BASE_URL: 'https://example.test/v1',
   RAG_CHAT_MODEL: 'env/chat',
@@ -56,6 +65,7 @@ const ENV = {
 beforeEach(() => {
   __resetAiSettingsForTests()
   rows.clear()
+  connectionRows.length = 0
   for (const k of Object.keys(mockEnv)) delete mockEnv[k]
   Object.assign(mockEnv, ENV)
   vi.clearAllMocks()
@@ -194,5 +204,84 @@ describe('parseSetting', () => {
       value: 'llm',
     })
     expect(parseSetting('RAG_RERANK_BACKEND', 'other').ok).toBe(false)
+  })
+})
+
+describe('connections (spec 0040 FR1, FR2)', () => {
+  const openrouter = () => ({
+    id: 'c-1',
+    name: 'OpenRouter',
+    preset: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    apiKeyCiphertext: encryptSecret('sk-or-secret-1234'),
+  })
+
+  it('sends every job to the .env endpoint until one is chosen', async () => {
+    connectionRows.push(openrouter())
+    await refreshAiSettings()
+    const chat = connectionFor('chat')
+    expect(chat.id).toBe(ENV_CONNECTION_ID)
+    expect(chat.baseUrl).toBe('https://example.test/v1')
+    expect(chat.apiKey).toBe('env-key')
+  })
+
+  it('points a job at a saved connection, with its key decrypted', async () => {
+    connectionRows.push(openrouter())
+    rows.set('connection:chat', 'c-1')
+    await refreshAiSettings()
+    expect(connectionFor('chat')).toMatchObject({
+      id: 'c-1',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-or-secret-1234',
+      keyUnreadable: false,
+    })
+    expect(connectionFor('planner').id).toBe(ENV_CONNECTION_ID)
+  })
+
+  it('falls back to .env when the chosen connection was deleted', async () => {
+    rows.set('connection:chat', 'gone')
+    await refreshAiSettings()
+    expect(connectionFor('chat').id).toBe(ENV_CONNECTION_ID)
+  })
+
+  it('never moves embeddings, even if a row says so', async () => {
+    connectionRows.push(openrouter())
+    rows.set('connection:embed', 'c-1')
+    await refreshAiSettings()
+    expect(connectionFor('embed').id).toBe(ENV_CONNECTION_ID)
+    expect(await saveRoleConnection('embed', 'c-1', null)).toMatchObject({
+      ok: false,
+    })
+  })
+
+  it('flags a key that no longer decrypts instead of sending garbage', async () => {
+    connectionRows.push({ ...openrouter(), apiKeyCiphertext: 'v1:AAAA' })
+    rows.set('connection:chat', 'c-1')
+    await refreshAiSettings()
+    expect(connectionFor('chat')).toMatchObject({
+      apiKey: undefined,
+      keyUnreadable: true,
+    })
+  })
+
+  it('saves a job’s connection, and refuses one that does not exist', async () => {
+    connectionRows.push(openrouter())
+    expect(await saveRoleConnection('planner', 'c-1', 'admin')).toEqual({
+      ok: true,
+    })
+    expect(connectionFor('planner').id).toBe('c-1')
+    expect(await saveRoleConnection('planner', 'nope', 'admin')).toMatchObject({
+      ok: false,
+    })
+    expect(
+      await saveRoleConnection('planner', ENV_CONNECTION_ID, null),
+    ).toEqual({ ok: true })
+    expect(connectionFor('planner').id).toBe(ENV_CONNECTION_ID)
+  })
+
+  it('gives each job its own model setting', async () => {
+    rows.set('RAG_CHAT_MODEL', 'or/some-chat')
+    await refreshAiSettings()
+    expect(modelFor('chat')).toBe('or/some-chat')
   })
 })

@@ -14,6 +14,7 @@ import {
   parentMaxTokens,
 } from './parents'
 import { rerankChunks } from './rerank'
+import { span } from '@/lib/observability/runs'
 
 /**
  * Owner- and knowledge-base-scoped nearest-neighbour retrieval
@@ -287,9 +288,16 @@ export async function retrieveForOwner(
   // have the lexical channel vote for passages matching words the user never
   // typed — the one channel whose value is that it matches what was actually
   // asked.
-  const hypothetical = await hypotheticalQuery(question)
+  // Each stage is a step of the current run, if there is one (spec 0042).
+  const hypothetical = aiSettings().RAG_HYDE_ENABLED
+    ? await span('hyde', async (step) => {
+        const drafted = await hypotheticalQuery(question)
+        step.set({ drafted: drafted !== null, passage: drafted })
+        return drafted
+      })
+    : null
   const queryVector = toVectorLiteral(
-    await embedQuery(hypothetical ?? question),
+    await span('embed-question', () => embedQuery(hypothetical ?? question)),
   )
 
   // Hybrid retrieval (spec 0027, 1b): a dense channel and a lexical one, fused
@@ -306,7 +314,8 @@ export async function retrieveForOwner(
   // ever ran, starving real candidates and, at RAG_HYBRID_CANDIDATES=20,
   // excluding correct results (spec 0028). The tenant boundary is not
   // something fusion is trusted to preserve, and neither is the KB one.
-  const rows = await db.execute<Row>(sql`
+  const rows = await span('search-index', async (step) => {
+    const found = await db.execute<Row>(sql`
     WITH q AS (
       -- The lexical query is an OR of the question's lexemes, not an AND.
       --
@@ -376,6 +385,9 @@ export async function retrieveForOwner(
     ORDER BY f.rrf DESC
     LIMIT ${poolSize}
   `)
+    step.set({ candidates: found.length, question })
+    return found
+  })
 
   const fused: RetrievedChunk[] = Array.from(rows).map((r) => {
     const inVector = r.vec_rank !== null
@@ -416,7 +428,16 @@ export async function retrieveForOwner(
   // below admits the identical set whether reranking ran, was disabled or
   // failed. What the pool WIDTH admits is a separate question, answered in
   // candidatePoolSize above.
-  const ranked = await rerankChunks(question, fused)
+  const ranked = aiSettings().RAG_RERANK_ENABLED
+    ? await span('rerank', async (step) => {
+        const out = await rerankChunks(question, fused)
+        step.set({
+          candidates: fused.length,
+          topChanged: out[0]?.chunkId !== fused[0]?.chunkId,
+        })
+        return out
+      })
+    : await rerankChunks(question, fused)
 
   const admitted = ranked.filter(
     // The gate stays on cosine similarity alone.

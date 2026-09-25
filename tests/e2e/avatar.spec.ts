@@ -158,7 +158,7 @@ test('deleting a user also removes their profile photo', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/chat/)
 
-  await page.goto('/settings')
+  await page.goto('/settings#users')
   const row = page.getByRole('row').filter({ hasText: emailE })
   await row.getByRole('button', { name: 'Open menu' }).click()
   await page.getByRole('menuitem', { name: 'Delete' }).click()

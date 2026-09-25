@@ -97,6 +97,66 @@ Citation verification then strips claims their sources do not support. It is
 roughly ten times slower and markedly better on follow-ups — the measured A/B
 is in [RAG → The agentic path](rag.md#the-agentic-path).
 
+### Choosing the provider and models from Settings
+
+Admins get two sections in **Settings** (spec 0040):
+
+- **AI provider** lists the endpoints the app can send questions to. The
+  `.env` endpoint is always there. Add more with a preset (NVIDIA NIM,
+  OpenRouter, a llama.cpp server, OpenAI, Ollama, vLLM / LM Studio) or any
+  OpenAI-compatible URL. API keys are encrypted at rest (AES-256-GCM) and never
+  sent back to the browser; the page shows the last four characters at most.
+  **Test** lists the endpoint's models.
+- **Models** sets the connection and model for each job: chat, planner, HyDE,
+  vision and page parsing. A change applies to the next request, with no
+  restart. **Test** tries the job as configured: a short completion, a tool
+  call for the planner (a llama.cpp planner without `--jinja` is told so), or
+  one embedding of the size the index needs. **Use .env** removes the change.
+
+Embeddings stay on the `.env` endpoint and model for now, because the index
+holds that model's vectors and changing it means re-indexing (#56). Choosing a
+provider also chooses who sees your document text: the questions and the
+retrieved passages go to it.
+
+### Watching an answer being built
+
+Every answer in a chat has an **Agent activity** link under it. Open it while
+the answer is being written and it follows along live: each step with its
+timing (finding passages, each thing the planner decided, each search, writing
+the answer, checking its citations) and a plain line for each thing that
+happened, such as "Decided to search for 'leave policy'" or "Found 5 passages
+(best match 0.73)". Open it on an older answer and it shows what was recorded
+then. Everyone sees this for their own answers; admins also get each line's
+raw details and links to the full run and its log lines (spec 0042 FR12).
+
+### Observability: what the pipeline is doing
+
+Admins get an **Observability** item in the sidebar (spec 0042). **Logs** shows
+every log line the server writes, live, newest at the bottom: the level as a
+coloured badge (error, warn, info, debug), the area as a coloured stripe
+(agent, retrieval, inference, ingestion, auth, settings, system), and the full
+details a click away. Every line written while answering one question shares a
+request id, so one click shows that question's whole story: what the planner
+chose, what each search found, reranking, HyDE, and any provider errors and
+retries. Lines are kept in Postgres for `LOG_RETENTION_DAYS` (7 by default),
+with API keys and other secrets removed before they are stored.
+
+**Runs** lists every question answered and every document ingested, with its
+outcome (answered, no match, failed, cancelled), how long it took, time to the
+first word, tokens and best match. Open one to see its steps as a timeline you
+can replay: finding passages, each thing the planner decided, each search,
+writing the answer and checking its citations, each with the model it used,
+its tokens, and what it found. Runs are kept for `TELEMETRY_RETENTION_DAYS`
+(30 by default).
+
+**Overview** is the dashboard, for the last 24 hours or 7 days against the
+period before: questions asked, how often nothing matched, answer time and
+time to the first word, tokens per answer and the failure rate, each with a
+trend line. Below them: questions and answer times over time, which retrieval
+mode was used, why agentic searches stopped, documents processed, how close
+each question's best passage came to the similarity floor, where the time goes
+step by step, which models failed, and the latest runs.
+
 ### Measured, not asserted
 
 A **retrieval evaluation harness** (`pnpm rag:eval`) runs a ground-truth corpus

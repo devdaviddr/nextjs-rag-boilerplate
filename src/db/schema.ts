@@ -2,6 +2,7 @@ import { type SQL, relations, sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
   bigint,
+  bigserial,
   boolean,
   customType,
   index,
@@ -674,6 +675,10 @@ export const messages = pgTable(
     // Generation metrics (tokens, tok/s, latency). Null for user messages and
     // for assistant messages answered without calling the model.
     metrics: jsonb('metrics').$type<StoredMetrics>(),
+    // The request that produced this answer (spec 0042 FR12): the key of its
+    // log lines and its run, so the chat's Agent activity drawer can show
+    // what happened. Null for user messages and for older answers.
+    requestId: text('request_id'),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
@@ -809,3 +814,117 @@ export const aiSettings = pgTable('ai_settings', {
   }),
   updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
 })
+
+/**
+ * Endpoints the app can send inference to (spec 0040 FR1): NVIDIA NIM,
+ * OpenRouter, a llama.cpp server, or any OpenAI-compatible URL. The API key
+ * is AES-256-GCM ciphertext (`src/lib/ai-settings/crypto.ts`) and is never
+ * sent back to the browser. Which job uses which connection is an
+ * `ai_settings` row, `connection:<role>`. The `.env` endpoint is not a row:
+ * it is always available as the built-in "Environment" connection.
+ */
+export const aiConnections = pgTable('ai_connections', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  preset: text('preset').notNull(),
+  baseUrl: text('base_url').notNull(),
+  apiKeyCiphertext: text('api_key_ciphertext'),
+  /** Last four characters of the key, so the page can show `••••1a2b`. */
+  apiKeyHint: text('api_key_hint'),
+  createdBy: text('created_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+})
+
+/**
+ * Every log line, kept for the Logs page (spec 0042 FR3). Written in batches
+ * by `src/lib/observability/log-store.ts` and pruned after
+ * `LOG_RETENTION_DAYS`. `meta` has already been through the redactor: no
+ * secrets. Not linked to `users` by a foreign key, so a log line outlives the
+ * account it mentions until retention removes it.
+ */
+export const appLogs = pgTable(
+  'app_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    time: timestamp('time', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    level: text('level').notNull(),
+    category: text('category').notNull(),
+    message: text('message').notNull(),
+    requestId: text('request_id'),
+    userId: text('user_id'),
+    meta: jsonb('meta').$type<Record<string, unknown>>(),
+  },
+  (table) => [
+    index('app_logs_time_idx').on(table.time.desc()),
+    index('app_logs_request_idx').on(table.requestId),
+    index('app_logs_level_time_idx').on(table.level, table.time),
+  ],
+)
+
+/**
+ * One row per question answered or document ingested (spec 0042 FR8): what
+ * was asked, how it went, and its totals. Its steps are in `rag_spans`. The
+ * id is the request id, so a run and its log lines join on it. Pruned after
+ * `TELEMETRY_RETENTION_DAYS`.
+ */
+export const ragRuns = pgTable(
+  'rag_runs',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(),
+    userId: text('user_id'),
+    conversationId: text('conversation_id'),
+    documentId: text('document_id'),
+    question: text('question'),
+    mode: text('mode'),
+    status: text('status').notNull(),
+    termination: text('termination'),
+    startedAt: timestamp('started_at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    durationMs: integer('duration_ms').notNull(),
+    ttftMs: integer('ttft_ms'),
+    promptTokens: integer('prompt_tokens'),
+    completionTokens: integer('completion_tokens'),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    bestSimilarity: real('best_similarity'),
+    sourceCount: integer('source_count'),
+    models: jsonb('models').$type<string[]>().notNull().default([]),
+    error: text('error'),
+  },
+  (table) => [
+    index('rag_runs_started_idx').on(table.startedAt.desc()),
+    index('rag_runs_kind_started_idx').on(table.kind, table.startedAt),
+  ],
+)
+
+/** The timed steps of a run, nested by `parent_key` (spec 0042 FR8). */
+export const ragSpans = pgTable(
+  'rag_spans',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    runId: text('run_id')
+      .notNull()
+      .references(() => ragRuns.id, { onDelete: 'cascade' }),
+    key: integer('key').notNull(),
+    parentKey: integer('parent_key'),
+    name: text('name').notNull(),
+    startedAt: timestamp('started_at', {
+      mode: 'date',
+      withTimezone: true,
+    }).notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    status: text('status').notNull(),
+    model: text('model'),
+    tokens: integer('tokens'),
+    attributes: jsonb('attributes').$type<Record<string, unknown>>(),
+  },
+  (table) => [index('rag_spans_run_idx').on(table.runId, table.key)],
+)

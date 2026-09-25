@@ -134,6 +134,34 @@
       "when": 1790324629697,
       "tag": "0018_ai_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790326311892,
+      "tag": "0019_ai_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790367127835,
+      "tag": "0020_app_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790367940288,
+      "tag": "0021_rag_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790369478116,
+      "tag": "0022_message_request_id",
+      "breakpoints": true
     }
   ]
 }

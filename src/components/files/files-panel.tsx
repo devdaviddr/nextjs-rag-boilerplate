@@ -166,7 +166,9 @@ export function FilesPanel({ initialFiles }: FilesPanelProps) {
                     </TableCell>
                     <TableCell>{formatBytes(file.sizeBytes)}</TableCell>
                     <TableCell>
-                      {new Date(file.createdAt).toLocaleDateString()}
+                      {/* ISO, not toLocaleDateString(): the server's locale
+                          and the browser's differ, which broke hydration. */}
+                      {new Date(file.createdAt).toISOString().slice(0, 10)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" asChild>

@@ -44,7 +44,7 @@ test('settings admin panel has no detectable a11y violations', async ({
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/chat/)
 
-  await page.goto('/settings')
+  await page.goto('/settings#users')
   await expect(page.getByRole('button', { name: 'Add User' })).toBeVisible()
 
   // Include the "Add User" dialog — a common source of focus-trap/label bugs.
@@ -104,4 +104,35 @@ test('403 page has no detectable a11y violations', async ({ page }) => {
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze()
   expect(results.violations).toEqual([])
+})
+
+test('settings AI sections have no detectable a11y violations', async ({
+  page,
+}) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('demo@example.com')
+  await page.getByLabel('Password', { exact: true }).fill('Password123')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/chat/)
+
+  for (const section of ['configuration', 'configuration-open']) {
+    await page.goto('/settings#configuration')
+    await expect(page.locator('#configuration')).toBeVisible()
+    if (section === 'configuration-open') {
+      // The model picker is a custom combobox: check it open, too.
+      await page
+        .locator('li[data-role="chat"]')
+        .getByRole('button', { name: 'Show models' })
+        .click()
+      await expect(
+        page.locator(
+          'li[data-role="chat"] [role="combobox"][aria-expanded="true"]',
+        ),
+      ).toBeVisible()
+    }
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+    expect(results.violations).toEqual([])
+  }
 })

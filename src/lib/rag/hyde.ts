@@ -318,7 +318,7 @@ export const llmHyde: HydeBackend = {
           { role: 'user', content: `Question:\n${question}` },
         ],
         {
-          model: aiSettings().RAG_HYDE_MODEL,
+          role: 'hyde',
           tools: [HYDE_TOOL],
           maxTokens: HYDE_MAX_TOKENS,
           // Not 0. A hypothetical is a guess at the vocabulary of an unseen
@@ -381,6 +381,11 @@ export async function hypotheticalQuery(
       })
       return null
     }
+    logger.info('HyDE drafted a passage to search with', {
+      category: 'retrieval',
+      backend: backend.name,
+      passage,
+    })
     return passage
   } catch (error) {
     // Failure-open, and warn rather than error: an unavailable HyDE backend is

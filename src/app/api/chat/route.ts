@@ -14,6 +14,18 @@ import { toStoredCitations } from '@/lib/chat/citations'
 import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
+import {
+  MAX_ACTIVITY_EVENTS,
+  toActivityLine,
+  worthShowing,
+} from '@/lib/observability/activity'
+import { subscribe } from '@/lib/observability/bus'
+import { beginSpan, span, startRun } from '@/lib/observability/runs'
+import {
+  annotateContext,
+  newRequestId,
+  withRequestContext,
+} from '@/lib/observability/context'
 import { logger } from '@/lib/logger'
 import { RAG_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
@@ -72,19 +84,33 @@ interface ChatRequestBody {
   // permitted. Sending it with an existing conversationId is ignored, not an
   // error — the client has no way to change it.
   knowledgeBaseIds?: unknown
+  /** Stream this answer's activity for the chat's drawer (spec 0042 FR12). */
+  activity?: unknown
 }
 
 function line(payload: unknown): Uint8Array {
   return new TextEncoder().encode(`${JSON.stringify(payload)}\n`)
 }
 
+/**
+ * Every line logged while answering, streaming included, carries this
+ * request's id (spec 0042 FR4). The id is also returned as `X-Request-Id`.
+ */
 export async function POST(request: Request) {
+  const requestId = newRequestId()
+  return withRequestContext({ requestId, kind: 'chat' }, () =>
+    answer(request, requestId),
+  )
+}
+
+async function answer(request: Request, requestId: string) {
   await refreshAiSettings()
   const session = await getCurrentSession()
   if (!session?.user.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const userId = session.user.id
+  annotateContext({ userId })
 
   if (!isRagConfigured()) {
     return NextResponse.json(
@@ -114,6 +140,9 @@ export async function POST(request: Request) {
   }
 
   const question = typeof body.question === 'string' ? body.question.trim() : ''
+  // Whether to stream this answer's activity for the chat's drawer (FR12).
+  const wantsActivity = body.activity === true
+  const isAdmin = (session.user.roles ?? []).includes('admin')
   if (question.length === 0) {
     return NextResponse.json(
       { error: 'A question is required.' },
@@ -191,6 +220,17 @@ export async function POST(request: Request) {
       )
     }
   }
+
+  annotateContext({ conversationId })
+  // The run record for Observability (spec 0042 FR8): finished once, on
+  // whichever way this request ends.
+  const run = startRun({
+    id: requestId,
+    kind: 'question',
+    userId,
+    conversationId,
+    question,
+  })
 
   // Persisted BEFORE the model is called, so a question is never lost even if
   // generation fails outright.
@@ -298,6 +338,7 @@ export async function POST(request: Request) {
           content,
           citations,
           metrics,
+          requestId,
         })
         .returning({ id: messages.id })
       persistedId = row?.id ?? null
@@ -342,6 +383,9 @@ export async function POST(request: Request) {
   let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
   let answer = ''
 
+  // Hoisted so `cancel()` and a dropped connection can stop it too.
+  let stopActivity: () => void = () => {}
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (payload: unknown): void => {
@@ -352,7 +396,28 @@ export async function POST(request: Request) {
           closed = true
         }
       }
+      // The Agent activity drawer (spec 0042 FR12): this answer's steps and
+      // log lines, forwarded as they happen. Plain lines for everyone; the
+      // redacted details for admins only. Capped, and never allowed to fail
+      // the answer.
+      let forwarded = 0
+      stopActivity = wantsActivity
+        ? subscribe(requestId, (event) => {
+            if (forwarded >= MAX_ACTIVITY_EVENTS) return
+            if (event.kind === 'log' && !worthShowing(event.message)) return
+            forwarded++
+            send({
+              type: 'activity',
+              event:
+                event.kind === 'log'
+                  ? toActivityLine(event, isAdmin)
+                  : { ...event, kind: 'step' },
+            })
+          })
+        : () => {}
+
       const finish = (): void => {
+        stopActivity()
         if (closed) return
         closed = true
         try {
@@ -366,15 +431,26 @@ export async function POST(request: Request) {
       // socket mid-stream, so react to the request signal directly.
       request.signal.addEventListener('abort', () => {
         closed = true
+        stopActivity()
         void upstreamReader?.cancel().catch(() => undefined)
       })
 
       try {
         send({ type: 'conversation', conversationId, title: conversationTitle })
+        send({ type: 'request', requestId })
 
-        const retrieved = await gatherEvidence((phase, iteration) => {
-          send({ type: 'step', phase, iteration })
+        const retrieved = await span('retrieve', async (step) => {
+          const found = await gatherEvidence((phase, iteration) => {
+            send({ type: 'step', phase, iteration })
+          })
+          step.set({ mode: retrievalMode, passages: found.length })
+          return found
         })
+        const bestSimilarity = retrieved.reduce<number | null>(
+          (best, c) =>
+            best === null || c.similarity > best ? c.similarity : best,
+          null,
+        )
         // Section parents are flagged so the panel highlights the whole run.
         citations = toStoredCitations(retrieved)
         send({ type: 'citations', citations })
@@ -407,11 +483,19 @@ export async function POST(request: Request) {
           await persistAnswer(answer)
           send({ type: 'done' })
           finish()
+          run.finish({
+            status: 'refused',
+            mode: retrievalMode,
+            termination: agenticTrace?.termination ?? 'no-evidence',
+            sourceCount: 0,
+            bestSimilarity,
+          })
           return
         }
 
         send({ type: 'step', phase: 'drafting' })
         const startedAt = Date.now()
+        const drafting = beginSpan('draft', { sources: citations.length })
         // Hoisted above the retry loop so a second attempt overwrites them
         // rather than shadowing, and so the empty-answer diagnostic below can
         // still see what the last attempt produced.
@@ -539,6 +623,16 @@ export async function POST(request: Request) {
           send({ type: 'error', message: draftFailureMessage(upstreamError) })
           send({ type: 'done' })
           finish()
+          drafting.set({ finishReason, upstreamError })
+          drafting.end({ status: 'error', model: chatModelName() })
+          run.finish({
+            status: 'error',
+            mode: retrievalMode,
+            termination: agenticTrace?.termination ?? null,
+            sourceCount: citations.length,
+            bestSimilarity,
+            error: upstreamError?.message ?? 'Drafting produced no answer text',
+          })
           return
         }
 
@@ -546,6 +640,19 @@ export async function POST(request: Request) {
         // verification: tokens/sec and total time describe the answer the user
         // watched stream in, not the post-hoc check that follows it (#42).
         const draftedAt = Date.now()
+        drafting.set({
+          finishReason,
+          ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
+          answerChars: answer.length,
+          answer,
+        })
+        drafting.end({
+          model: chatModelName(),
+          tokens:
+            promptTokens !== null || completionTokens !== null
+              ? (promptTokens ?? 0) + (completionTokens ?? 0)
+              : null,
+        })
 
         // The answer is complete: save it and send its metrics now. `metrics`
         // is the client's signal that the composer may unlock (#48) — it no
@@ -578,11 +685,15 @@ export async function POST(request: Request) {
           answer.trim()
         ) {
           send({ type: 'step', phase: 'verifying' })
-          const unsupported = await verifyCitations(
-            answer,
-            retrieved,
-            request.signal,
-          )
+          const unsupported = await span('verify', async (step) => {
+            const found = await verifyCitations(
+              answer,
+              retrieved,
+              request.signal,
+            )
+            step.set({ unsupported: found.length })
+            return found
+          })
           const verified = stripUnsupported(answer, unsupported)
           if (verified.strippedIndices.length > 0) {
             logger.warn('Stripped unsupported citations', {
@@ -602,6 +713,16 @@ export async function POST(request: Request) {
 
         send({ type: 'done' })
         finish()
+        run.finish({
+          status: 'ok',
+          mode: retrievalMode,
+          termination: agenticTrace?.termination ?? null,
+          ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
+          promptTokens,
+          completionTokens,
+          sourceCount: citations.length,
+          bestSimilarity,
+        })
       } catch (error) {
         const aborted =
           closed ||
@@ -613,6 +734,12 @@ export async function POST(request: Request) {
             error: error instanceof Error ? error.message : String(error),
           })
         }
+        run.finish({
+          status: aborted ? 'cancelled' : 'error',
+          mode: retrievalMode,
+          termination: agenticTrace?.termination ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        })
         // Whatever was generated before the failure is still worth keeping.
         await persistAnswer(answer)
         send({
@@ -624,6 +751,8 @@ export async function POST(request: Request) {
     },
     cancel() {
       closed = true
+      stopActivity()
+      run.finish({ status: 'cancelled', mode: retrievalMode })
       void upstreamReader?.cancel().catch(() => undefined)
       void persistAnswer(answer)
     },
@@ -631,6 +760,7 @@ export async function POST(request: Request) {
 
   return new Response(stream, {
     headers: {
+      'X-Request-Id': requestId,
       'Content-Type': 'application/x-ndjson; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Accel-Buffering': 'no',

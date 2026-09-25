@@ -43,7 +43,7 @@ describe('verifyCitations', () => {
 
     const options = createChatCompletion.mock.calls[0]![1]
     expect(options).toMatchObject({
-      model: 'test-planner',
+      role: 'planner',
       maxAttempts: 1,
       timeoutMs: VERIFY_TIMEOUT_MS,
     })

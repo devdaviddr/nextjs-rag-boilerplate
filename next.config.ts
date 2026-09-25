@@ -1,6 +1,11 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  // No dev-tools button. It is a dark circle with an "N", which reads as a
+  // user avatar: bottom-left it covered the account menu's avatar, and
+  // anywhere else it was mistaken for it (#74). Next.js still shows build
+  // and runtime errors without it. Development only either way.
+  devIndicators: false,
   // Pin the workspace root so Next doesn't misdetect it from stray parent-dir
   // lockfiles; also keeps standalone output file-tracing scoped correctly.
   turbopack: {

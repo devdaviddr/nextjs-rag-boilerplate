@@ -387,7 +387,7 @@ export const llmReranker: RerankerBackend = {
           },
         ],
         {
-          model: aiSettings().RAG_PLANNER_MODEL,
+          role: 'planner',
           tools: [RERANK_TOOL],
           maxTokens: RERANK_MAX_TOKENS,
           temperature: 0,
@@ -511,6 +511,14 @@ export async function rerankChunks(
   // That matters more than it looks: a backend that scores everything 5
   // changes nothing at all, rather than shuffling the list arbitrarily.
   scored.sort((a, b) => b.rerankScore - a.rerankScore)
+  logger.info(`Reranked ${head.length} passages`, {
+    category: 'retrieval',
+    backend: backend.name,
+    candidates: head.length,
+    // Did the reranker change which passage comes first?
+    topChanged: scored[0]?.chunkId !== head[0]?.chunkId,
+    topScore: scored[0]?.rerankScore,
+  })
 
   // The tail keeps its fusion order and stays below the reranked window, so
   // the output is a permutation of the input either way.

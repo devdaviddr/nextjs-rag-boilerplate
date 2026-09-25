@@ -7,6 +7,10 @@ import { ChevronDown, Send } from 'lucide-react'
 import { FormMessage } from '@/components/auth/field-error'
 import { Markdown } from '@/components/chat/markdown'
 import { SourceViewer } from '@/components/chat/source-viewer'
+import {
+  AgentActivity,
+  type LiveActivity,
+} from '@/components/chat/agent-activity'
 import { Thinking } from '@/components/chat/thinking'
 import { CreateKnowledgeBaseDialog } from '@/components/rag/create-knowledge-base-dialog'
 import { Button } from '@/components/ui/button'
@@ -20,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import type { StoredCitation, StoredMetrics } from '@/db/schema'
 import type { ConversationMessage } from '@/lib/chat/actions'
 import { formatMetrics } from '@/lib/chat/metrics'
+import type { ActivityEvent } from '@/lib/observability/activity'
 import type { KnowledgeBaseSummary } from '@/lib/rag/kb-actions'
 
 /**
@@ -40,6 +45,8 @@ interface StreamEvent {
     | 'error'
     | 'step'
     | 'revision'
+    | 'request'
+    | 'activity'
   conversationId?: string
   title?: string
   citations?: StoredCitation[]
@@ -49,6 +56,8 @@ interface StreamEvent {
   phase?: string
   iteration?: number
   stripped?: number[]
+  requestId?: string
+  event?: ActivityEvent
 }
 
 /**
@@ -148,6 +157,13 @@ export function ChatView({
   // unlocked (#48). Verification runs in the background and may revise it.
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [phase, setPhase] = useState<string | undefined>(undefined)
+  // Live activity per answer, keyed by REQUEST id (spec 0042 FR12). Not the
+  // message id: when a new thread is adopted, the messages are re-read from
+  // the server with their real ids, and a drawer keyed by the temporary one
+  // would lose its events and close.
+  const [activity, setActivity] = useState<Record<string, LiveActivity[]>>({})
+  // The request still being answered, whose drawer follows it live.
+  const [liveRequestId, setLiveRequestId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [source, setSource] = useState<StoredCitation | null>(null)
   const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases)
@@ -296,6 +312,7 @@ export function ChatView({
         content: text,
         citations: [],
         metrics: null,
+        requestId: null,
       },
       {
         id: assistantId,
@@ -303,10 +320,13 @@ export function ChatView({
         content: '',
         citations: [],
         metrics: null,
+        requestId: null,
       },
     ])
     setIsStreaming(true)
     setPhase(undefined)
+    // Set when the server names this request, before any activity arrives.
+    let requestId: string | null = null
     const seq = ++requestSeq.current
     // A refresh queued by an earlier answer must not land during this one.
     if (refreshTimer.current) {
@@ -335,6 +355,9 @@ export function ChatView({
         body: JSON.stringify({
           question: text,
           conversationId,
+          // The Agent activity drawer's live feed (spec 0042 FR12). Small and
+          // capped; drawn only if the drawer is opened.
+          activity: true,
           // Only meaningful when creating — an existing thread's scope is
           // fixed and the API ignores this field for it (spec 0028).
           ...(isCreating ? { knowledgeBaseIds: requestedKbIds } : {}),
@@ -392,6 +415,21 @@ export function ChatView({
               // picker below switches to a read-only label from here on.
               setLockedKbIds(selectedIdsFor(selection, knowledgeBases))
             }
+          } else if (event.type === 'request' && event.requestId) {
+            const id = event.requestId
+            requestId = id
+            setLiveRequestId(id)
+            applyToLast((m) => ({ ...m, requestId: id }))
+          } else if (event.type === 'activity' && event.event && requestId) {
+            const activityEvent = event.event
+            const id = requestId
+            setActivity((prev) => ({
+              ...prev,
+              [id]: [
+                ...(prev[id] ?? []),
+                { ...activityEvent, receivedAt: Date.now() },
+              ],
+            }))
           } else if (event.type === 'revision' && event.value !== undefined) {
             // Citation verification removed a claim its source did not support
             // (spec 0029 FR6). Replace the streamed text with the verified
@@ -442,6 +480,7 @@ export function ChatView({
       }
     } finally {
       setVerifyingId((id) => (id === assistantId ? null : id))
+      setLiveRequestId((id) => (id === requestId ? null : id))
       // An older request finishing its verification must not unlock (or
       // relabel) the composer while a newer answer is streaming.
       if (isCurrent()) {
@@ -685,6 +724,13 @@ export function ChatView({
                           <p className="text-muted-foreground mt-2 text-xs">
                             {formatMetrics(message.metrics).join(' · ')}
                           </p>
+                        )}
+                        {message.requestId && (
+                          <AgentActivity
+                            requestId={message.requestId}
+                            live={message.requestId === liveRequestId}
+                            events={activity[message.requestId]}
+                          />
                         )}
                       </div>
                     )}

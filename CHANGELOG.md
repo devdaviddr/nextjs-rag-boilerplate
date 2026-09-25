@@ -8,8 +8,56 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-26
+
 ### Added
 
+- **Watch an answer being built, live**
+  ([#80](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/80),
+  spec 0042). Every chat answer has an **Agent activity** drawer. Opened while
+  the answer is written, it follows each step and says in plain words what
+  happened (what the planner decided, what each search found, retries);
+  opened on an older answer, it shows what was recorded. Everyone sees it for
+  their own answers; admins also see each line's details and links to the
+  full run.
+- **Watch RAG and agent health over time**
+  ([#79](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/79),
+  spec 0042). Observability → Overview shows the last 24 hours or 7 days
+  against the period before: questions, no-match rate, answer time, time to
+  first word, tokens per answer and failures, with trends; charts over time;
+  how agentic searches ended; best match against the similarity floor; where
+  the time goes step by step; failures by model; and documents processed.
+- **See how each question was answered, step by step**
+  ([#78](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/78),
+  spec 0042). Every question and every document ingestion is now recorded as
+  a run of timed steps. Observability → Runs lists them; opening one shows a
+  replayable timeline of what happened, from the planner's decisions and each
+  search to writing and checking the answer, with the model, tokens and
+  results of every step, and a link to its log lines.
+- **Read the system's logs in the app**
+  ([#77](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/77),
+  spec 0042). Admins get an **Observability** item in the sidebar with a live
+  Logs page: colour-coded by level and by area (agent, retrieval, inference,
+  ingestion, auth, settings, system), searchable, with each line's details
+  and every line of one question a click away. The agents now log what they
+  decide as they decide it. Lines are kept in Postgres for 7 days
+  (`LOG_RETENTION_DAYS`; `LOG_PERSIST=false` turns it off), with secrets
+  removed first.
+- **Choose the AI provider and models from Settings**
+  ([#54](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/54),
+  [#55](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/55),
+  spec 0040). Admins can add connections to NVIDIA NIM, OpenRouter, a
+  llama.cpp server, OpenAI, Ollama, vLLM / LM Studio or any OpenAI-compatible
+  URL, test them, and choose the connection and model for each job (chat,
+  planner, HyDE, vision, page parsing). Changes apply to the next request,
+  with no restart and no `.env` edit. API keys are encrypted at rest and never
+  sent back to the browser. The model box is a searchable dropdown of the
+  models the connection lists. Settings is now laid out as tabs down the side
+  (a row on phones): Account, Configuration (providers and models), Users and
+  About, each linkable (`/settings#configuration`). Every AI setting has an ⓘ
+  that explains it in plain words
+  ([#76](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/76)). Embeddings stay on the `.env` endpoint
+  until re-indexing lands (#56).
 - **Documentation inside the app**
   ([#60](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/60),
   [#61](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/61),
@@ -29,6 +77,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   browser; nothing is sent to a model. The Docs pages were restyled with it:
   illustrated cards on the index, a section label and title on each page, and
   an "On this page" panel that follows along as you scroll.
+
+### Fixed
+
+- **The account avatar opens its menu again in development**
+  ([#74](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/74)).
+  Under `pnpm dev`, Next.js's dev-tools button (a dark circle with an "N")
+  sat on top of the avatar and took the click, and looked enough like an
+  avatar to be clicked instead of it. It is now hidden; build and runtime
+  errors still show.
 
 ## [0.22.0] - 2026-09-25
 
@@ -1116,7 +1173,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.20.1...v0.21.0

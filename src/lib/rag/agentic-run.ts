@@ -2,6 +2,7 @@ import 'server-only'
 
 import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
+import { span } from '@/lib/observability/runs'
 import { type LoopStep, effectiveFloor, runAgenticLoop } from './agentic'
 import { createChatCompletion } from './client'
 import { READ_FIGURE_TOOL, readFigure } from './figure'
@@ -60,7 +61,7 @@ export const FIGURE_LOOP_FLOOR_MS = 45_000
  */
 export const FIGURE_LOOP_FLOOR_TOKENS = 30_000
 
-const PLANNER_SYSTEM_PROMPT = `You plan document searches for a retrieval system.
+export const PLANNER_SYSTEM_PROMPT = `You plan document searches for a retrieval system.
 
 Call search_documents when answering needs information from the user's documents.
 The search has NO memory of the conversation. Resolve pronouns and references from the conversation before searching: "what about carrying it over?" after a question about annual leave must be searched as "carrying over annual leave", never as the literal words the user typed.
@@ -200,26 +201,49 @@ export async function runAgenticRetrieval(input: {
       maxTokens,
     },
     {
-      plan: async (steps, planSignal) => {
-        onStep('searching', steps.length + 1)
-        const { choice, tokens: used } = await createChatCompletion(
-          [
-            { role: 'system', content: PLANNER_SYSTEM_PROMPT },
-            { role: 'user', content: historyPrompt(question, turns, steps) },
-          ],
-          {
-            model: aiSettings().RAG_PLANNER_MODEL,
-            tools: figureReadingEnabled
-              ? [SEARCH_TOOL, READ_FIGURE_TOOL]
-              : [SEARCH_TOOL],
-            maxTokens: 800,
-            signal: planSignal,
-          },
-        )
-        tokens += used
-        const decision: PlannerDecision | null = parseToolCallDecision(choice)
-        return { decision, tokens: used }
-      },
+      // Each call of the loop is a step of the run (spec 0042 FR8).
+      plan: (steps, planSignal) =>
+        span('plan', async (step) => {
+          onStep('searching', steps.length + 1)
+          const { choice, tokens: used } = await createChatCompletion(
+            [
+              { role: 'system', content: PLANNER_SYSTEM_PROMPT },
+              { role: 'user', content: historyPrompt(question, turns, steps) },
+            ],
+            {
+              role: 'planner',
+              tools: figureReadingEnabled
+                ? [SEARCH_TOOL, READ_FIGURE_TOOL]
+                : [SEARCH_TOOL],
+              maxTokens: 800,
+              signal: planSignal,
+            },
+          )
+          tokens += used
+          const decision: PlannerDecision | null = parseToolCallDecision(choice)
+          // What the agent chose, as it chose it (spec 0042 FR6).
+          logger.info(
+            decision
+              ? `Planner chose to ${decision.action.replace(/[-_]/g, ' ')}`
+              : 'Planner gave no usable decision',
+            {
+              category: 'agent',
+              iteration: steps.length + 1,
+              action: decision?.action ?? null,
+              query: decision?.query,
+              documentId: decision?.documentId,
+              tokens: used,
+              finishReason: choice.finish_reason,
+            },
+          )
+          step.set({
+            iteration: steps.length + 1,
+            action: decision?.action ?? null,
+            query: decision?.query,
+            documentId: decision?.documentId,
+          })
+          return { decision, tokens: used }
+        }),
       fallbackQuery: question,
       outageQueries: outageQueries(question, turns),
       outageBaseline: previousUserTurn(turns) ?? undefined,
@@ -240,10 +264,40 @@ export async function runAgenticRetrieval(input: {
           aborted: signal.aborted,
         })
       },
-      search: async (searchQuery, documentId) =>
-        documentId
-          ? retrieveDocumentChunks(userId, documentId, permittedKbIds)
-          : retrieveForOwner(userId, searchQuery, permittedKbIds),
+      search: (searchQuery, documentId) =>
+        span('search', async (step) => {
+          const started = Date.now()
+          const found = documentId
+            ? await retrieveDocumentChunks(userId, documentId, permittedKbIds)
+            : await retrieveForOwner(userId, searchQuery, permittedKbIds)
+          logger.info(
+            `Search found ${found.length} passage${found.length === 1 ? '' : 's'}`,
+            {
+              category: 'retrieval',
+              query: searchQuery,
+              documentId,
+              results: found.length,
+              bestSimilarity: found.reduce<number | null>(
+                (best, c) =>
+                  best === null || c.similarity > best ? c.similarity : best,
+                null,
+              ),
+              elapsedMs: Date.now() - started,
+            },
+          )
+          step.set({
+            query: searchQuery,
+            documentId,
+            results: found.length,
+            passages: found.slice(0, 5).map((c) => ({
+              document: c.documentTitle,
+              page: c.pageNumber,
+              similarity: c.similarity,
+              text: c.content.slice(0, 280),
+            })),
+          })
+          return found
+        }),
       // Omitted entirely when disabled, so the loop never advertises a tool it
       // cannot service.
       ...(figureReadingEnabled
@@ -253,18 +307,20 @@ export async function runAgenticRetrieval(input: {
               figureQuestion: string,
               figureSignal: AbortSignal,
             ) =>
-              readFigure(
-                {
-                  ownerId: userId,
-                  chunkId,
-                  question: figureQuestion,
-                  // Bound HERE, from the conversation — never from the model.
-                  knowledgeBaseIds: permittedKbIds,
-                },
-                // The loop's signal, not the request's: it carries whatever is
-                // left of the wall-clock budget, so a slow vision call is cut
-                // off rather than allowed to overrun it.
-                { signal: figureSignal },
+              span('read-figure', () =>
+                readFigure(
+                  {
+                    ownerId: userId,
+                    chunkId,
+                    question: figureQuestion,
+                    // Bound HERE, from the conversation — never from the model.
+                    knowledgeBaseIds: permittedKbIds,
+                  },
+                  // The loop's signal, not the request's: it carries whatever is
+                  // left of the wall-clock budget, so a slow vision call is cut
+                  // off rather than allowed to overrun it.
+                  { signal: figureSignal },
+                ),
               ),
           }
         : {}),
@@ -289,6 +345,7 @@ export async function runAgenticRetrieval(input: {
   const kept = outcome.chunks.filter((c) => c.similarity >= floor)
 
   logger.info('Agentic retrieval', {
+    category: 'agent',
     userId,
     rewritten,
     searches: outcome.searches,
@@ -356,7 +413,7 @@ export async function verifyCitations(
         { role: 'user', content: `Sources:\n${sources}\n\nAnswer:\n${answer}` },
       ],
       {
-        model: aiSettings().RAG_PLANNER_MODEL,
+        role: 'planner',
         maxTokens: 500,
         temperature: 0,
         signal,
