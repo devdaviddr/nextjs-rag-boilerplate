@@ -8,6 +8,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`RAG_PLANNER_REASONING=off` lets the planner skip its hidden reasoning**
+  ([#84](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/84)).
+  For planner models that honour it (Nemotron and Qwen3 on NIM or vLLM), each
+  decision comes back faster: 1.3 s instead of 2.4 s typical in a benchmark,
+  with the same searches chosen. Off by default until the retrieval eval has
+  compared the two.
+
 ## [0.23.0] - 2026-09-26
 
 ### Added

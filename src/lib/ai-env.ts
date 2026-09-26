@@ -190,6 +190,13 @@ export const aiEnvShape = {
     .min(1)
     .optional()
     .default('nvidia/nemotron-3.5-lightning-30b-a3b'),
+  // Whether the planner writes its hidden reasoning before each decision
+  // (#84). `off` sends `chat_template_kwargs: { enable_thinking: false }` on
+  // planner-role calls (planning, citation checking), the switch Nemotron and
+  // Qwen3 honour on NIM and vLLM; providers that do not know the field may
+  // reject it, so it applies to planner calls only. Measured on NIM's free
+  // tier: the first decision 2.4s -> 1.3s typical, 9/9 correct either way.
+  RAG_PLANNER_REASONING: z.enum(['on', 'off']).optional().default('on'),
   // Three, not two. Measured planner latency is 2.6-4.4s medians, not the
   // ~10s previously on record — at 10s a call, three searches worst-cased at
   // 45s and would have been unusable; at the real numbers it is about 14s.

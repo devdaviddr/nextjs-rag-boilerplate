@@ -378,6 +378,14 @@ export async function createChatCompletion(
     body.tools = options.tools
     body.tool_choice = 'auto'
   }
+  // Skip the planner's hidden reasoning when asked (#84). Planner-role calls
+  // only: the field is a chat-template option some providers reject.
+  if (
+    (options.role ?? 'chat') === 'planner' &&
+    aiSettings().RAG_PLANNER_REASONING === 'off'
+  ) {
+    body.chat_template_kwargs = { enable_thinking: false }
+  }
 
   const response = await post('/chat/completions', body, {
     role: options.role ?? 'chat',
