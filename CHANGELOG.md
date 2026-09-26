@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-09-26
+
 ### Changed
 
 - **The agentic search spends its searches better**
