@@ -14,7 +14,8 @@ Tracked in [#85](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/85)
 (confident stop), [#87](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/87)
 (per-call cap), and
 [#84](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/84)
-(planner reasoning off).
+(planner reasoning off). The eval and the defaults are
+[#88](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/88).
 
 ## Summary
 
@@ -112,9 +113,9 @@ seconds instead of the whole loop budget.
 
 ## Acceptance criteria
 
-- [ ] NFR1: `tests/unit/rag-plan-route.test.ts` classifies all 66 eval
+- [x] NFR1: `tests/unit/rag-plan-route.test.ts` classifies all 66 eval
       questions as intended
-- [ ] FR2, FR3: loop tests for `confident` and `planner-slow`
+- [x] FR2, FR3: loop tests for `confident` and `planner-slow`
 - [ ] `pnpm rag:eval --compare` with `adaptive` against `always`: refusal
       accuracy 1.000; follow-up and multi-part recall not lower; single-hop
       not lower; planner calls and latency per question recorded here

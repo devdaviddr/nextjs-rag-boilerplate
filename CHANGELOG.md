@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-26
+
 ### Added
 
 - **Plan only when it pays**
@@ -27,6 +29,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   decision comes back faster: 1.3 s instead of 2.4 s typical in a benchmark,
   with the same searches chosen. Off by default until the retrieval eval has
   compared the two.
+
+### Changed
+
+- **The documentation reads more plainly**
+  ([#70](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/70)).
+  The pages under Docs were rewritten in plain language, with the same facts.
 
 ### Fixed
 
@@ -1210,7 +1218,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.0...v0.21.1
