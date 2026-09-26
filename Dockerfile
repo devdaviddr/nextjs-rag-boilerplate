@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1
 
 # ---------- Base ----------
-FROM node:22-alpine AS base
-# libc6-compat helps some native addons resolve on Alpine/musl.
-#
-# `font-liberation` is not a nicety. Alpine ships NO fonts, and a PDF is not
-# required to embed the ones it names — the standard 14 (Helvetica, Times,
-# Courier) may simply be referenced and left to the reader. With no font on the
-# box, `@napi-rs/canvas` draws no glyphs and a page of text renders as a blank
-# sheet: no error, no log line.
+# Debian slim, not Alpine (#38, #112): the local reranker's native ONNX runtime
+# needs glibc, and runs 4-8x faster than the WebAssembly build that Alpine
+# forced. argon2, sharp and @napi-rs/canvas all ship glibc prebuilds too.
+FROM node:22-bookworm-slim AS base
+# `fonts-liberation` is not a nicety. Debian slim ships NO fonts (nor did
+# Alpine), and a PDF is not required to embed the ones it names — the standard
+# 14 (Helvetica, Times, Courier) may simply be referenced and left to the
+# reader. With no font on the box, `@napi-rs/canvas` draws no glyphs and a page
+# of text renders as a blank sheet: no error, no log line.
 #
 # That is not a cosmetic bug. The rendered PNG is what `nemotron-parse` is
 # shown, so a blank render means the parser is handed an empty page, reports
@@ -19,13 +20,16 @@ FROM node:22-alpine AS base
 # table borders. Ingestion reported success throughout.
 #
 # It never reproduced in development because macOS has Helvetica installed.
+# Re-checked on slim for #38: no fonts drew 0 inked pixels; with these, 305.
 # Liberation Sans is metric-compatible with Helvetica/Arial, so substituted
 # text keeps the layout the boxes are positioned against.
 #
 # pdf.js's own bundled `standard_fonts` are NOT an alternative: it loads them
 # over a `file://` URL, which Node's `fetch` refuses, so every one fails with
 # "Unable to load font data" and the page still comes out blank.
-RUN apk add --no-cache libc6-compat font-liberation fontconfig
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-liberation fontconfig \
+    && rm -rf /var/lib/apt/lists/*
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 # Skip git hooks (husky) inside the container — there is no .git here.
@@ -64,16 +68,19 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# The local reranker's native ONNX runtime otherwise sends device telemetry to
+# Microsoft (rerank-local.ts sets this too, for runs outside the image).
+ENV ORT_DISABLE_TELEMETRY=1
 
 # Run as an unprivileged user.
 RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 nextjs
+    && adduser --system --uid 1001 --ingroup nodejs nextjs
 
 # The standalone output includes a minimal node_modules with the traced native
-# binaries — argon2, and @napi-rs/canvas for PDF page rendering (spec 0031).
-# Both are listed in next.config.ts's serverExternalPackages, which is what
-# makes them resolvable rather than bundled. Copy migrations + runner deps so
-# we can migrate too.
+# binaries — argon2, @napi-rs/canvas for PDF page rendering (spec 0031), and
+# onnxruntime-node for the local reranker (spec 0036). All are listed in
+# next.config.ts's serverExternalPackages, which is what makes them resolvable
+# rather than bundled. Copy migrations + runner deps so we can migrate too.
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
