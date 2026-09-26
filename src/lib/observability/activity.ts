@@ -87,7 +87,10 @@ export function plainLine(
   if (message === 'Agentic retrieval') {
     const searches = num(meta.searches) ?? 0
     const chunks = num(meta.chunkCount) ?? 0
-    return `Finished searching: ${searches} search${searches === 1 ? '' : 'es'}, ${chunks} passage${chunks === 1 ? '' : 's'} kept`
+    const kept = `${searches} search${searches === 1 ? '' : 'es'}, ${chunks} passage${chunks === 1 ? '' : 's'} kept`
+    return meta.termination === 'time-budget'
+      ? `Stopped searching at the time limit: ${kept}`
+      : `Finished searching: ${kept}`
   }
   if (message === 'Agentic planner unavailable') {
     // Logged twice when it happens: once for the failed call, once for the

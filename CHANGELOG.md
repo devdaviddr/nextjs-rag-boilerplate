@@ -8,6 +8,16 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Running out of time after a search is no longer called a planner failure**
+  ([#83](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/83)).
+  When the agentic search's time limit cut off a planner decision after it
+  had already found passages, the log warned that the planner was
+  unavailable and Observability counted it that way, though the answer was
+  written from those passages as normal. It is now recorded as a stop at the
+  time limit, with an info line saying how many passages were kept.
+
 ## [0.23.0] - 2026-09-26
 
 ### Added

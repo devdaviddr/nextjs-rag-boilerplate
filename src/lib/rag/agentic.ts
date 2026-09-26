@@ -253,6 +253,9 @@ export function accumulate(
   return [...byKey.values()].sort((a, b) => b.similarity - a.similarity)
 }
 
+/** Why the loop's clock aborts a call it started (see `callSignal`). */
+const BUDGET_EXHAUSTED = 'Loop time budget exhausted'
+
 export async function runAgenticLoop(
   budget: LoopBudget,
   deps: LoopDeps,
@@ -283,7 +286,7 @@ export async function runAgenticLoop(
     const remaining = Math.max(0, budget.maxMs - elapsed())
     const controller = new AbortController()
     const timer = setTimeout(
-      () => controller.abort(new Error('Loop time budget exhausted')),
+      () => controller.abort(new Error(BUDGET_EXHAUSTED)),
       remaining,
     )
     return {
@@ -379,6 +382,14 @@ export async function runAgenticLoop(
         call.clear()
       }
     } catch (error) {
+      // The loop's own clock ending a call is not the planner failing (#83).
+      // With a search already made, the evidence in hand stands and the loop
+      // simply ran out of time: a budget stop like any other. Only before the
+      // first search does it mean "no planner", which falls back to a search.
+      const outOfTime =
+        (error instanceof Error && error.message === BUDGET_EXHAUSTED) ||
+        (!signal.aborted && elapsed() >= budget.maxMs)
+      if (outOfTime && searches > 0) return finish('time-budget')
       // The planner failing is not the request failing. Whatever was gathered
       // so far still stands, and the caller decides whether it is enough.
       deps.onPlanFailure?.('planner call threw', error)
