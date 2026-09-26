@@ -18,7 +18,7 @@ from scratch.
 
 ## Quick stats
 
-- Version: 0.24.1
+- Version: 0.25.0
 - License: MIT
 - Type: full-stack Next.js 16 application template (not a library)
 - Target: single-box production (Docker + Cloudflare Tunnel)
