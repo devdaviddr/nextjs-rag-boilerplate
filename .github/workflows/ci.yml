@@ -6,64 +6,97 @@ on:
     tags: ['v*'] # release tags → publish the semver-tagged image
   pull_request:
     branches: [main]
+  workflow_dispatch: # manual full run: quality, E2E and both image builds, no publish
 
+# PRs cancel a superseded run; main never does. A release merge must publish
+# its `sha-` image, because the `release` job re-tags it (#110).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 env:
   NEXT_TELEMETRY_DISABLED: '1'
 
 jobs:
-  # Is this a docs-only pull request? Every changed file under specs/ or docs/,
-  # or any *.md. Then the build, E2E and image jobs are skipped — a job skipped
-  # by `if:` counts as passing for the ruleset's required checks — and quality
-  # runs only formatting and the spec index. Pushes to main always run
-  # everything: the release job re-tags the image main built for the tagged
-  # commit, so every main commit needs one.
-  changes:
-    name: Detect docs-only change
+  # CI runs in full once per ship, on the release PR, not on every PR and merge.
+  # PRs into main are only opened by /ship, so this job sorts each run into:
+  #
+  #   feature PR          quality only (lint, typecheck, unit)
+  #   release/* PR        everything: quality, E2E, both image builds
+  #   release merge       build + publish the image the tag will re-tag; the
+  #                       release PR just tested this tree, so no re-test
+  #   other main push     nothing (each feature PR already passed quality)
+  #   workflow_dispatch   everything, without publishing
+  #
+  # A docs-only PR (every changed file under specs/ or docs/, or any *.md) runs
+  # only formatting, the spec index and docs:check. Jobs skipped by `if:` count
+  # as passing for the ruleset's required checks.
+  plan:
+    name: Plan jobs
+    timeout-minutes: 5
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.classify.outputs.code }}
+      quality: ${{ steps.plan.outputs.quality }}
+      code: ${{ steps.plan.outputs.code }}
+      full: ${{ steps.plan.outputs.full }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - id: classify
+      # The commit message and branch name reach the script through env, never
+      # through ${{ }} interpolation inside `run:`.
+      - id: plan
         env:
           EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
-          echo "$changed"
-          if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '^(specs/|docs/)|\.md$'; then
-            echo "Docs-only change: skipping build, E2E and image jobs."
-            echo "code=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          fi
+          out() { echo "$1=$2" | tee -a "$GITHUB_OUTPUT"; }
+          case "$EVENT" in
+            workflow_dispatch)
+              out quality true; out code true; out full true; out publish false ;;
+            push)
+              # A /ship release merge: "Merge pull request #N from <owner>/release/vX.Y.Z",
+              # or a squashed "chore(release): vX.Y.Z".
+              subject="$(printf '%s\n' "$COMMIT_MSG" | head -n 1)"
+              if printf '%s\n' "$subject" | grep -qE '^Merge pull request #[0-9]+ from [^ ]+/release/v|^chore\(release\)'; then
+                out quality false; out code true; out full false; out publish true
+              else
+                out quality false; out code false; out full false; out publish false
+              fi ;;
+            pull_request)
+              out quality true
+              changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+              if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '^(specs/|docs/)|\.md$'; then
+                echo "Docs-only change."; out code false
+              else
+                out code true
+              fi
+              case "$HEAD_REF" in release/*) out full true ;; *) out full false ;; esac
+              out publish false ;;
+          esac
 
   quality:
     name: Lint · Typecheck · Unit
-    # A release tag re-uses the image already built + tested on the `main` push
-    # for the same commit (see the `release` job), so it does NOT re-run these.
-    needs: [changes]
-    if: github.ref_type != 'tag'
+    timeout-minutes: 15
+    needs: [plan]
+    if: needs.plan.outputs.quality == 'true'
     runs-on: ubuntu-latest
     env:
-      CODE: ${{ needs.changes.outputs.code }}
+      CODE: ${{ needs.plan.outputs.code }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
@@ -75,15 +108,22 @@ jobs:
         if: env.CODE == 'true'
       - run: pnpm specs:check
       - run: pnpm docs:check
+      # Blocks on critical advisories only; Renovate raises the rest as PRs.
       - name: Audit dependencies
         if: env.CODE == 'true'
-        run: pnpm audit --audit-level=high
-        continue-on-error: true
+        run: pnpm audit --audit-level=critical
+      # A release PR must pass the same check the tag will, before it merges.
+      - name: Release is consistent (release:check)
+        if: startsWith(github.head_ref, 'release/')
+        run: |
+          git fetch --tags --quiet origin
+          pnpm release:check
 
   e2e:
     name: E2E (Playwright)
-    needs: [changes]
-    if: github.ref_type != 'tag' && needs.changes.outputs.code == 'true'
+    timeout-minutes: 20
+    needs: [plan]
+    if: needs.plan.outputs.full == 'true' && needs.plan.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -124,7 +164,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # MinIO can't be a `services:` container — that block only supports
@@ -152,7 +192,7 @@ jobs:
           "
       - name: Start Mailpit (email catcher for E2E)
         run: |
-          docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+          docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:latest@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
           for i in $(seq 1 30); do
             curl -sf http://localhost:8025/readyz && break
             sleep 1
@@ -181,19 +221,23 @@ jobs:
           retention-days: 7
 
   # Build each arch on its OWN native runner (no QEMU emulation → fast), push by
-  # digest, then `docker-merge` assembles the multi-arch manifest. Publishing is
-  # gated to non-PR events; PRs build both arches cache-only to prove they
-  # compile without pushing (fork-safe).
+  # digest, then `docker-merge` assembles the multi-arch manifest. Only a release
+  # merge pushes; the release PR and a manual run build both arches cache-only
+  # to prove they compile.
   #
-  # Gated on `quality` only (fast: lint/type/unit) so the ~2–3 min build overlaps
-  # the ~2 min e2e instead of queuing behind it — `docker-merge` still `needs` e2e,
-  # so nothing gets a human tag until the full suite is green. Release tags don't
-  # build here at all; they re-tag this commit's already-published image (see
-  # the `release` job).
+  # Waits on `quality` only (fast: lint/type/unit) so the build overlaps E2E
+  # instead of queuing behind it. On a release merge `quality` is skipped (the
+  # release PR ran it), hence `!cancelled()` and the result check. Release tags
+  # don't build here at all; they re-tag this commit's published image (see the
+  # `release` job).
   docker:
     name: Build image (${{ matrix.platform }})
-    needs: [changes, quality]
-    if: github.ref_type != 'tag' && needs.changes.outputs.code == 'true'
+    timeout-minutes: 20
+    needs: [plan, quality]
+    if: >-
+      !cancelled() && needs.quality.result != 'failure'
+      && (needs.plan.outputs.full == 'true' || needs.plan.outputs.publish == 'true')
+      && needs.plan.outputs.code == 'true'
     permissions:
       contents: read
       packages: write
@@ -214,7 +258,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
+        if: needs.plan.outputs.publish == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -239,7 +283,7 @@ jobs:
           build-args: |
             APP_VERSION=${{ github.ref_name }}
             APP_GIT_SHA=${{ github.sha }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.APP_IMAGE) || 'type=cacheonly' }}
+          outputs: ${{ needs.plan.outputs.publish == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.APP_IMAGE) || 'type=cacheonly' }}
           cache-from: type=gha,scope=app-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=app-${{ env.PLATFORM_PAIR }}
 
@@ -251,12 +295,12 @@ jobs:
           context: .
           target: builder
           platforms: ${{ matrix.platform }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.MIGRATE_IMAGE) || 'type=cacheonly' }}
+          outputs: ${{ needs.plan.outputs.publish == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.MIGRATE_IMAGE) || 'type=cacheonly' }}
           cache-from: type=gha,scope=migrate-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=migrate-${{ env.PLATFORM_PAIR }}
 
       - name: Export digests
-        if: github.event_name != 'pull_request'
+        if: needs.plan.outputs.publish == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/app" "$RUNNER_TEMP/migrate"
           touch "$RUNNER_TEMP/app/${APP_DIGEST#sha256:}"
@@ -266,7 +310,7 @@ jobs:
           MIGRATE_DIGEST: ${{ steps.build-migrate.outputs.digest }}
 
       - name: Upload app digest
-        if: github.event_name != 'pull_request'
+        if: needs.plan.outputs.publish == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: digests-app-${{ env.PLATFORM_PAIR }}
@@ -275,7 +319,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload migrate digest
-        if: github.event_name != 'pull_request'
+        if: needs.plan.outputs.publish == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: digests-migrate-${{ env.PLATFORM_PAIR }}
@@ -283,16 +327,31 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # The one required check for the image build. A matrix job skipped by `if:`
+  # reports under its unexpanded name, "Build image (${{ matrix.platform }})",
+  # so the ruleset can't require the per-arch legs; it requires this instead.
+  docker-gate:
+    name: Build image
+    needs: [docker]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Both arches built (or were not needed)
+        run: '[ "$RESULT" = success ] || [ "$RESULT" = skipped ]'
+        env:
+          RESULT: ${{ needs.docker.result }}
+
   # Assemble the per-arch digests into one multi-arch manifest per image, tagged
-  # by metadata-action (sha / branch / semver on tags / latest on main).
+  # by metadata-action (sha / branch / latest on main). Semver tags come from
+  # the `release` job.
   docker-merge:
     name: Publish multi-arch manifest
-    # `needs` e2e as well as docker, so the tag/publish only happens once BOTH the
-    # build and the full test suite are green (the build itself only needed
-    # `quality`). Skipped for PRs (build-only) and for tags (the `release` job
-    # re-tags instead of rebuilding).
-    needs: [docker, e2e]
-    if: github.event_name != 'pull_request' && github.ref_type != 'tag'
+    timeout-minutes: 10
+    # Release merges only. Their tree passed quality, E2E and both builds on the
+    # release PR moments earlier; tags re-tag in the `release` job instead.
+    needs: [plan, docker]
+    if: ${{ !cancelled() && needs.plan.outputs.publish == 'true' && needs.docker.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -324,7 +383,6 @@ jobs:
           tags: |
             type=sha
             type=ref,event=branch
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
       - name: Create & push app manifest
         working-directory: ${{ runner.temp }}/app
@@ -349,7 +407,6 @@ jobs:
           tags: |
             type=sha
             type=ref,event=branch
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
       - name: Create & push migrate manifest
         working-directory: ${{ runner.temp }}/migrate
@@ -359,8 +416,8 @@ jobs:
             $(printf '${{ env.MIGRATE_IMAGE }}@sha256:%s ' *)
           docker buildx imagetools inspect ${{ env.MIGRATE_IMAGE }}:${{ steps.meta-migrate.outputs.version }}
 
-  # A `v*` release tag does NOT rebuild. The tag sits on a commit that the `main`
-  # push already built, tested, and published (as `sha-<short>` + `latest`), so a
+  # A `v*` release tag does NOT rebuild. The tag sits on the release merge, which
+  # `main` already built and published (as `sha-<short>` + `latest`), so a
   # rebuild would recompile a bit-identical image just to add the semver tag — the
   # slowest part of the whole tag→live path. Instead we add the version tag to the
   # existing multi-arch digest with `imagetools create` (a manifest op, ~30s).
@@ -368,10 +425,12 @@ jobs:
   # Version *identity* is applied at RUNTIME — the box sets APP_VERSION=${APP_TAG}
   # via docker-compose.deploy.yml, and APP_GIT_SHA stays baked (correct) in the
   # image — so re-tagging needs no rebuild to keep Settings → Build accurate.
-  # See spec 0024. The wait loop makes this tag inherit `main`'s full test gate:
-  # the source image only exists if `main`'s quality+e2e+build all passed.
+  # See spec 0024. The wait loop makes this tag inherit the release gate: the
+  # source image only exists if the release PR's quality, E2E and builds passed
+  # and the release merge's build did.
   release:
     name: Tag release image (no rebuild)
+    timeout-minutes: 25
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
@@ -402,8 +461,8 @@ jobs:
 
       - name: Resolve version + source tags
         run: |
-          # `type=semver,pattern={{version}}` publishes the unprefixed semver, so
-          # strip the leading `v` to match (v0.16.3 → 0.16.3). The source is the
+          # Release images use the unprefixed semver (v0.16.3 → 0.16.3), so
+          # strip the leading `v`. The source is the
           # immutable per-commit tag `main` published: `sha-` + short (7) SHA.
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "SHA_TAG=sha-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"

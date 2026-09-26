@@ -21,10 +21,14 @@ on:
     tags: ['v*']
   workflow_dispatch: # manual "Run workflow" button
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     if: vars.SELF_HOSTED_DEPLOY == 'true'
     runs-on: [self-hosted]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       # actions/checkout cleans the work tree every run (git clean -ffdx), so

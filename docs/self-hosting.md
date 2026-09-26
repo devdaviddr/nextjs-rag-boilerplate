@@ -242,7 +242,7 @@ box's `.env`:
 ```bash
 APP_IMAGE="ghcr.io/your-org/nextjs-fullstack-boilerplate"
 APP_TAG="stable"        # newest RELEASE — moves when a v* tag is pushed (recommended)
-# APP_TAG="latest"      # every green main merge (trunk tracking, no release gate)
+# APP_TAG="latest"      # every release merge, minutes before its tag
 # APP_TAG="0.18.0"      # pin an exact release — never moves; bump it to update
 ```
 

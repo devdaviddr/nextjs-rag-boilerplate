@@ -10,7 +10,8 @@ steps in order, and this page is the reference behind it.
 ## The workflows
 
 Three workflows live in `.github/workflows/`. `ci.yml` runs on every push and
-pull request to `main` and on `v*` tags; `pr.yml` checks each pull request
+pull request to `main` and on `v*` tags, but does the full work only once per
+release (see [When CI runs what](#when-ci-runs-what)); `pr.yml` checks each pull request
 against the contribution process; `deploy.yml` is opt-in and only runs on
 release tags.
 
@@ -18,16 +19,16 @@ release tags.
 ┌─────────────────────────────────────────────────────────────┐
 │ .github/workflows/ci.yml  (push / PR → main · v* tags)      │
 ├─────────────────────────────────────────────────────────────┤
-│ On push to main / PR (NOT tags):                             │
+│ plan    : sorts the run (feature PR · release PR · release   │
+│           merge · other main push · manual) → which jobs run │
 │   quality : format:check · lint · typecheck · test:coverage  │
-│             · specs:check · pnpm audit (non-blocking)        │
+│             · specs:check · pnpm audit (critical)  [all PRs] │
 │   e2e     : Postgres service + MinIO + Mailpit → migrate/seed │
-│             → build → Playwright (uploads report artifact)   │
-│   docker  : needs quality; builds in PARALLEL with e2e;      │
-│             per-arch native (amd64 + arm64) → push by digest  │
-│   docker-merge : needs docker + e2e; assemble multi-arch     │
-│             manifest → publish 2 GHCR images (app + migrate); │
-│             PRs build only (no push, no merge)               │
+│             → build → Playwright           [release PR only] │
+│   docker  : per-arch native (amd64 + arm64); cache-only on   │
+│             the release PR, push by digest on release merge  │
+│   docker-merge : release merge only; assemble multi-arch     │
+│             manifest → publish 2 GHCR images (app + migrate) │
 │ On a v* release tag (fast path — no rebuild):                │
 │   release : release:check, then wait for main's already-built │
 │             image for this commit and re-tag it with the     │
@@ -47,18 +48,49 @@ release tags.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Most of the design is in the gating. `quality` and `e2e` run independently.
-`docker` is gated on `quality` only (fast lint/type/unit), so the ~2 to 3 min
-image build overlaps the ~2 min `e2e` instead of queuing behind it.
-`docker-merge`, the job that assigns the human-readable tags, needs both
-`docker` and `e2e`, so nothing gets a usable tag until the full suite is green.
+Most of the design is in the gating. On the release PR, `quality` and `e2e`
+run independently, and `docker` waits on `quality` only (fast lint/type/unit),
+so the ~2 to 3 min image build overlaps the ~2 min `e2e` instead of queuing
+behind it. `docker-merge`, the job that assigns the human-readable tags, runs
+only on the release merge, whose tree just passed all of that on the release
+PR.
 
 There is no CodeQL workflow. It was removed while the repository was private
 and code scanning was unavailable; restoring it is a separate decision.
 
+### When CI runs what
+
+Pull requests into `main` are only opened by `/ship`, so every run belongs to
+a ship. The full suite runs once per ship, on the release PR, instead of on
+every PR and every merge. The `plan` job sorts each run:
+
+| Run                                  | Jobs                                                               |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| Feature PR                           | `quality` (lint, typecheck, unit)                                  |
+| Release PR (`release/*`)             | `quality` + `release:check`, `e2e`, both image builds (cache-only) |
+| Release merge to `main`              | both image builds + `docker-merge` (publish)                       |
+| Any other push to `main`             | none (`plan` only, a few seconds)                                  |
+| `v*` tag                             | `release` (re-tag, no rebuild)                                     |
+| Manual (Actions → CI → Run workflow) | `quality`, `e2e`, both image builds, no publish                    |
+
+A push to `main` is a release merge when its subject is `Merge pull request #N
+from <owner>/release/vX.Y.Z` or starts with `chore(release)`. The release merge
+does not re-run `quality` or `e2e`: `/ship` merges the release PR as soon as it
+is green, so the merge commit's tree is the one those jobs just passed.
+
+The trade-off: a feature PR merges on lint, typecheck and unit tests alone,
+and E2E first sees the combined work on the release PR. A failure there is
+fixed through another PR before the release merges, so nothing untested is
+published. Use the manual run to test `main` in full between releases.
+
+Skipped jobs count as passing for the ruleset's required checks. The image
+build is required through the `Build image` job, which passes when both arches
+built or neither was needed. The per-arch matrix legs can't be required
+directly: a matrix job skipped by `if:` reports under its unexpanded name.
+
 ### Docs-only pull requests
 
-A `changes` job classifies each pull request. When every changed file is
+The `plan` job also classifies each pull request. When every changed file is
 under `specs/` or `docs/`, or ends in `.md`, the PR is docs-only:
 
 - Lint · Typecheck · Unit runs only install, `format:check`, `specs:check` and
@@ -67,20 +99,25 @@ under `specs/` or `docs/`, or ends in `.md`, the PR is docs-only:
   `if:` counts as passing for the ruleset's required checks, so the PR stays
   mergeable in about a minute instead of several.
 
-Pushes to `main` always run the full pipeline. The `release` job re-tags the
-image `main` built for the tagged commit, so every `main` commit needs one.
-
 ### Shared setup
 
-All jobs run on `ubuntu-latest` with Node 22 (no version matrix) and pnpm via
+All jobs run on `ubuntu-latest` with the Node version in `.nvmrc`
+(`node-version-file`, no version matrix) and pnpm via
 `pnpm/action-setup`. The pnpm version comes from `package.json`'s
 `packageManager` field and is not pinned in the workflow. Next.js telemetry
 is disabled with `NEXT_TELEMETRY_DISABLED` for reproducible builds.
 
 `ci.yml` sets `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress:
-true }`. Pushing again to the same branch or PR cancels whatever run is already
-in flight. If a run vanishes from the Actions tab after a follow-up push, this
-setting cancelled it; the run did not fail.
+${{ github.event_name == 'pull_request' }} }`. Pushing again to a PR cancels
+the run already in flight; if a PR run vanishes from the Actions tab after a
+follow-up push, this setting cancelled it. Pushes to `main` queue instead of
+cancelling: a release merge must publish its `sha-` image, because the
+`release` job re-tags that image, and a cancelled run would leave the release
+waiting for an image that never comes.
+
+Every job sets `timeout-minutes`, so a hung step fails in minutes rather than
+the 6-hour default. The workflows declare `permissions: contents: read` at the
+top; only the image and release jobs ask for more.
 
 ### `quality` job
 
@@ -92,7 +129,8 @@ pnpm typecheck
 pnpm test:coverage
 pnpm specs:check
 pnpm docs:check                 # every docs/*.md indexed, every link and anchor resolves
-pnpm audit --audit-level=high   # continue-on-error: advisory, non-blocking
+pnpm audit --audit-level=critical   # blocks on critical advisories only
+pnpm release:check                  # release/* PRs only: the check the tag will run
 ```
 
 ### `e2e` job
@@ -136,9 +174,9 @@ it means the rate-limit tests assert something real. The implementation is in
 
 ### `docker` job (+ `docker-merge`, `release`)
 
-`docker` is gated `needs: [quality]` and runs in parallel with `e2e`;
-`docker-merge` is gated `needs: [docker, e2e]`, so only tested images are
-published. Images are multi-arch (`linux/amd64` + `linux/arm64`) so they run on
+`docker` runs on the release PR (cache-only, in parallel with `e2e`) and on
+the release merge, where it pushes by digest and `docker-merge` publishes.
+Only a tree that passed the release PR is published. Images are multi-arch (`linux/amd64` + `linux/arm64`) so they run on
 Apple Silicon Mac minis as well as amd64 servers. To avoid slow QEMU emulation,
 `docker` is a matrix that builds each architecture on its own native runner
 (`ubuntu-latest` + `ubuntu-24.04-arm`) and pushes by digest;
@@ -152,10 +190,10 @@ There are two images, because one cannot do both jobs:
   can run `pnpm db:migrate` (the runner standalone image has no tsx and no
   source).
 
-Tags: the commit `sha`, the branch, semver on `v*` tags, and `latest` on the
-default branch. Pull requests build both arches cache-only and never push
-(login is skipped, and `docker-merge` is gated to non-PR runs), so forks stay
-safe. It uses the workflow `GITHUB_TOKEN` with `packages: write`.
+Tags: the commit `sha`, the branch and `latest`, all on the release merge;
+the `release` job adds the semver and `stable` on the tag. Pull requests build
+both arches cache-only and never push (login is skipped, and `docker-merge`
+only runs on a release merge), so forks stay safe. It uses the workflow `GITHUB_TOKEN` with `packages: write`.
 
 The `main`/PR app build bakes in
 `APP_VERSION=${{ github.ref_name }}` (so `main` on a branch build) and
@@ -193,7 +231,9 @@ in `tests/unit/process-rules.test.ts`.
 ### Required checks
 
 A repository ruleset on `main` requires a pull request and these checks to
-pass before merge: Lint · Typecheck · Unit, E2E (Playwright) and PR checks. Nothing reaches `main` without them, including release commits.
+pass before merge: Lint · Typecheck · Unit, E2E (Playwright), both Build image
+legs (linux/amd64, linux/arm64) and PR checks. The image builds are required so
+a PR that breaks the Dockerfile cannot merge and leave `main` unable to publish. Nothing reaches `main` without them, including release commits.
 
 ### Dependency updates and security scanning
 
@@ -214,8 +254,9 @@ they don't duplicate Renovate's.
 
 ## Release fast-path
 
-A release is a `v*` tag placed on a `main` commit that CI already built, tested
-and published (as `sha-<short>` + `latest`) minutes earlier. Rebuilding on the
+A release is a `v*` tag placed on the release merge, which CI built and
+published (as `sha-<short>` + `latest`) minutes earlier, after the release PR
+passed the full suite. Rebuilding on the
 tag would recompile a bit-identical image just to add the semver tag, and that
 rebuild would be the slowest step on the path from tag to live. On a tag ref the
 workflow instead runs a single `release` job. It adds the semver tag, and moves
@@ -232,13 +273,14 @@ earlier tag, or when a spec with every acceptance criterion ticked is still
 
 Skipping the tests on a tag is safe because the `release` job waits for
 `ghcr.io/<owner>/<repo>:sha-<short>` (app + migrate) to exist before
-re-tagging. It therefore inherits `main`'s full gate, since that image is only
-published once `main`'s `quality` + `e2e` + build pass. If the image never
+re-tagging. It therefore inherits the release gate, since that image is only
+published by a release merge whose release PR passed `quality`, `e2e` and both
+builds. If the image never
 appears, the release fails loudly and ships nothing untested.
 
 `stable` always points at the most recently released image. A Tier B box sets
 `APP_TAG` to it for automatic _release-only_ deploys: `latest` moves on every
-`main` merge, a pinned semver never moves, and `stable` moves exactly when a
+release merge (before the tag), a pinned semver never moves, and `stable` moves exactly when a
 release is cut. Any `v*` push moves it, including an old tag re-pushed, so to
 roll back you pin `APP_TAG` to a semver. Re-pushing an old tag is the wrong way
 to do it.
@@ -280,11 +322,13 @@ unavoidable compile of new source.
 
 ## How a merge becomes a live deploy
 
-1. A PR merges to `main`.
-2. `ci.yml` runs `quality` and `e2e` in parallel; `docker` starts as soon as
-   `quality` is green (it does not wait on `e2e`) and builds both
-   architectures.
-3. Once both `docker` and `e2e` are green, `docker-merge` assembles the
+1. `/ship` merges the finished feature PRs (each passed `quality`), then opens
+   the release PR.
+2. On the release PR, `ci.yml` runs `quality` and `e2e` in parallel; `docker`
+   starts as soon as `quality` is green (it does not wait on `e2e`) and builds
+   both architectures cache-only.
+3. When the release PR merges, `docker` builds again and pushes, and
+   `docker-merge` assembles the
    multi-arch manifests and publishes `ghcr.io/<owner>/<repo>` (app) and
    `ghcr.io/<owner>/<repo>/migrate`, tagged `sha-<short>` and `latest`.
 4. When you are ready to cut a release: bump the version, update
@@ -352,8 +396,8 @@ see [Backups & restore](backups.md).
 1. Put it in the `quality` job, the fast, blocking one, next to
    `format:check` / `lint` / `typecheck` / `test:coverage` / `specs:check`.
 2. If a check is exploratory or has a high false-positive rate, as
-   `pnpm audit` does, mark the step `continue-on-error: true` so it reports
-   without blocking merges. Don't leave it out entirely.
+   `pnpm audit` would at `high`, mark the step `continue-on-error: true` so it
+   reports without blocking merges. Don't leave it out entirely.
 3. Expose it as a `pnpm` script in `package.json` so a contributor can run it
    locally before pushing.
 4. If the check belongs in the standard gate, update the pre-push command
