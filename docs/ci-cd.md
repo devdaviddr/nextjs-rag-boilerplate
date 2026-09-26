@@ -27,6 +27,7 @@ release tags.
 │             → build → Playwright           [release PR only] │
 │   docker  : per-arch native (amd64 + arm64); cache-only on   │
 │             the release PR, push by digest on release merge  │
+│             · Trivy scan of the app image (critical, fixed)  │
 │   docker-merge : release merge only; assemble multi-arch     │
 │             manifest → publish 2 GHCR images (app + migrate) │
 │ On a v* release tag (fast path — no rebuild):                │
@@ -207,6 +208,55 @@ confirm which version a self-hosted box is running.
 
 On a tag ref, `docker` and `docker-merge` are skipped and the `release` job
 re-tags instead.
+
+### Image scanning
+
+Each `docker` leg scans the app image it just built with
+[Trivy](https://github.com/aquasecurity/trivy-action)
+([#117](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/117)). The build is
+cache-only or pushed by digest, so the job first loads the same image into the
+local Docker daemon from the builder's cache (no rebuild), then runs two
+steps over OS packages and `node_modules`:
+
+- **Report**: fixable HIGH and CRITICAL findings, printed as a table in the
+  job log. It never fails the job.
+- **Gate**: fails the leg, and so `Build image`, on any CRITICAL finding that
+  has a fix. It is the image-level twin of `pnpm audit --audit-level=critical`
+  in `quality`.
+
+Findings without a fix (`ignore-unfixed`) don't block and aren't reported,
+because nothing in this repo can act on them until the distribution ships a
+patch. The scan runs wherever `docker` does: the release PR, the release merge
+(before `docker-merge` publishes) and a manual run. A release merge whose scan
+fails leaves its digests pushed but untagged; `docker-merge` doesn't run. The
+`migrate` image is not scanned: it is the `builder` stage, only runs
+`db:migrate` and is never exposed. There is no SARIF upload to code scanning,
+so the workflow needs no `security-events` permission.
+
+To see what the gate sees, locally:
+
+```bash
+docker build --target runner -t app:scan .
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+  image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed app:scan
+```
+
+**Base-image baseline** (2026-09-26, Trivy 0.74.0, `--severity HIGH,CRITICAL`,
+before the runner moves to Debian slim in
+[#112](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/112)):
+
+| Base                                   | Fixable CRITICAL | Fixable HIGH | Unfixed OS (CRITICAL / HIGH) |
+| -------------------------------------- | ---------------- | ------------ | ---------------------------- |
+| `node:22-alpine` (Alpine 3.24.2)       | 0                | 8            | 0 / 0                        |
+| `node:22-bookworm-slim` (Debian 12.15) | 0                | 8            | 4 / 52                       |
+
+Both bases pass the gate. The 8 fixable HIGH findings are the same in both:
+packages inside the npm that ships with Node (`brace-expansion`, `picomatch`,
+`sigstore`, `ip-address`, `pacote`), not OS packages. Neither base has a
+fixable OS finding. The difference is in unfixed Debian findings, which the
+gate ignores: they would show up only in a scan run without
+`--ignore-unfixed`. These are base-image numbers; the built app image adds its
+own `node_modules` and, on slim, the font packages.
 
 ### `pr.yml` — PR checks
 
