@@ -37,6 +37,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   unavailable and Observability counted it that way, though the answer was
   written from those passages as normal. It is now recorded as a stop at the
   time limit, with an info line saying how many passages were kept.
+- **A model NVIDIA lists but does not serve now says so**
+  ([#82](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/82)).
+  NIM's model list includes some models it does not run for the account;
+  choosing one (in Settings → Models) made every call fail with an opaque
+  "Function … Not found for account" 404. The error now names the model and
+  says to choose another, and fails at once instead of looking like a
+  provider outage.
 
 ## [0.23.0] - 2026-09-26
 
