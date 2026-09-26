@@ -131,7 +131,9 @@ Do not start a change that has no issue.
   in the release PR. See [`specs/README.md`](specs/README.md).
 - **Trunk-based.** `main` is the only long-lived branch (no `develop`). Work
   branches off `main` (naming above) and PRs back into it. CI (`ci.yml`)
-  publishes the app + migrate images from every green `main`.
+  runs the full suite once per ship, on the release PR (feature PRs run lint,
+  typecheck and unit only), and publishes the images from the release merge.
+  See `docs/ci-cd.md#when-ci-runs-what`.
 - **Conventional Commits**, enforced by a commitlint `commit-msg` hook locally
   and on every PR commit and title in CI. Keep commit **body lines ≤ 100
   characters**. A `pre-commit` hook runs lint-staged.

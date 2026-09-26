@@ -28,8 +28,10 @@ git fetch --tags
 gh run list --branch main --workflow CI -L 1    # latest main run: completed success
 ```
 
-If `main`'s latest CI run is not green, stop: the release job re-tags the image
-that run published, and there isn't one.
+If `main`'s latest CI run is not green, stop and find out why. CI only tests in
+full on the release PR (feature PRs run lint, typecheck and unit; feature merges
+run nothing), so the release PR is where E2E and the image build first see this
+ship's work together.
 
 Check the open work planned for this release:
 
@@ -136,7 +138,7 @@ needs the user's go-ahead.
 
 ```bash
 git switch main && git pull --ff-only
-gh run list --branch main --workflow CI -L 1    # wait for this commit's run to go green
+gh run list --branch main --workflow CI -L 1    # wait for the release merge to publish its image
 git tag -a vX.Y.Z -m "<short title of the release>"
 git push origin vX.Y.Z
 ```
@@ -167,5 +169,6 @@ next poll.
 - **release:check failed** — the tag points at a commit that is not a finished
   release. Delete the tag (`git push --delete origin vX.Y.Z && git tag -d vX.Y.Z`),
   fix it through another PR, and tag again.
-- **Timed out waiting for `sha-<short>`** — `main`'s run for that commit failed
-  or had not finished. Get it green, then re-run the job.
+- **Timed out waiting for `sha-<short>`** — the release merge's image build
+  failed or had not finished, or the tag is not on the release merge (only a
+  release merge publishes). Get it green, then re-run the job.

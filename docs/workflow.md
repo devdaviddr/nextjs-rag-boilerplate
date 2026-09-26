@@ -94,17 +94,19 @@ changes through them. Fill in the template with a Conventional Commit title,
 `Closes #N` for the issue, the CHANGELOG entry and the docs you touched. The PR
 checks job fails without the issue link, on a commit or title that is not
 Conventional, or on a `feat`/`fix`/`perf`/`revert`/breaking PR with no
-`CHANGELOG.md` change (label it `no-changelog` if users cannot notice it). CI runs
-`quality` (format, lint, typecheck, unit tests with coverage, `specs:check`) and
-`e2e` (Playwright against Postgres, MinIO and Mailpit), and builds both image
-architectures without pushing. Merge once it is green and a human has looked at
+`CHANGELOG.md` change (label it `no-changelog` if users cannot notice it). On a
+feature PR, CI runs `quality` only (format, lint, typecheck, unit tests with
+coverage, `specs:check`). The release PR gets the full suite: `quality`, `e2e`
+(Playwright against Postgres, MinIO and Mailpit) and both image architectures
+built without pushing. See [When CI runs what](ci-cd.md#when-ci-runs-what). Merge once it is green and a human has looked at
 it. [CI/CD](ci-cd.md) has the job-by-job detail.
 
 ## 4 — CI publishes the images
 
-When the merge lands on `main`, CI runs the same checks again. Once both
-`quality` and `e2e` are green, it publishes two multi-arch images to GHCR,
-tagged `sha-<short>` and `latest`:
+A feature merge to `main` runs nothing more; it was checked on its PR. When the
+release PR merges, CI builds and publishes two multi-arch images to GHCR,
+tagged `sha-<short>` and `latest` (its tree passed the full suite on the
+release PR):
 
 - `ghcr.io/<owner>/<repo>` is the `runner` target, the slim production app.
 - `ghcr.io/<owner>/<repo>/migrate` is the `builder` target, the migrator.
