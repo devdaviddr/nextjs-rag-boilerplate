@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 
 import { decryptSecret } from './crypto'
 import { type PresetId, presetForUrl } from './presets'
+import type { AuditWrite } from './store'
 
 /**
  * The one place the app reads its AI settings (spec 0040 FR6): a value saved
@@ -104,9 +105,17 @@ export interface ConnectionRow {
   apiKeyCiphertext: string | null
 }
 
+/** Who saved a value and when (spec 0040 FR5). */
+export interface SavedMeta {
+  by: string | null
+  at: string | null
+}
+
 interface Loaded {
   /** Parsed saved values, already validated. */
   saved: Partial<AiSettings>
+  /** Who saved each row and when, by key (settings and `connection:<job>`). */
+  savedMeta: Map<string, SavedMeta>
   /** Saved connections, by id. */
   connections: Map<string, ResolvedConnection>
   /** Which saved connection each job uses; absent means `.env`. */
@@ -179,13 +188,26 @@ export function aiSettings(): AiSettings {
 }
 
 /** Validate the saved rows; a row that no longer parses is skipped, loudly. */
-function parseRows(rows: { key: string; value: string }[]): {
+function parseRows(
+  rows: {
+    key: string
+    value: string
+    updatedBy?: string | null
+    updatedAt?: Date | null
+  }[],
+): {
   saved: Partial<AiSettings>
+  savedMeta: Map<string, SavedMeta>
   roleConnection: Partial<Record<ConnectableRole, string>>
 } {
   const saved: Partial<Record<AiSettingKey, unknown>> = {}
+  const savedMeta = new Map<string, SavedMeta>()
   const roleConnection: Partial<Record<ConnectableRole, string>> = {}
   for (const row of rows) {
+    savedMeta.set(row.key, {
+      by: row.updatedBy ?? null,
+      at: row.updatedAt ? row.updatedAt.toISOString() : null,
+    })
     if (row.key.startsWith(ROLE_KEY_PREFIX)) {
       const role = row.key.slice(ROLE_KEY_PREFIX.length)
       if (isConnectableRole(role)) roleConnection[role] = row.value
@@ -212,7 +234,7 @@ function parseRows(rows: { key: string; value: string }[]): {
     delete typed.RAG_CHUNK_TOKENS
     delete typed.RAG_CHUNK_OVERLAP_TOKENS
   }
-  return { saved: typed, roleConnection }
+  return { saved: typed, savedMeta, roleConnection }
 }
 
 function resolveRows(rows: ConnectionRow[]): Map<string, ResolvedConnection> {
@@ -276,6 +298,16 @@ export function modelFor(role: AiRole): string {
   return aiSettings()[ROLE_MODEL_KEY[role]]
 }
 
+/** Who saved `key` and when, or null when it is not saved (FR5). */
+export function savedMetaFor(key: string): SavedMeta | null {
+  return savedKeys().has(key) ? (state?.savedMeta.get(key) ?? null) : null
+}
+
+/** The value in force for a setting, as the page shows it. */
+export function displayValue(key: AiSettingKey): string {
+  return String(aiSettings()[key])
+}
+
 /** The keys with a saved value, for "saved" / "env" / "default" badges. */
 export function savedKeys(): Set<string> {
   const keys = new Set<string>(Object.keys(state?.saved ?? {}))
@@ -304,9 +336,10 @@ export function refreshAiSettings({
         readSavedRows(),
         readConnectionRows(),
       ])
-      const { saved, roleConnection } = parseRows(rows)
+      const { saved, savedMeta, roleConnection } = parseRows(rows)
       state = {
         saved,
+        savedMeta,
         connections: resolveRows(connectionRows),
         roleConnection,
         merged: mergedOrNull(saved),
@@ -317,6 +350,7 @@ export function refreshAiSettings({
       const saved = state?.saved ?? {}
       state = {
         saved,
+        savedMeta: state?.savedMeta ?? new Map(),
         connections: state?.connections ?? new Map(),
         roleConnection: state?.roleConnection ?? {},
         merged: mergedOrNull(saved),
@@ -330,6 +364,15 @@ export function refreshAiSettings({
 }
 
 export type SaveResult = { ok: true } | { ok: false; error: string }
+
+/** Record one change (spec 0040 FR5). Never given a secret. */
+export async function auditChange(
+  entry: AuditWrite,
+  userId: string | null,
+): Promise<void> {
+  const { writeAudit } = await import('./store')
+  await writeAudit(entry, userId)
+}
 
 /**
  * Save one setting, validated as its environment variable would be and
@@ -349,21 +392,48 @@ export async function saveAiSetting(
   await refreshAiSettings()
   const error = crossFieldError({ ...aiSettings(), [key]: parsed.value })
   if (error) return { ok: false, error }
+  const before = displayValue(key)
   const { writeSavedRow } = await import('./store')
   await writeSavedRow(key, raw, userId)
   await refreshAiSettings({ force: true })
+  const after = displayValue(key)
+  if (after !== before) {
+    await auditChange(
+      { action: 'save', key, oldValue: before, newValue: after },
+      userId,
+    )
+  }
   return { ok: true }
 }
 
 /** Remove a saved value, so the environment (or default) applies again. */
-export async function resetAiSetting(key: string): Promise<SaveResult> {
+export async function resetAiSetting(
+  key: string,
+  userId: string | null = null,
+): Promise<SaveResult> {
   if (!isSavable(key)) {
     return { ok: false, error: `${key} cannot be saved as a setting` }
   }
+  await refreshAiSettings()
+  const wasSaved = savedKeys().has(key)
+  const before = displayValue(key)
   const { deleteSavedRow } = await import('./store')
   await deleteSavedRow(key)
   await refreshAiSettings({ force: true })
+  if (wasSaved) {
+    await auditChange(
+      { action: 'reset', key, oldValue: before, newValue: displayValue(key) },
+      userId,
+    )
+  }
   return { ok: true }
+}
+
+/** A connection's name for the audit log; `.env` for the built-in one. */
+function connectionName(id: string): string {
+  return id === ENV_CONNECTION_ID
+    ? envConnection().name
+    : (state?.connections.get(id)?.name ?? id)
 }
 
 /**
@@ -379,16 +449,29 @@ export async function saveRoleConnection(
     return { ok: false, error: `The ${role} job cannot change connection` }
   }
   const store = await import('./store')
+  await refreshAiSettings({ force: true })
+  const before = connectionIdFor(role)
+  const beforeName = connectionName(before)
   if (connectionId === ENV_CONNECTION_ID) {
     await store.deleteSavedRow(ROLE_KEY_PREFIX + role)
   } else {
-    await refreshAiSettings({ force: true })
     if (!state?.connections.has(connectionId)) {
       return { ok: false, error: 'That connection no longer exists' }
     }
     await store.writeSavedRow(ROLE_KEY_PREFIX + role, connectionId, userId)
   }
   await refreshAiSettings({ force: true })
+  if (before !== connectionId) {
+    await auditChange(
+      {
+        action: connectionId === ENV_CONNECTION_ID ? 'reset' : 'save',
+        key: ROLE_KEY_PREFIX + role,
+        oldValue: beforeName,
+        newValue: connectionName(connectionId),
+      },
+      userId,
+    )
+  }
   return { ok: true }
 }
 

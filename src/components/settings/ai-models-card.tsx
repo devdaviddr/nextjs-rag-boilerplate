@@ -4,7 +4,6 @@ import { useCallback, useId, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, RotateCcw } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -17,7 +16,6 @@ import {
 import {
   type ConnectionView,
   type RoleView,
-  type Source,
   modelsFor,
   resetRole,
   saveRole,
@@ -26,12 +24,7 @@ import {
 import { InfoTip } from '@/components/ui/info-tip'
 import { FIELD_HELP, ROLE_LABELS } from './ai-role-labels'
 import { type ModelList, ModelPicker } from './model-picker'
-
-const SOURCE_TEXT: Record<Source, string> = {
-  saved: 'saved here',
-  env: 'from .env',
-  default: 'default',
-}
+import { SourceBadge } from './source-badge'
 
 type Status =
   | { kind: 'idle' }
@@ -44,11 +37,14 @@ function RoleRow({
   connections,
   modelList,
   loadModels,
+  locked,
 }: {
   role: RoleView
   connections: ConnectionView[]
   modelList: (connectionId: string) => ModelList
   loadModels: (connectionId: string) => void
+  /** `AI_SETTINGS_LOCKED`: shown and testable, never changed (FR5). */
+  locked: boolean
 }) {
   const router = useRouter()
   const listId = useId()
@@ -57,7 +53,7 @@ function RoleRow({
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [pending, startTransition] = useTransition()
   const labels = ROLE_LABELS[role.role]
-  const editable = role.role !== 'embed'
+  const editable = role.role !== 'embed' && !locked
   const dirty = connectionId !== role.connectionId || model !== role.model
   const customised = role.source === 'saved' || role.connectionId !== 'env'
 
@@ -119,9 +115,7 @@ function RoleRow({
               <p key={d}>{d}</p>
             ))}
           </InfoTip>
-          <Badge variant="outline" className="font-normal">
-            {SOURCE_TEXT[role.source]}
-          </Badge>
+          <SourceBadge source={role.source} saved={role.saved} />
         </div>
         <p className="text-muted-foreground text-sm">{labels.help}</p>
       </div>
@@ -144,7 +138,7 @@ function RoleRow({
               setConnectionId(v)
               setStatus({ kind: 'idle' })
             }}
-            disabled={!role.canChangeConnection}
+            disabled={!role.canChangeConnection || locked}
           >
             <SelectTrigger id={`${listId}-conn`} className="w-full">
               <SelectValue />
@@ -232,9 +226,11 @@ function RoleRow({
 export function AiModelsCard({
   roles,
   connections,
+  locked = false,
 }: {
   roles: RoleView[]
   connections: ConnectionView[]
+  locked?: boolean
 }) {
   // One /models request per connection, shared by every job's picker.
   const [lists, setLists] = useState<Record<string, ModelList>>({})
@@ -274,6 +270,7 @@ export function AiModelsCard({
               connections={connections}
               modelList={modelList}
               loadModels={loadModels}
+              locked={locked}
             />
           ))}
         </ul>

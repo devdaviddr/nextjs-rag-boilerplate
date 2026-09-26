@@ -6,14 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * table is replaced by a map, so no database is involved.
  */
 
-const { mockEnv, rows, connectionRows, store } = vi.hoisted(() => {
+const { mockEnv, rows, connectionRows, audit, store } = vi.hoisted(() => {
   const rows = new Map<string, string>()
   const connectionRows: unknown[] = []
+  const audit: Array<Record<string, unknown>> = []
   return {
     mockEnv: {} as Record<string, unknown>,
     rows,
     connectionRows,
+    audit,
     store: {
+      writeAudit: vi.fn(
+        async (entry: Record<string, unknown>, userId: string | null) => {
+          audit.push({ ...entry, userId })
+        },
+      ),
       readSavedRows: vi.fn(async () =>
         [...rows].map(([key, value]) => ({ key, value })),
       ),
@@ -66,6 +73,7 @@ beforeEach(() => {
   __resetAiSettingsForTests()
   rows.clear()
   connectionRows.length = 0
+  audit.length = 0
   for (const k of Object.keys(mockEnv)) delete mockEnv[k]
   Object.assign(mockEnv, ENV)
   vi.clearAllMocks()
@@ -185,6 +193,33 @@ describe('saveAiSetting / resetAiSetting', () => {
     const result = await saveAiSetting('NVIDIA_API_KEY', 'sk-123', null)
     expect(result.ok).toBe(false)
     expect(store.writeSavedRow).not.toHaveBeenCalled()
+  })
+
+  it('audits a save and a reset, old → new, with who did it (FR5)', async () => {
+    await saveAiSetting('RAG_TOP_K', '10', 'admin-1')
+    await resetAiSetting('RAG_TOP_K', 'admin-2')
+    expect(audit).toEqual([
+      {
+        action: 'save',
+        key: 'RAG_TOP_K',
+        oldValue: '8',
+        newValue: '10',
+        userId: 'admin-1',
+      },
+      {
+        action: 'reset',
+        key: 'RAG_TOP_K',
+        oldValue: '10',
+        newValue: '8',
+        userId: 'admin-2',
+      },
+    ])
+  })
+
+  it('does not audit a save that changes nothing, or a reset of an unsaved value', async () => {
+    await saveAiSetting('RAG_TOP_K', String(aiSettings().RAG_TOP_K), null)
+    await resetAiSetting('RAG_MIN_SIMILARITY', null)
+    expect(audit).toEqual([])
   })
 
   it('reset removes the saved value, so the environment applies again', async () => {

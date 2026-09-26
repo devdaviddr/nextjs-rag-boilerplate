@@ -841,6 +841,33 @@ export const aiConnections = pgTable('ai_connections', {
 })
 
 /**
+ * Every change made to AI settings from Settings (spec 0040 FR5): a saved or
+ * reset value, a job pointed at another connection, a connection added,
+ * edited or removed. Old and new are what the page showed, never a secret:
+ * an API key appears only as its `••••1a2b` hint. The user link survives the
+ * account being deleted as null, so the history stays.
+ */
+export const aiSettingsAudit = pgTable(
+  'ai_settings_audit',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    at: timestamp('at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    userId: text('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    /** `save`, `reset`, `connection-add`, `connection-edit`, `connection-remove`. */
+    action: text('action').notNull(),
+    /** The setting (`RAG_TOP_K`, `connection:chat`) or the connection's name. */
+    key: text('key').notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+  },
+  (table) => [index('ai_settings_audit_at_idx').on(table.at.desc())],
+)
+
+/**
  * Every log line, kept for the Logs page (spec 0042 FR3). Written in batches
  * by `src/lib/observability/log-store.ts` and pruned after
  * `LOG_RETENTION_DAYS`. `meta` has already been through the redactor: no

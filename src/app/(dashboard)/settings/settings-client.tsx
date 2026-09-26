@@ -14,6 +14,7 @@ import { AdminPanel } from '@/components/auth/admin-panel'
 import { ConnectedAccounts } from '@/components/auth/connected-accounts'
 import { FilesPanel } from '@/components/files/files-panel'
 import { NotificationsPanel } from '@/components/push/notifications-panel'
+import { AiChangesCard } from '@/components/settings/ai-changes-card'
 import { AiConnectionsCard } from '@/components/settings/ai-connections-card'
 import { AiModelsCard } from '@/components/settings/ai-models-card'
 import { BuildInfoCard } from '@/components/settings/build-info-card'
@@ -228,6 +229,16 @@ export function SettingsClient({
           {ai && (
             <>
               <Section def={def('configuration')} current={current}>
+                {ai.locked && (
+                  <p
+                    role="note"
+                    className="bg-muted/40 rounded-lg border p-4 text-sm"
+                  >
+                    These settings are locked on this deployment (
+                    <code>AI_SETTINGS_LOCKED</code>). They can be viewed and
+                    tested here, and changed only in <code>.env</code>.
+                  </p>
+                )}
                 <div id="providers" className="space-y-4">
                   <h3 className="flex items-center gap-1.5 font-semibold">
                     Providers
@@ -237,11 +248,22 @@ export function SettingsClient({
                       ))}
                     </InfoTip>
                   </h3>
-                  <AiConnectionsCard connections={ai.connections} />
+                  <AiConnectionsCard
+                    connections={ai.connections}
+                    locked={ai.locked}
+                  />
                 </div>
                 <div id="models" className="space-y-4 border-t pt-6">
                   <h3 className="font-semibold">Models</h3>
-                  <AiModelsCard roles={ai.roles} connections={ai.connections} />
+                  <AiModelsCard
+                    roles={ai.roles}
+                    connections={ai.connections}
+                    locked={ai.locked}
+                  />
+                </div>
+                <div id="changes" className="space-y-4 border-t pt-6">
+                  <h3 className="font-semibold">Recent changes</h3>
+                  <AiChangesCard changes={ai.recentChanges} />
                 </div>
               </Section>
             </>

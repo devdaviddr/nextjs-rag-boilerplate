@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { ForbiddenError, requireRole } from '@/lib/auth/rbac'
 import { getCurrentSession } from '@/lib/auth/session'
+import { env as appEnv } from '@/lib/env'
 import { logger } from '@/lib/logger'
 
 import {
@@ -14,6 +15,8 @@ import {
   ENV_CONNECTION_ID,
   ROLE_MODEL_KEY,
   type ResolvedConnection,
+  type SavedMeta,
+  auditChange,
   connectionFor,
   connectionIdFor,
   envConnection,
@@ -24,6 +27,7 @@ import {
   saveRoleConnection,
   savedConnections,
   savedKeys,
+  savedMetaFor,
 } from './index'
 import { PLANNER_SYSTEM_PROMPT } from '@/lib/rag/agentic-run'
 import { SEARCH_TOOL } from '@/lib/rag/planner'
@@ -62,11 +66,26 @@ export interface RoleView {
   canChangeConnection: boolean
   model: string
   source: Source
+  /** Who last saved this job's model or connection, and when (FR5). */
+  saved: SavedMeta | null
+}
+
+/** One line of the audit log as the page shows it (FR5). No secrets. */
+export interface ChangeView {
+  at: string
+  by: string | null
+  action: string
+  key: string
+  oldValue: string | null
+  newValue: string | null
 }
 
 export interface AiSettingsView {
   connections: ConnectionView[]
   roles: RoleView[]
+  /** `AI_SETTINGS_LOCKED`: shown, never changed (FR5). */
+  locked: boolean
+  recentChanges: ChangeView[]
 }
 
 export interface TestResult {
@@ -77,6 +96,11 @@ export interface TestResult {
 }
 
 const FORBIDDEN = 'Only admins can change AI settings.'
+export const LOCKED =
+  'AI settings are locked on this deployment (AI_SETTINGS_LOCKED). Change them in .env.'
+
+/** How many audit lines the page shows. */
+const RECENT_CHANGES = 20
 
 async function adminUserId(): Promise<string | null> {
   await requireRole('admin')
@@ -94,6 +118,26 @@ async function asAdmin<T>(
     if (err instanceof ForbiddenError) return { ok: false, error: FORBIDDEN }
     throw err
   }
+}
+
+/**
+ * An admin action that changes something. Refused whole when the deployment
+ * locks its AI settings (FR5): the page greys out, but this is the gate.
+ */
+async function asAdminWrite<T>(
+  run: (userId: string | null) => Promise<ActionResult<T>>,
+): Promise<ActionResult<T>> {
+  return asAdmin(async (userId) => {
+    if (appEnv.AI_SETTINGS_LOCKED) return { ok: false, error: LOCKED }
+    return run(userId)
+  })
+}
+
+/** The later of two saves, for a job whose model and connection are two rows. */
+function latest(a: SavedMeta | null, b: SavedMeta | null): SavedMeta | null {
+  if (!a) return b
+  if (!b) return a
+  return (a.at ?? '') >= (b.at ?? '') ? a : b
 }
 
 function sourceOf(key: string): Source {
@@ -135,8 +179,28 @@ function view(): AiSettingsView {
     ),
     model: modelFor(role),
     source: sourceOf(ROLE_MODEL_KEY[role]),
+    saved: latest(
+      savedMetaFor(ROLE_MODEL_KEY[role]),
+      savedMetaFor(`connection:${role}`),
+    ),
   }))
-  return { connections, roles }
+  return {
+    connections,
+    roles,
+    locked: Boolean(appEnv.AI_SETTINGS_LOCKED),
+    recentChanges: changes,
+  }
+}
+
+/** The audit log's latest lines, refreshed with the view. */
+let changes: ChangeView[] = []
+
+async function loadChanges(): Promise<void> {
+  const { readRecentAudit } = await import('./store')
+  changes = (await readRecentAudit(RECENT_CHANGES)).map((row) => ({
+    ...row,
+    at: row.at.toISOString(),
+  }))
 }
 
 /** Key hints by connection id, refreshed with the view. */
@@ -154,6 +218,7 @@ export async function getAiSettingsView(): Promise<
   return asAdmin(async () => {
     await refreshAiSettings({ force: true })
     await loadHints()
+    await loadChanges()
     return { ok: true, data: view() }
   })
 }
@@ -179,10 +244,20 @@ const connectionInput = z.object({
 
 export type ConnectionInput = z.input<typeof connectionInput>
 
+/** A connection as the audit log records it: never the key, only its hint. */
+function describeConnection(c: {
+  preset: string
+  baseUrl: string
+  keyHint: string | null
+}): string {
+  const key = c.keyHint ? `key ••••${c.keyHint}` : 'no key'
+  return `${presetById(c.preset).label} · ${c.baseUrl} · ${key}`
+}
+
 export async function saveConnection(
   input: ConnectionInput,
 ): Promise<ActionResult<{ id: string }>> {
-  return asAdmin(async (userId) => {
+  return asAdminWrite(async (userId) => {
     const parsed = connectionInput.safeParse(input)
     if (!parsed.success) {
       return {
@@ -203,6 +278,9 @@ export async function saveConnection(
       baseUrl: baseUrl.replace(/\/$/, ''),
       apiKey: key,
     }
+    const previous = id
+      ? (await store.readConnectionRows()).find((r) => r.id === id)
+      : undefined
 
     if (id) {
       if (id === ENV_CONNECTION_ID) {
@@ -218,6 +296,32 @@ export async function saveConnection(
       }
     }
     const savedId = id ?? (await store.insertConnection(values, userId))
+    const after = describeConnection({
+      preset,
+      baseUrl: values.baseUrl,
+      keyHint:
+        key === undefined
+          ? (previous?.apiKeyHint ?? null)
+          : (key?.hint ?? null),
+    })
+    const before = previous
+      ? describeConnection({
+          preset: previous.preset,
+          baseUrl: previous.baseUrl,
+          keyHint: previous.apiKeyHint,
+        })
+      : null
+    if (before !== after || previous?.name !== name) {
+      await auditChange(
+        {
+          action: id ? 'connection-edit' : 'connection-add',
+          key: name,
+          oldValue: before,
+          newValue: after,
+        },
+        userId,
+      )
+    }
     await refreshAiSettings({ force: true })
     logger.info('ai-settings: connection saved', { id: savedId, preset })
     revalidatePath('/settings')
@@ -226,12 +330,28 @@ export async function saveConnection(
 }
 
 export async function deleteConnection(id: string): Promise<ActionResult> {
-  return asAdmin(async () => {
+  return asAdminWrite(async (userId) => {
     if (id === ENV_CONNECTION_ID) {
       return { ok: false, error: 'The .env connection cannot be removed' }
     }
-    const { deleteConnection: remove } = await import('./store')
-    await remove(id)
+    const store = await import('./store')
+    const previous = (await store.readConnectionRows()).find((r) => r.id === id)
+    await store.deleteConnection(id)
+    if (previous) {
+      await auditChange(
+        {
+          action: 'connection-remove',
+          key: previous.name,
+          oldValue: describeConnection({
+            preset: previous.preset,
+            baseUrl: previous.baseUrl,
+            keyHint: previous.apiKeyHint,
+          }),
+          newValue: null,
+        },
+        userId,
+      )
+    }
     await refreshAiSettings({ force: true })
     logger.info('ai-settings: connection deleted', { id })
     revalidatePath('/settings')
@@ -343,7 +463,7 @@ const roleInput = z.object({
 export async function saveRole(
   input: z.input<typeof roleInput>,
 ): Promise<ActionResult> {
-  return asAdmin(async (userId) => {
+  return asAdminWrite(async (userId) => {
     const parsed = roleInput.safeParse(input)
     if (!parsed.success) {
       return {
@@ -376,12 +496,12 @@ export async function saveRole(
 
 /** Back to `.env` for both the connection and the model. */
 export async function resetRole(role: AiRole): Promise<ActionResult> {
-  return asAdmin(async (userId) => {
+  return asAdminWrite(async (userId) => {
     if (!AI_ROLES.includes(role)) return { ok: false, error: 'Unknown job' }
     if ((CONNECTABLE_ROLES as readonly string[]).includes(role)) {
       await saveRoleConnection(role, ENV_CONNECTION_ID, userId)
     }
-    await resetAiSetting(ROLE_MODEL_KEY[role])
+    await resetAiSetting(ROLE_MODEL_KEY[role], userId)
     revalidatePath('/settings')
     return { ok: true, data: null }
   })

@@ -24,6 +24,7 @@ const { isAdmin, store, mockEnv } = vi.hoisted(() => ({
   store: {
     rows: new Map<string, string>(),
     connections: [] as Array<Record<string, unknown>>,
+    audit: [] as Array<Record<string, unknown>>,
   },
 }))
 
@@ -72,7 +73,20 @@ vi.mock('@/lib/ai-settings/store', () => ({
     return `c-${store.connections.length}`
   }),
   updateConnection: vi.fn(async () => true),
-  deleteConnection: vi.fn(async () => {}),
+  deleteConnection: vi.fn(async (id: string) => {
+    const i = store.connections.findIndex((c) => c.id === id)
+    if (i >= 0) store.connections.splice(i, 1)
+  }),
+  writeAudit: vi.fn(
+    async (entry: Record<string, unknown>, userId: string | null) => {
+      store.audit.push({ ...entry, userId })
+    },
+  ),
+  readRecentAudit: vi.fn(async () =>
+    [...store.audit]
+      .reverse()
+      .map((e) => ({ ...e, at: new Date(0), by: 'Admin' })),
+  ),
 }))
 
 import { __resetAiSettingsForTests } from '@/lib/ai-settings'
@@ -93,6 +107,8 @@ beforeEach(() => {
   isAdmin.value = true
   store.rows.clear()
   store.connections.length = 0
+  store.audit.length = 0
+  mockEnv.AI_SETTINGS_LOCKED = false
   vi.restoreAllMocks()
 })
 
@@ -231,5 +247,78 @@ describe('FR2: jobs', () => {
     )
     const result = await testRole('embed')
     expect(!result.ok && result.error).toContain('needs 2048')
+  })
+})
+
+describe('FR5: provenance, audit and lock', () => {
+  it('audits a connection without its key, only the hint', async () => {
+    await saveConnection({
+      name: 'OpenRouter',
+      preset: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: SECRET,
+    })
+    await deleteConnection('c-1')
+    const text = JSON.stringify(store.audit)
+    expect(text).not.toContain(SECRET)
+    expect(store.audit).toEqual([
+      {
+        action: 'connection-add',
+        key: 'OpenRouter',
+        oldValue: null,
+        newValue: 'OpenRouter · https://openrouter.ai/api/v1 · key ••••9876',
+        userId: 'admin-1',
+      },
+      {
+        action: 'connection-remove',
+        key: 'OpenRouter',
+        oldValue: 'OpenRouter · https://openrouter.ai/api/v1 · key ••••9876',
+        newValue: null,
+        userId: 'admin-1',
+      },
+    ])
+  })
+
+  it('audits a job moved to a connection and a new model, and shows who saved it', async () => {
+    await saveConnection({
+      name: 'OpenRouter',
+      preset: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: SECRET,
+    })
+    store.audit.length = 0
+    await saveRole({ role: 'chat', connectionId: 'c-1', model: 'or/chat' })
+    expect(store.audit.map((e) => [e.key, e.oldValue, e.newValue])).toEqual([
+      ['connection:chat', 'Environment (.env)', 'OpenRouter'],
+      ['RAG_CHAT_MODEL', 'env/chat', 'or/chat'],
+    ])
+    const view = await getAiSettingsView()
+    expect(view.ok && view.data.recentChanges[0]).toMatchObject({
+      key: 'RAG_CHAT_MODEL',
+      by: 'Admin',
+    })
+  })
+
+  it('refuses every change when AI_SETTINGS_LOCKED is set, but still shows and tests', async () => {
+    mockEnv.AI_SETTINGS_LOCKED = true
+    const LOCKED =
+      'AI settings are locked on this deployment (AI_SETTINGS_LOCKED). Change them in .env.'
+    const writes = await Promise.all([
+      saveConnection({
+        name: 'x',
+        preset: 'custom',
+        baseUrl: 'https://example.test/v1',
+      }),
+      deleteConnection('c-1'),
+      saveRole({ role: 'chat', connectionId: 'env', model: 'm' }),
+      resetRole('chat'),
+    ])
+    for (const r of writes) expect(r).toEqual({ ok: false, error: LOCKED })
+    expect(store.connections).toHaveLength(0)
+    expect(store.rows.size).toBe(0)
+    expect(store.audit).toHaveLength(0)
+
+    const view = await getAiSettingsView()
+    expect(view.ok && view.data.locked).toBe(true)
   })
 })

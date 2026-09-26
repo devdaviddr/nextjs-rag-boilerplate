@@ -75,6 +75,11 @@ AI provider. Without it they are encrypted under a key derived from
 `AUTH_SECRET`. Changing whichever is in use makes the saved keys unreadable, and
 Settings asks for them again.
 
+`AI_SETTINGS_LOCKED=true` makes the AI settings read-only: the page shows them
+but every save, reset and connection change is refused by the server, for
+deployments that keep their AI config in `.env`. Values saved before the lock
+still apply.
+
 A variable marked required has no default, and the app will not start without
 it. Everything else is optional and has a default, and the features those
 variables control stay inert until you set them.
