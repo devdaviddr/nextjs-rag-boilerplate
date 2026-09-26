@@ -25,6 +25,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - A document can no longer close the fence around retrieved text and have what
   follows read as instructions. The fence now uses a random id per prompt, and
   the agentic planner and the citation verifier see fenced text too (#126).
+- Removed two unused account-setup functions from the admin module, which
+  were still registered as Server Actions (#155).
 
 ## [0.26.0] - 2026-09-26
 

@@ -529,50 +529,5 @@ async function assignRolesOrThrow(input: AssignRolesInput): Promise<void> {
   })
 }
 
-/**
- * Check if a user can complete registration (has pre-created account, no password).
- * Used by /register page to show appropriate UI.
- */
-export async function canCompleteRegistration(email: string): Promise<boolean> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-    columns: { id: true, hashedPassword: true },
-  })
-  return !!user && !user.hashedPassword
-}
-
-/**
- * Complete registration for a pre-created user (set password).
- * This is called from the register action when user already exists without password.
- */
-export async function completeRegistration(
-  email: string,
-  password: string,
-): Promise<void> {
-  await checkAdminRateLimit('complete-registration')
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-    columns: { id: true, hashedPassword: true },
-  })
-
-  if (!user) {
-    throw new Error('Account not found.')
-  }
-  if (user.hashedPassword) {
-    throw new Error('Account already has a password. Please sign in.')
-  }
-
-  // Hash password
-  const { hashPassword } = await import('@/lib/auth/password')
-  const hashed = await hashPassword(password)
-
-  await db
-    .update(users)
-    .set({ hashedPassword: hashed })
-    .where(eq(users.id, user.id))
-  logger.info('User completed registration', { userId: user.id })
-}
-
 // Import getCurrentSession here to avoid circular dependency
 import { getCurrentSession } from './session'

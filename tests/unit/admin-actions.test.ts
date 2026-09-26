@@ -40,11 +40,6 @@ vi.mock('@/lib/email/templates', () => ({
   })),
 }))
 
-const mockHashPassword = vi.fn()
-vi.mock('@/lib/auth/password', () => ({
-  hashPassword: (...args: unknown[]) => mockHashPassword(...args),
-}))
-
 const mockDeleteAllFilesForUser = vi.fn()
 vi.mock('@/lib/storage/cleanup', () => ({
   deleteAllFilesForUser: (...args: unknown[]) =>
@@ -57,8 +52,6 @@ import { ForbiddenError } from '@/lib/auth/rbac'
 import { resetRateLimit } from '@/lib/rate-limit'
 import {
   assignRoles,
-  canCompleteRegistration,
-  completeRegistration,
   createUser,
   deleteUser,
   getAllRoles,
@@ -134,7 +127,6 @@ beforeEach(() => {
 
   mockIsEmailEnabled.mockReset().mockReturnValue(false)
   mockSendEmail.mockReset().mockResolvedValue({ sent: false, skipped: true })
-  mockHashPassword.mockReset().mockResolvedValue('hashed')
   mockDeleteAllFilesForUser.mockReset().mockResolvedValue(undefined)
 
   resetRateLimit()
@@ -450,65 +442,5 @@ describe('assignRoles', () => {
     expect(await assignRoles(input)).toEqual({ ok: true, data: null })
     expect(dbMock.delete).toHaveBeenCalled()
     expect(dbMock.insert).toHaveBeenCalled()
-  })
-})
-
-// --- canCompleteRegistration / completeRegistration ---------------------------
-
-describe('canCompleteRegistration', () => {
-  it('is true for an invited (passwordless) account', async () => {
-    dbMock.query.users.findFirst.mockResolvedValueOnce({
-      id: NEW_USER_ID,
-      hashedPassword: null,
-    })
-    await expect(canCompleteRegistration('new@example.com')).resolves.toBe(true)
-  })
-
-  it('is false when no account exists', async () => {
-    dbMock.query.users.findFirst.mockResolvedValueOnce(null)
-    await expect(canCompleteRegistration('nobody@example.com')).resolves.toBe(
-      false,
-    )
-  })
-
-  it('is false when the account already has a password', async () => {
-    dbMock.query.users.findFirst.mockResolvedValueOnce({
-      id: NEW_USER_ID,
-      hashedPassword: 'x',
-    })
-    await expect(canCompleteRegistration('new@example.com')).resolves.toBe(
-      false,
-    )
-  })
-})
-
-describe('completeRegistration', () => {
-  it('errors when the account does not exist', async () => {
-    dbMock.query.users.findFirst.mockResolvedValueOnce(null)
-    await expect(
-      completeRegistration('nobody@example.com', 'Password123'),
-    ).rejects.toThrow('Account not found.')
-  })
-
-  it('errors when the account already has a password', async () => {
-    dbMock.query.users.findFirst.mockResolvedValueOnce({
-      id: NEW_USER_ID,
-      hashedPassword: 'x',
-    })
-    await expect(
-      completeRegistration('new@example.com', 'Password123'),
-    ).rejects.toThrow('Account already has a password. Please sign in.')
-  })
-
-  it('hashes and sets the password for an invited account', async () => {
-    dbMock.query.users.findFirst.mockResolvedValueOnce({
-      id: NEW_USER_ID,
-      hashedPassword: null,
-    })
-
-    await completeRegistration('new@example.com', 'Password123')
-
-    expect(mockHashPassword).toHaveBeenCalledWith('Password123')
-    expect(dbMock.update).toHaveBeenCalled()
   })
 })
