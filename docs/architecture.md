@@ -150,7 +150,7 @@ boundaries differ in kind. `owner_id` isolates tenants, while
 data. Both are enforced identically, but only one is a defence against an
 adversary.
 
-An optional agentic path (`RAG_AGENTIC_ENABLED`, off by default) lets the model
+An optional agentic path (`RAG_AGENTIC_ENABLED`, on by default) lets the model
 plan its own searches through a `search_documents` tool, within hard caps on
 searches, wall-clock time and tokens. Scope is bound server-side once per
 question, and refusal stays a code path _around_ the loop. The model is never

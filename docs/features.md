@@ -88,7 +88,7 @@ you can search. [RAG](rag.md) walks through each step.
 
 ### Optional: agentic retrieval
 
-`RAG_AGENTIC_ENABLED`, off by default. The model plans its own searches via a
+`RAG_AGENTIC_ENABLED`, on by default. The model plans its own searches via a
 tool call, resolves conversational references, and can search again when the
 first attempt is thin, inside hard caps on searches, wall-clock and tokens.
 Citation verification then strips claims their sources do not support. It is

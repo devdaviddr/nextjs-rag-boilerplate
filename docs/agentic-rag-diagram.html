@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>How Agentic RAG Answers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f2f5f4;
+        --card: #ffffff;
+        --ink: #17222b;
+        --muted: #5a6872;
+        --line: #c9d3d1;
+        --model: #0f7c74;
+        --model-soft: #e1f0ee;
+        --code: #a86a12;
+        --code-soft: #f7eedd;
+        --stop: #b0443a;
+        --stop-soft: #f7e4e1;
+        --plain: #6b7780;
+        --plain-soft: #e9edee;
+        --sans:
+          'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          color-scheme: dark;
+          --paper: #121a1f;
+          --card: #1a242a;
+          --ink: #e4ecea;
+          --muted: #97a6ac;
+          --line: #33434a;
+          --model: #4fc2b6;
+          --model-soft: #173532;
+          --code: #e0a548;
+          --code-soft: #3a2e1a;
+          --stop: #ee7d71;
+          --stop-soft: #3d2320;
+          --plain: #9aa7ae;
+          --plain-soft: #243037;
+        }
+      }
+      :root[data-theme='dark'] {
+        color-scheme: dark;
+        --paper: #121a1f;
+        --card: #1a242a;
+        --ink: #e4ecea;
+        --muted: #97a6ac;
+        --line: #33434a;
+        --model: #4fc2b6;
+        --model-soft: #173532;
+        --code: #e0a548;
+        --code-soft: #3a2e1a;
+        --stop: #ee7d71;
+        --stop-soft: #3d2320;
+        --plain: #9aa7ae;
+        --plain-soft: #243037;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 15px/1.55 var(--sans);
+        padding: 40px 16px 64px;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        display: grid;
+        gap: 28px;
+      }
+
+      header h1 {
+        font-size: clamp(26px, 5vw, 34px);
+        line-height: 1.15;
+        font-weight: 600;
+        margin: 0 0 8px;
+        text-wrap: balance;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 62ch;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.86em;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .sw {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        border: 2px solid;
+      }
+      .sw.m {
+        background: var(--model-soft);
+        border-color: var(--model);
+      }
+      .sw.c {
+        background: var(--code-soft);
+        border-color: var(--code);
+      }
+      .sw.p {
+        background: var(--plain-soft);
+        border-color: var(--plain);
+      }
+      .sw.s {
+        background: var(--stop-soft);
+        border-color: var(--stop);
+      }
+
+      /* The flow: a spine of steps, each with an optional exit to the right. */
+      .flow {
+        display: grid;
+        gap: 0;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 36px minmax(0, 1fr) minmax(0, 220px);
+        gap: 0 14px;
+        align-items: start;
+      }
+      .rail {
+        position: relative;
+        align-self: stretch;
+        display: flex;
+        justify-content: center;
+      }
+      .rail::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--line);
+      }
+      .row:first-child .rail::before {
+        top: 18px;
+      }
+      .row:last-child .rail::before {
+        bottom: calc(100% - 18px);
+      }
+      .dot {
+        position: relative;
+        margin-top: 8px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--card);
+        border: 2px solid var(--line);
+        display: grid;
+        place-items: center;
+        font: 500 12px/1 var(--mono);
+        color: var(--muted);
+      }
+
+      .node {
+        background: var(--card);
+        border: 1.5px solid var(--line);
+        border-left-width: 1.5px;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 18px;
+      }
+      .node h3 {
+        margin: 0 0 4px;
+        font-size: 15.5px;
+        font-weight: 600;
+      }
+      .node p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .node .file {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11.5px;
+      }
+      .node.m {
+        background: var(--model-soft);
+        border-color: var(--model);
+      }
+      .node.c {
+        background: var(--code-soft);
+        border-color: var(--code);
+      }
+      .node.p {
+        background: var(--plain-soft);
+        border-color: var(--plain);
+      }
+      .node.s {
+        background: var(--stop-soft);
+        border-color: var(--stop);
+      }
+
+      .exit {
+        margin-top: 10px;
+        margin-bottom: 18px;
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 6px;
+        align-items: start;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .exit .arrow {
+        color: var(--line);
+        font-family: var(--mono);
+        line-height: 1.3;
+        font-size: 15px;
+      }
+      .exit b {
+        display: block;
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .exit.s b {
+        color: var(--stop);
+      }
+
+      /* The loop itself, drawn as a small cycle. */
+      .loop {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+      .pill {
+        background: var(--card);
+        border: 1.5px solid var(--model);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .pill b {
+        display: block;
+        font-weight: 600;
+      }
+      .pill span {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .pill.tool {
+        border-style: dashed;
+      }
+      .cyc {
+        font-family: var(--mono);
+        color: var(--model);
+        font-size: 13px;
+        text-align: center;
+        line-height: 1.2;
+      }
+      .choices {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 4px;
+        font-size: 13.5px;
+      }
+      .choices li {
+        display: grid;
+        grid-template-columns: 112px 1fr;
+        gap: 8px;
+      }
+      .choices code {
+        color: var(--model);
+        font-weight: 500;
+      }
+      .choices span {
+        color: var(--muted);
+      }
+
+      .stops {
+        margin-top: 12px;
+        border-top: 1px dashed var(--code);
+        padding-top: 10px;
+        font-size: 13px;
+      }
+      .stops strong {
+        color: var(--code);
+        font-weight: 600;
+      }
+      .stops ul {
+        margin: 6px 0 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .stops li {
+        background: var(--card);
+        border: 1px solid var(--code);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 12.5px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .floor {
+        margin-top: 10px;
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .bar {
+        display: grid;
+        grid-template-columns: 76px 1fr 44px;
+        gap: 8px;
+        align-items: center;
+      }
+      .bar i {
+        display: block;
+        height: 8px;
+        border-radius: 4px;
+        background: var(--code);
+      }
+      .bar em {
+        font-style: normal;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .bar span {
+        color: var(--muted);
+      }
+
+      .guard {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px 18px;
+      }
+      .guard h2 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .guard ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .guard li b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      @media (max-width: 640px) {
+        .row {
+          grid-template-columns: 28px minmax(0, 1fr);
+        }
+        .rail {
+          grid-row: span 2;
+        }
+        .row .exit {
+          grid-column: 2;
+          margin-top: -8px;
+        }
+        .row .exit:empty {
+          display: none;
+        }
+        .dot {
+          width: 22px;
+          height: 22px;
+          font-size: 11px;
+        }
+        .loop {
+          grid-template-columns: 1fr;
+        }
+        .cyc {
+          transform: rotate(90deg);
+        }
+        .choices li {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>How a question becomes an answer</h1>
+        <p>
+          The agentic RAG path in
+          <span class="mono">nextjs-rag-boilerplate</span>, as of v0.24.1. A
+          planner model chooses what to search for. The code decides when it has
+          to stop, what counts as evidence, and when to refuse.
+        </p>
+      </header>
+
+      <div class="legend" aria-label="Legend">
+        <span><i class="sw p"></i>Plain code, no AI</span>
+        <span><i class="sw m"></i>A model makes the choice</span>
+        <span><i class="sw c"></i>A hard limit the code enforces</span>
+        <span><i class="sw s"></i>Refusal path</span>
+      </div>
+
+      <div class="flow">
+        <div class="row">
+          <div class="rail"><div class="dot">1</div></div>
+          <div class="node p">
+            <h3>Should we search at all?</h3>
+            <p>
+              A pattern match on the message. Only obvious small talk skips the
+              search. Anything unclear searches.
+            </p>
+            <span class="file">route-intent.ts</span>
+          </div>
+          <div class="exit">
+            <span class="arrow">→</span>
+            <div>
+              <b>"thanks", "hi", "what can you do?"</b>Reply directly, no
+              search.
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="rail"><div class="dot">2</div></div>
+          <div class="node p">
+            <h3>Is it about a whole document?</h3>
+            <p>
+              "Summarise the handbook" is a request about a document, so there
+              is nothing to search for.
+            </p>
+            <span class="file">scope.ts</span>
+          </div>
+          <div class="exit">
+            <span class="arrow">→</span>
+            <div><b>Yes</b>Fetch the whole document and skip to step 5.</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="rail"><div class="dot">3</div></div>
+          <div class="node m">
+            <h3>The search loop</h3>
+            <p>
+              The planner sees the question, the last 4 chat turns, and what
+              earlier searches found. It rewrites follow-ups into full searches,
+              so "what about carrying it over?" becomes "carrying over annual
+              leave". With adaptive planning on, a standalone question skips the
+              planner and gets one plain search.
+            </p>
+
+            <div class="loop" aria-label="Planner loop">
+              <div class="pill">
+                <b>Planner decides</b><span>reads the results so far</span>
+              </div>
+              <div class="cyc">⇄</div>
+              <div class="pill tool">
+                <b>Run the tool</b
+                ><span>search the documents or read a figure</span>
+              </div>
+            </div>
+
+            <ul class="choices">
+              <li>
+                <code>search</code
+                ><span
+                  >Search the documents with a query it writes itself. For a
+                  two-part question it can ask for two at once, and they run
+                  together.</span
+                >
+              </li>
+              <li>
+                <code>read_figure</code
+                ><span
+                  >Ask a vision model a specific question about a chart. What it
+                  sees is kept for the answer.</span
+                >
+              </li>
+              <li>
+                <code>answer</code
+                ><span
+                  >"I have enough." It must search at least once first.</span
+                >
+              </li>
+            </ul>
+
+            <div class="stops">
+              <strong>The code stops the loop at the first of:</strong>
+              <ul>
+                <li>3 searches (it's told how many are left)</li>
+                <li>15 s, searches included (45 s with figures)</li>
+                <li>token budget spent</li>
+                <li>it repeats a search</li>
+                <li>planner says it's done</li>
+              </ul>
+            </div>
+            <span class="file">agentic.ts · agentic-run.ts · planner.ts</span>
+          </div>
+          <div class="exit">
+            <span class="arrow">→</span>
+            <div>
+              <b>Planner down or timed out</b>The code runs one plain search
+              with the question, so you still get an answer.
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="rail"><div class="dot">4</div></div>
+          <div class="node c">
+            <h3>Keep only strong evidence</h3>
+            <p>
+              Results are merged and duplicates dropped. Anything below the
+              relevance pass mark is thrown out. The pass mark rises with each
+              extra text search, because more tries give more chances to find an
+              irrelevant passage by luck. Reading a figure doesn't count, so it
+              can't push out the figure it read.
+            </p>
+            <div class="floor" aria-label="Pass mark by number of searches">
+              <div class="bar">
+                <span>1 search</span><i style="width: 35%"></i><em>0.35</em>
+              </div>
+              <div class="bar">
+                <span>2 searches</span><i style="width: 39%"></i><em>0.39</em>
+              </div>
+              <div class="bar">
+                <span>3 searches</span><i style="width: 43%"></i><em>0.43</em>
+              </div>
+            </div>
+            <span class="file">effectiveFloor() in agentic.ts</span>
+          </div>
+          <div class="exit"></div>
+        </div>
+
+        <div class="row">
+          <div class="rail"><div class="dot">5</div></div>
+          <div class="node s">
+            <h3>Anything left?</h3>
+            <p>
+              If no evidence survives, the user gets a fixed "I couldn't find
+              that" message. The writing model is never called, so it has
+              nothing to make up an answer from.
+            </p>
+            <span class="file">app/api/chat/route.ts</span>
+          </div>
+          <div class="exit s">
+            <span class="arrow">→</span>
+            <div><b>Nothing left</b>Fixed refusal. Done.</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="rail"><div class="dot">6</div></div>
+          <div class="node m">
+            <h3>Write the answer</h3>
+            <p>
+              The chat model streams an answer from the kept passages only,
+              citing each one as [1], [2] and so on. It also gets what the
+              planner took a follow-up to mean, and what any figure read showed,
+              labelled as a reading and cited as the figure.
+            </p>
+            <span class="file"
+              >prompt.ts · withFigureReadings() in agentic-run.ts</span
+            >
+          </div>
+          <div class="exit"></div>
+        </div>
+
+        <div class="row">
+          <div class="rail"><div class="dot">7</div></div>
+          <div class="node m">
+            <h3>Check the citations</h3>
+            <p>
+              One more model call checks whether each source really supports its
+              sentence. Unsupported sentences are removed and the corrected
+              answer replaces the streamed one. It runs once and never redrafts.
+              If the check fails, the answer stays as it was.
+            </p>
+            <span class="file">verify.ts</span>
+          </div>
+          <div class="exit s">
+            <span class="arrow">→</span>
+            <div><b>Every claim removed</b>Becomes the fixed refusal.</div>
+          </div>
+        </div>
+      </div>
+
+      <section class="guard">
+        <h2>What the planner can't do</h2>
+        <ul>
+          <li>
+            <b>Widen its access.</b> The server fixes which user and which
+            knowledge bases are allowed. The planner only supplies a search
+            query, plus a figure ID for <code>read_figure</code>, which the
+            server checks.
+          </li>
+          <li>
+            <b>Loop forever.</b> Every limit is checked before the next call,
+            and a slow call, a search included, is cut off when time runs out.
+          </li>
+          <li>
+            <b>Answer without evidence.</b> Refusing is a code path around the
+            loop. It isn't an instruction the model can be talked out of.
+          </li>
+        </ul>
+      </section>
+    </div>
+  </body>
+</html>

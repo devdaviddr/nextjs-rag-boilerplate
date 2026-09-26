@@ -1181,10 +1181,13 @@ whose only job is to emit the next search query as a tool call (a structured
 function call with typed arguments, instead of free text you would have to
 parse). The planner never writes the prose the user reads.
 
-It is behind `RAG_AGENTIC_ENABLED` and **off by default**. With the flag off the
+It is behind `RAG_AGENTIC_ENABLED`, **on by default**. With the flag off the
 fixed pipeline runs unchanged. The agentic path is roughly ten times slower and
 much better on follow-up and multi-hop questions; the measured trade is
 [below](#measured-agentic-vs-the-fixed-pipeline).
+
+For a one-page walk-through of the whole path, open
+[the agentic RAG diagram](agentic-rag-diagram.html) in a browser.
 
 The picture below has three bands: the router at the top, the bounded loop in
 the middle, and the floor-plus-refusal gate underneath it. The middle band is

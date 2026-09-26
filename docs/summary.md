@@ -53,7 +53,7 @@ Document chat (RAG) supports multiple independent knowledge bases per user, PDF
 upload and ingestion, and hybrid retrieval: dense `pgvector` HNSW and lexical
 `tsvector` GIN, fused with Reciprocal Rank Fusion. Answers carry page-level
 citations and are either grounded or refused. There is an optional agentic
-retrieval loop (`RAG_AGENTIC_ENABLED`, off by default) and an evaluation
+retrieval loop (`RAG_AGENTIC_ENABLED`, on by default) and an evaluation
 harness (`pnpm rag:eval`) that reports hit@k, MRR, refusal accuracy and
 cross-knowledge-base leakage. See [RAG](rag.md).
 
