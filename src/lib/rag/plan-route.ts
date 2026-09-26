@@ -16,9 +16,13 @@ import type { RewriteTurn } from './rewrite'
 
 export type PlanReason = 'follow-up' | 'multi-part' | 'standalone'
 
-/** Words that point back at something said earlier. */
+/**
+ * Words that point back at something said earlier. Includes the temporal
+ * ones (#106): "How long does the fire watch stay afterwards?" means after
+ * whatever the last turn was about.
+ */
 const REFERS_BACK =
-  /\b(it|its|it's|that|this|these|those|they|them|their|there|he|she|him|her|one|ones|same|above|earlier|previous|former|latter|else|instead)\b/i
+  /\b(it|its|it's|that|this|these|those|they|them|their|there|he|she|him|her|one|ones|same|above|earlier|previous|former|latter|else|instead|afterwards?|beforehand|meanwhile)\b/i
 
 /** Openings that only make sense as a reply to the last turn. */
 const REPLY_LEAD =

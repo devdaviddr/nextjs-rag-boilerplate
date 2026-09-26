@@ -8,6 +8,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Afterwards" follow-ups reach the planner**
+  ([#106](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/106)).
+  With `RAG_AGENTIC_ROUTE=adaptive`, a follow-up such as "How long does the
+  fire watch stay afterwards?" was treated as a standalone question and
+  searched word for word. "Afterwards", "beforehand" and "meanwhile" now count
+  as pointing back at the conversation.
+
 ## [0.24.1] - 2026-09-26
 
 ### Changed

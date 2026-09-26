@@ -74,6 +74,21 @@ describe('planRoute', () => {
     ).toBe(false)
   })
 
+  it('treats a temporal back-reference as a follow-up (#106)', () => {
+    for (const q of [
+      'How long does the fire watch stay afterwards?',
+      'When does the report come out afterward?',
+      'What do I need to do beforehand?',
+      'Who covers the desk in the meantime, meanwhile?',
+    ]) {
+      expect(planRoute(q, history)).toEqual({ plan: true, reason: 'follow-up' })
+    }
+    // With no conversation there is nothing to point back at.
+    expect(
+      planRoute('How long does the fire watch stay afterwards?', []).plan,
+    ).toBe(false)
+  })
+
   it('treats corrections and short replies as follow-ups', () => {
     expect(planRoute('No, I meant the night shift rate.', history).plan).toBe(
       true,
