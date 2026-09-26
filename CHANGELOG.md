@@ -8,6 +8,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- The helper that removes a deleted user's stored files is no longer
+  reachable as a Server Action; it now runs only from the admin-checked
+  delete-user path (#125).
+
 ## [0.26.0] - 2026-09-26
 
 ### Added

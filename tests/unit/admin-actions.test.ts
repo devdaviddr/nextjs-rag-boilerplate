@@ -46,7 +46,7 @@ vi.mock('@/lib/auth/password', () => ({
 }))
 
 const mockDeleteAllFilesForUser = vi.fn()
-vi.mock('@/lib/storage/actions', () => ({
+vi.mock('@/lib/storage/cleanup', () => ({
   deleteAllFilesForUser: (...args: unknown[]) =>
     mockDeleteAllFilesForUser(...args),
 }))

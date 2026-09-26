@@ -12,7 +12,7 @@ import { inviteEmail } from '@/lib/email/templates'
 import { env } from '@/lib/env'
 import { AUTH_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
-import { deleteAllFilesForUser } from '@/lib/storage/actions'
+import { deleteAllFilesForUser } from '@/lib/storage/cleanup'
 import { headers } from 'next/headers'
 import {
   createUserSchema,
