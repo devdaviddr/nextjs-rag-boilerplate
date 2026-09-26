@@ -232,7 +232,7 @@ jobs:
   # `release` job).
   docker:
     name: Build image (${{ matrix.platform }})
-    timeout-minutes: 20
+    timeout-minutes: 25
     needs: [plan, quality]
     if: >-
       !cancelled() && needs.quality.result != 'failure'
@@ -286,6 +286,51 @@ jobs:
           outputs: ${{ needs.plan.outputs.publish == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.APP_IMAGE) || 'type=cacheonly' }}
           cache-from: type=gha,scope=app-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=app-${{ env.PLATFORM_PAIR }}
+
+      # Vulnerability scan of the app image (#117). The build above is
+      # cache-only or pushed by digest, so load the same image into the local
+      # daemon first: every layer comes from the builder's cache, no rebuild.
+      - name: Load app for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            APP_GIT_SHA=${{ github.sha }}
+          load: true
+          tags: app-scan:${{ env.PLATFORM_PAIR }}
+          cache-from: type=gha,scope=app-${{ env.PLATFORM_PAIR }}
+
+      # Report fixable HIGH and CRITICAL findings (OS packages and node_modules)
+      # as a table in the log. Never fails the job.
+      # trivy-action is pinned to a commit, not a tag: a tag can be moved.
+      - name: Scan app image (report HIGH, CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: app-scan:${{ env.PLATFORM_PAIR }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: '0'
+
+      # Blocks on a CRITICAL finding that has a fix, like `pnpm audit
+      # --audit-level=critical` above. Unfixed findings can't be acted on, so
+      # they don't block; HIGH is reported by the step above.
+      - name: Scan app image (gate on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: app-scan:${{ env.PLATFORM_PAIR }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: '1'
+          skip-setup-trivy: true
 
       # migrate image (`builder` target — the only one that can run `db:migrate`)
       - name: Build migrate (${{ matrix.platform }})
