@@ -1083,6 +1083,21 @@ first right-page result is a parent holding every `sectionMustContain` phrase,
 drawn from different paragraphs of the section. Its questions run against
 `records-policy`, the one corpus document with real headings.
 
+`--compare --answers` also checks the answers written from the agentic pass's
+retrieval, reported apart from the fixed pipeline's, since follow-ups only
+resolve on that path. `--compare --label <name>` saves `<name>.json` and
+`<name>-agentic.json` in place of `baseline.json` and `agentic.json`, so a run
+with different settings (cracking on, say) does not overwrite the recorded
+baseline.
+
+Two more question types sit outside the headline pool (#102). A **summary**
+question (`type: "summary"`) is a whole-document request that passes only when
+every page in `summaryPages` came back. Its questions run against
+`contractor-safety-manual`, thirty one-page sections, which is longer than the
+`RAG_DOC_SCOPE_MAX_CHUNKS` (24) a whole-document request loads. A **refusal**
+question (`type: "refusal"`) is a standalone question the corpus cannot answer,
+added after the original twenty. Several name a real document title.
+
 The corpus is three documents that deliberately overlap. The handbook's fire
 assembly point and the facilities guide's staff parking are both on Wellington
 Street, and both the handbook and the contract discuss notice. Those near-misses
