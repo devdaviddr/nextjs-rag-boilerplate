@@ -8,6 +8,18 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Removed
+
+- **HyDE (search with a drafted answer)**
+  ([#27](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/27),
+  spec 0033). The toggle is gone from Settings → Retrieval & answering, the
+  HyDE job from Settings → Models, and `RAG_HYDE_ENABLED` and `RAG_HYDE_MODEL`
+  from `.env`. It made up answers to questions your documents cannot answer,
+  which could stop the app from saying "I don't know"; it guessed the wrong
+  document when asked for a summary; and it roughly doubled the wait for the
+  first word. Values already saved for it are ignored, and the two env vars
+  can be deleted.
+
 ## [0.25.0] - 2026-09-26
 
 ### Added

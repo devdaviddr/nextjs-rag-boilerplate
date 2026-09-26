@@ -365,6 +365,13 @@ floor low enough to admit it would admit junk on every other question. So
 `src/lib/rag/scope.ts` routes whole-document requests to retrieval by document
 instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
 
+HyDE (searching with a drafted answer instead of the question) was built as
+the other fix for this and then removed (#27). It invented answers to
+unanswerable questions, which pushed them over the floor and put refusal at
+risk; it invented the wrong document for "summarise this document", the case
+it was meant to fix; and it roughly doubled time to first token. The reasoning
+is in spec 0033, step 1g.
+
 A whole-document request reads at most `RAG_DOC_SCOPE_MAX_CHUNKS` (24)
 passages. A longer document is read across its sections, not from the start:
 each section's first passage (a run under one heading, or a page where none
@@ -1334,8 +1341,8 @@ Budgets are checked **before** each expensive call, never after, because
 checking afterwards lets each bound be exceeded by exactly one call. Each call
 also carries a signal composed from the time the loop has left, so
 `RAG_MAX_LOOP_MS` bounds work already in flight instead of only deciding whether
-to start more. That includes searches (#92): the query embedding (and HyDE, when
-on) is cut off at the budget, and so are the fallback searches when the planner
+to start more. That includes searches (#92): the query embedding is cut off at
+the budget, and so are the fallback searches when the planner
 is down. Underneath that, every inference request has a **60-second
 per-attempt deadline**. `fetch` has no timeout of its own, and without one a
 stalled endpoint hung a request indefinitely while the loop budget did nothing

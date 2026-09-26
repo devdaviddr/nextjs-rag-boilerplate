@@ -75,12 +75,6 @@ export const RETRIEVAL_GROUPS: readonly RetrievalGroup[] = [
         kind: 'boolean',
       },
       {
-        key: 'RAG_HYDE_ENABLED',
-        label: 'Search with a drafted answer (HyDE)',
-        help: 'Drafts a likely answer first and searches with that. Costs one model call per question.',
-        kind: 'boolean',
-      },
-      {
         key: 'RAG_DOC_SCOPE_MAX_CHUNKS',
         label: 'Passages for a whole-document request',
         help: 'How much of a document "Summarise the handbook" can read, in passages.',

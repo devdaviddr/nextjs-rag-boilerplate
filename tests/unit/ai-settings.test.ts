@@ -124,6 +124,20 @@ describe('aiSettings', () => {
     expect(s.RAG_MIN_SIMILARITY).toBe(0.4)
   })
 
+  it('ignores rows left over from a removed setting', async () => {
+    // HyDE was removed (#27); a database that saved its settings still has
+    // the rows, and loading must skip them rather than fail.
+    rows.set('RAG_HYDE_ENABLED', 'true')
+    rows.set('RAG_HYDE_MODEL', 'old/hyde')
+    rows.set('connection:hyde', 'env')
+    rows.set('RAG_TOP_K', '5')
+    await refreshAiSettings()
+    const s = aiSettings() as unknown as Record<string, unknown>
+    expect(s.RAG_TOP_K).toBe(5)
+    expect(s).not.toHaveProperty('RAG_HYDE_ENABLED')
+    expect(s).not.toHaveProperty('RAG_HYDE_MODEL')
+  })
+
   it('drops saved chunk sizes that would break the chunker', async () => {
     rows.set('RAG_CHUNK_OVERLAP_TOKENS', '600')
     await refreshAiSettings()

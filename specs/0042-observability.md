@@ -92,6 +92,10 @@ plain-language explanation.
   (queries, result counts, scores). Ingestion produces a run too, with
   extract, parse, embed and store steps. Full question and passage text are
   kept (decision 2).
+
+  > HyDE was removed after this shipped (#27), so there is no `hyde` step or
+  > HyDE log line any more.
+
 - **FR9 — Run view.** `/observability/runs/[id]`: a waterfall of the steps,
   with a scrubber to replay the run step by step; each step expands to its
   details; links to its log lines and its conversation.

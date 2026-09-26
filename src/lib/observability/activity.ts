@@ -91,9 +91,6 @@ export function plainLine(
       ? `Re-ordered the passages by relevance; a different one came out on top`
       : `Re-ordered the passages by relevance`
   }
-  if (message.startsWith('HyDE drafted')) {
-    return 'Drafted an example answer to search with'
-  }
   if (message === 'Agentic retrieval') {
     const searches = num(meta.searches) ?? 0
     const chunks = num(meta.chunkCount) ?? 0
@@ -147,8 +144,6 @@ export function plainLine(
   }
   if (message.startsWith('rerank'))
     return 'Reranking failed; kept the search order'
-  if (message.startsWith('hyde'))
-    return 'HyDE failed; searched with the question itself'
   return message
 }
 

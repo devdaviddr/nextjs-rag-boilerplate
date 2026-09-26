@@ -15,7 +15,6 @@ const { isAdmin, store, mockEnv } = vi.hoisted(() => ({
     RAG_LLM_BASE_URL: 'https://integrate.api.nvidia.com/v1',
     RAG_CHAT_MODEL: 'env/chat',
     RAG_PLANNER_MODEL: 'env/planner',
-    RAG_HYDE_MODEL: 'env/hyde',
     RAG_VISION_MODEL: 'env/vision',
     RAG_PARSE_MODEL: 'env/parse',
     RAG_EMBED_MODEL: 'env/embed',

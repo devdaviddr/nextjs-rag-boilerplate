@@ -25,14 +25,6 @@ export const ROLE_LABELS: Record<
       'When the reranker is set to use a model, this is the model that scores the passages too.',
     ],
   },
-  hyde: {
-    label: 'HyDE',
-    help: 'Drafts a hypothetical passage to search with, when HyDE is on.',
-    details: [
-      'HyDE means Hypothetical Document Embeddings. With it on, this model first writes a short, made-up passage that looks like what an answer might say, and the app searches with that instead of the question as typed.',
-      'It helps when people ask things in very different words from the documents. It costs one extra model call per question, and it only runs when HyDE is switched on.',
-    ],
-  },
   vision: {
     label: 'Vision',
     help: 'Describes figures and reads charts, when cracking or read-figure is on.',

@@ -21,7 +21,7 @@ const RULES: [RegExp, LogCategory][] = [
   [/^ai-settings:/i, 'settings'],
   [/^agentic|planner|^agent\b/i, 'agent'],
   [/^inference request|^upstream error|drafting/i, 'inference'],
-  [/rerank|hyde|retriev|search|citation/i, 'retrieval'],
+  [/rerank|retriev|search|citation/i, 'retrieval'],
   [
     /ingest|crack|pars(e|er)|figure|page|document|extract|embed|chunk/i,
     'ingestion',
