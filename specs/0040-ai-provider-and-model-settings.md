@@ -4,7 +4,7 @@ title: Configure the AI provider and models from Settings
 status: Proposed
 release: '—'
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # 0040 — Configure the AI provider and models from Settings
@@ -49,8 +49,8 @@ llama.cpp server in the house.
 
 - Point the app at any OpenAI-compatible endpoint: NVIDIA NIM, OpenAI, a local
   Ollama / vLLM / LM Studio server, or a custom URL.
-- Choose the connection and model per job: chat, planner, embeddings, HyDE,
-  vision, parse.
+- Choose the connection and model per job: chat, planner, embeddings,
+  vision, parse. (HyDE was a job here until it was removed, #27.)
 - Change retrieval and answering settings (toggles and limits) safely.
 - Keep `.env` configuration fully supported, and lockable.
 
@@ -70,8 +70,8 @@ llama.cpp server in the house.
   _connections_: name, preset (NVIDIA NIM, OpenRouter, llama.cpp, OpenAI,
   Ollama, vLLM/LM Studio, Custom), base URL, API key. The key is encrypted at rest and never returned to the
   browser. **Test** calls `GET {base}/models`.
-- **FR2 — Model roles.** Chat, planner, HyDE, vision and parse each select a
-  connection and a model. The model picker is filled from the connection's
+- **FR2 — Model roles.** Chat, planner, vision and parse each select a
+  connection and a model (HyDE was one until it was removed, #27). The model picker is filled from the connection's
   `/models`, with free text allowed. **Test** sends a 3-token completion and
   reports latency.
 - **FR3 — Embeddings.** The embedding role also checks the model returns 2048
@@ -79,7 +79,8 @@ llama.cpp server in the house.
   every ready document through the resumable ingestion path (spec 0034), shows
   progress, and keeps queries on the old model until the swap completes.
 - **FR4 — Retrieval and answering.** Toggles: agentic, rerank (backend, local
-  model), parent assembly, HyDE, cracking, read-figure. Numbers: top-k, minimum
+  model), parent assembly, cracking, read-figure (and HyDE, until #27 removed
+  it). Numbers: top-k, minimum
   similarity, hybrid candidates, RRF k, loop searches / ms / tokens, rerank
   candidates, chunk tokens / overlap. Each is validated by the same bounds as
   `src/lib/env.ts`; settings that only affect new uploads say so and offer
@@ -231,7 +232,8 @@ environment's exactly.
   display. The `.env` endpoint is not a row: it is the built-in "Environment"
   connection, read-only on the page, which is what an existing deployment sees
   with no setup (FR9).
-- **Jobs** are chat, planner, HyDE, vision, parse and embed. Each call site
+- **Jobs** are chat, planner, vision, parse and embed (HyDE was removed,
+  #27; a leftover `connection:hyde` row is ignored). Each call site
   names its job (`createChatCompletion(…, { role: 'planner' })`) and the
   client resolves the connection and model, so a saved change applies to the
   next request. Which connection a job uses is an `ai_settings` row,

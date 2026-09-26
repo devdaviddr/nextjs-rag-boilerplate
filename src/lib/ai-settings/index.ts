@@ -49,20 +49,12 @@ export const TTL_MS = 30_000
  * setting; all but embeddings can also be pointed at a saved connection.
  * The reranker's `llm` backend is the planner's job.
  */
-export const AI_ROLES = [
-  'chat',
-  'planner',
-  'hyde',
-  'vision',
-  'parse',
-  'embed',
-] as const
+export const AI_ROLES = ['chat', 'planner', 'vision', 'parse', 'embed'] as const
 export type AiRole = (typeof AI_ROLES)[number]
 
 export const ROLE_MODEL_KEY = {
   chat: 'RAG_CHAT_MODEL',
   planner: 'RAG_PLANNER_MODEL',
-  hyde: 'RAG_HYDE_MODEL',
   vision: 'RAG_VISION_MODEL',
   parse: 'RAG_PARSE_MODEL',
   embed: 'RAG_EMBED_MODEL',
@@ -75,7 +67,6 @@ export const ROLE_MODEL_KEY = {
 export const CONNECTABLE_ROLES = [
   'chat',
   'planner',
-  'hyde',
   'vision',
   'parse',
 ] as const satisfies readonly AiRole[]

@@ -107,7 +107,7 @@ Admins get a **Configuration** section in **Settings** (spec 0040):
   **Test** lists the endpoint's models; for OpenRouter the model picker also
   shows each model's context length and price, and requests carry its
   optional attribution headers.
-- **Models** sets the connection and model for each job: chat, planner, HyDE,
+- **Models** sets the connection and model for each job: chat, planner,
   vision and page parsing. A change applies to the next request, with no
   restart. **Test** tries the job as configured: a streamed answer for chat, a
   short completion, a tool call for the planner (a llama.cpp planner without
@@ -116,7 +116,7 @@ Admins get a **Configuration** section in **Settings** (spec 0040):
   the change.
 - **Retrieval & answering** holds the switches and limits behind search:
   passages per answer, the relevance floor, agentic search and its limits,
-  reranking, HyDE, and how documents are processed. Each is saved on its own,
+  reranking, and how documents are processed. Each is saved on its own,
   applies to the next question, and is refused with the allowed range if out
   of bounds. Passage size and document cracking affect documents uploaded
   after the change.
@@ -154,7 +154,7 @@ coloured badge (error, warn, info, debug), the area as a coloured stripe
 (agent, retrieval, inference, ingestion, auth, settings, system), and the full
 details a click away. Every line written while answering one question shares a
 request id, so one click shows that question's whole story: what the planner
-chose, what each search found, reranking, HyDE, and any provider errors and
+chose, what each search found, reranking, and any provider errors and
 retries. Lines are kept in Postgres for `LOG_RETENTION_DAYS` (7 by default),
 with API keys and other secrets removed before they are stored.
 

@@ -4,7 +4,7 @@ title: The retrieval fundamentals that were skipped
 status: Proposed
 release: '—'
 created: 2026-09-10
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # 0033 — The retrieval fundamentals that were skipped
@@ -90,7 +90,8 @@ the same problem, neither measured against the other.
   of total chunks, and `hnsw.iterative_scan` is set on evidence.
 - **FR6** — HyDE is implemented behind a flag and measured **against**
   `scope.ts` on the same questions. Whichever loses is removed or left off with
-  the numbers recorded.
+  the numbers recorded. _Resolved without the head-to-head: HyDE was removed
+  (#27), for the reasons under 1g — decision._
 
 ### Non-functional
 
@@ -323,6 +324,7 @@ believes it was measured.
 > hit@1 0.941 and refusal 1.000 on 2026-09-25; the HyDE-alone and both runs were
 > stopped part-way at the owner's request, and the whole-document questions
 > they needed were not merged. The 1g criteria stay open (#27).
+> _(2026-09-26: closed by removing HyDE instead — see 1g — decision.)_
 
 ### 1g — HyDE versus `scope.ts`
 
@@ -377,6 +379,35 @@ three places in `eval/run.ts`. A `RAG_SCOPE_ENABLED` flag that nothing reads was
 deliberately NOT added; shipping config that silently does nothing is the same
 defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
 
+### 1g — decision: HyDE is removed (2026-09-26)
+
+HyDE is deleted, not hidden (#27): `src/lib/rag/hyde.ts`, `RAG_HYDE_ENABLED`,
+`RAG_HYDE_MODEL`, the HyDE model job in Settings → Models, the toggle in
+Settings → Retrieval & answering, and its step in retrieval. `scope.ts` stays
+as the fix for whole-document requests. The reasons:
+
+1. **Refusal risk.** It writes a plausible answer to a question the corpus
+   cannot answer, and that answer embeds closer to real passages than the
+   question does, pushing similarity **up** on a question that must refuse
+   (the parental-leave case above). Refusal accuracy is the strongest
+   guarantee this system makes (NFR2); HyDE's failure mode aims at it.
+2. **It failed the case it was meant for.** Asked to summarise a document, it
+   invented a different document from the title.
+3. **Latency.** One generation before the embedding, the search and the
+   answer: a median 9.5s, roughly doubling time to first token.
+4. **The head-to-head could not run.** `resolveScope` always runs, so "HyDE
+   alone" was never selectable, and adding a real `scope.ts` switch to measure
+   a feature the evidence already argued against was not worth its cost.
+5. **It had stopped being an experiment.** Since 2026-09-26 (`e9dae5a`)
+   `RAG_HYDE_ENABLED` was a toggle in Settings, so an admin could turn on a
+   feature whose refusal accuracy had never been measured.
+
+What remains is the configuration already measured on 2026-09-25 — `scope.ts`
+alone, HyDE off: hit@1 0.941, refusal 1.000. Saved settings rows for the removed
+keys (`RAG_HYDE_ENABLED`, `RAG_HYDE_MODEL`, `connection:hyde`) are ignored on
+load, not an error. If HyDE is ever revisited it needs its own spec, a real
+`scope.ts` switch, and refusal measured before it reaches Settings.
+
 ## Acceptance criteria
 
 - [x] Token counts are within a stated tolerance of the provider's own
@@ -400,9 +431,13 @@ defect as [`0036`](0036-reranking.md)'s inert `RAG_RERANK_CANDIDATES`.
       questions return an assembled parent at rank 1 (parent@1 2/2, 2026-09-25)
 - [x] `pnpm rag:eval` after 1c alone, recorded — single-hop hit@1 0.941,
       MRR 0.941, refusal 1.000, cross-KB leakage 0 (see _1c — measured_)
-- [ ] HyDE measured alone, `scope.ts` measured alone, and both together, on the
-      same questions — the loser removed or disabled with numbers stated
-- [ ] Refusal accuracy is 1.000 at every one of those checkpoints
+- [x] ~~HyDE measured alone, `scope.ts` measured alone, and both together, on
+      the same questions — the loser removed or disabled with numbers stated~~
+      — superseded: HyDE removed without the head-to-head (#27), see _1g —
+      decision_
+- [x] ~~Refusal accuracy is 1.000 at every one of those checkpoints~~ —
+      superseded with the criterion above; the one configuration left
+      (`scope.ts` alone) measured refusal 1.000 on 2026-09-25
 - [x] Chunks still never span a page boundary — `tests/unit/rag-chunk.test.ts`,
       _"never lets a chunk span a page boundary"_ and _"still never lets a chunk
       span a page boundary when boxed"_, the second added with

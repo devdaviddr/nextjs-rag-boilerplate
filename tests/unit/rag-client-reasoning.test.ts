@@ -69,7 +69,7 @@ describe('RAG_PLANNER_REASONING', () => {
     const bodies = capture()
     await createChatCompletion([{ role: 'user', content: 'q' }])
     await createChatCompletion([{ role: 'user', content: 'q' }], {
-      role: 'hyde',
+      role: 'vision',
     })
     for (const b of bodies) expect(b).not.toHaveProperty('chat_template_kwargs')
   })

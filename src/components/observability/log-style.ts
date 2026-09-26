@@ -54,7 +54,7 @@ export const CATEGORY_STYLE: Record<
     stripe: 'border-l-teal-500',
     text: 'text-teal-700 dark:text-teal-300',
     chip: 'bg-teal-500',
-    help: 'Searches, reranking, HyDE and citation checks.',
+    help: 'Searches, reranking and citation checks.',
   },
   inference: {
     label: 'Inference',

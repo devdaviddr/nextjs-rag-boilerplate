@@ -130,7 +130,6 @@ test('every AI setting explains itself: hover, click and keyboard', async ({
   for (const job of [
     'Chat',
     'Planner',
-    'HyDE',
     'Vision',
     'Page parser',
     'Embeddings',

@@ -7,7 +7,6 @@ import type { ChunkKind } from '@/db/schema'
 import { activeEmbedding, aiSettings } from '@/lib/ai-settings'
 import { embedQuery } from './embed'
 import { generationLiteral, halfvecType } from './generation-sql'
-import { hypotheticalQuery } from './hyde'
 import {
   type PageRow,
   collapseParents,
@@ -98,9 +97,9 @@ export interface RetrieveOptions {
    */
   assembleParents?: boolean
   /**
-   * Cuts off the model calls this search makes (HyDE, the query embedding),
-   * e.g. at the agentic loop's time budget (#92). The database query itself
-   * is not interruptible and is fast next to either.
+   * Cuts off the model call this search makes (the query embedding), e.g.
+   * at the agentic loop's time budget (#92). The database query itself is
+   * not interruptible and is fast next to it.
    */
   signal?: AbortSignal
 }
@@ -278,41 +277,15 @@ export async function retrieveForOwner(
     CANDIDATE_POOL_CEILING,
   )
 
-  // HyDE (spec 0033 FR6): embed a hypothetical ANSWER rather than the
-  // question, because an answer looks more like the passage containing it.
-  // Returns null when disabled or when the generation failed in any way, and
-  // null means "embed the question" — so with RAG_HYDE_ENABLED off this is one
-  // falsy check and the embedding call below is exactly what it always was.
-  //
-  // The hypothetical replaces the question for the WHOLE vector channel: it
-  // orders the ANN scan and it is what `similarity` below is measured against.
-  // That is deliberate and it is why the flag is off by default — hyde.ts
-  // explains why pinning the gate to the question's own vector instead would
-  // make HyDE unevaluable, and what re-measuring it therefore costs.
-  //
-  // The LEXICAL channel deliberately keeps the real question. A hypothetical
-  // is invented vocabulary, and feeding invented terms to `to_tsquery` would
-  // have the lexical channel vote for passages matching words the user never
-  // typed — the one channel whose value is that it matches what was actually
-  // asked.
   // Each stage is a step of the current run, if there is one (spec 0042).
   // The generation this search reads, read once (#56): the question is
   // embedded with its model and compared at its size, even if a swap lands
   // while this runs.
   const active = activeEmbedding()
 
-  const hypothetical = aiSettings().RAG_HYDE_ENABLED
-    ? await span('hyde', async (step) => {
-        const drafted = await hypotheticalQuery(question, {
-          signal: options.signal,
-        })
-        step.set({ drafted: drafted !== null, passage: drafted })
-        return drafted
-      })
-    : null
   const queryVector = toVectorLiteral(
     await span('embed-question', () =>
-      embedQuery(hypothetical ?? question, options.signal, active),
+      embedQuery(question, options.signal, active),
     ),
   )
 

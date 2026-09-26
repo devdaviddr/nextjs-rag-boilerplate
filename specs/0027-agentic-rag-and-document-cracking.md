@@ -323,6 +323,11 @@ for what [`0025`](0025-rag-knowledge-base-and-chat.md) patched with a regex in
 Costs one small generation per query. Evaluate against the regex path rather
 than assuming it wins: the deterministic path is free and currently works.
 
+> **Update (2026-09-26):** built under [`0033`](0033-retrieval-fundamentals.md)
+> and then removed (#27): it invented answers to unanswerable questions, put
+> the wrong document in place of a summary, and doubled time to first token.
+> `scope.ts` stays. See 0033, _1g — decision_.
+
 ### 1f. Reranking — blocked, and worth stating why
 
 A cross-encoder reranker over the top 25 is normally the highest-precision

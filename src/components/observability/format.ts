@@ -62,7 +62,6 @@ export const STEP_LABEL: Record<string, string> = {
   retrieve: 'Find passages',
   plan: 'Planner decides',
   search: 'Search',
-  hyde: 'HyDE draft',
   'embed-question': 'Embed question',
   'search-index': 'Search the index',
   rerank: 'Rerank',
