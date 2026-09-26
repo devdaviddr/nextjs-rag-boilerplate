@@ -589,6 +589,191 @@ DOCS['records-policy.pdf'] = [
   },
 ]
 
+// --- #102: a document longer than RAG_DOC_SCOPE_MAX_CHUNKS -----------------
+//
+// Thirty one-page sections, so thirty chunks: more than the 24 a whole-document
+// request loads. A summary of it that only ever sees the first 24 chunks
+// misses sections 25-30, and the `summary` questions are built to show that.
+//
+// Four sections are permits, each signed off by a DIFFERENT role. That is what
+// the follow-up answer checks lean on: "Who signs it off?" is only answerable
+// correctly if the writer knows which permit "it" is.
+//
+// Vocabulary was checked against every unanswerable question: no night shift,
+// no parking, no bonus, no public holiday, no assembly point.
+const CONTRACTOR_SECTIONS = [
+  [
+    'INTRODUCTION',
+    'This manual applies to every contractor working on company sites.',
+    'It is issued by the Site Safety Office and reviewed every two years.',
+    'Contractors must read it before their first day on site.',
+  ],
+  [
+    'SITE INDUCTION',
+    'Every contractor completes a site induction before starting work.',
+    'The induction takes 90 minutes and is valid for twelve months.',
+    'Induction cards must be carried at all times on site.',
+  ],
+  [
+    'PERSONAL PROTECTIVE EQUIPMENT',
+    'Steel capped boots, a hard hat and safety glasses are required in all work zones.',
+    'Hearing protection is required where noise exceeds 85 decibels.',
+    'Contractors supply their own protective equipment unless the work order says otherwise.',
+  ],
+  [
+    'SUPERVISION',
+    'Each contractor crew nominates a leading hand before work starts.',
+    'The leading hand is the contact point for the site supervisor.',
+  ],
+  [
+    'HOT WORK PERMITS',
+    'Welding, grinding and cutting require a hot work permit.',
+    'A hot work permit is valid for one shift of up to 8 hours.',
+    'Hot work permits are signed off by the duty engineer.',
+    'A fire watch stays for 60 minutes after hot work ends.',
+  ],
+  [
+    'CONFINED SPACES',
+    'Entry to a tank, pit or vault requires a confined space permit.',
+    'The atmosphere is tested for oxygen and gas before every entry.',
+    'Confined space permits are signed off by the entry supervisor.',
+    'A confined space permit is valid for 4 hours.',
+  ],
+  [
+    'WORKING AT HEIGHTS',
+    'A harness is required for any work above 2 metres without edge protection.',
+    'Harnesses are inspected every six months and tagged.',
+    'Working at heights permits are signed off by the rigging coordinator.',
+  ],
+  [
+    'SCAFFOLDING',
+    'Only licensed scaffolders may erect or alter scaffolding.',
+    'Scaffolds are inspected every 30 days and after storms.',
+    'A green scaffold tag means the scaffold is safe to use.',
+  ],
+  [
+    'ELECTRICAL ISOLATION',
+    'Equipment is isolated and locked out before maintenance.',
+    'Each worker applies a personal danger lock and tag.',
+    'Only the person who applied a lock may remove it.',
+  ],
+  [
+    'PORTABLE ELECTRICAL EQUIPMENT',
+    'Portable tools and leads are tested and tagged every three months.',
+    'Untagged equipment is removed from site.',
+  ],
+  [
+    'HAZARDOUS CHEMICALS',
+    'A safety data sheet must be on site for every chemical brought in.',
+    'Chemicals are stored in the bunded store behind Building C.',
+  ],
+  [
+    'ASBESTOS',
+    'The asbestos register is held by the Site Safety Office.',
+    'Check the register before drilling or cutting any wall or ceiling.',
+    'Suspected asbestos stops work immediately.',
+  ],
+  [
+    'EXCAVATION',
+    'Any dig deeper than 300 millimetres needs a buried services search first.',
+    'Excavation permits are signed off by the civil engineer.',
+    'Trenches deeper than 1.5 metres must be shored or battered.',
+  ],
+  [
+    'CRANE LIFTS',
+    'Every crane lift needs a lift plan approved the day before.',
+    'Lifts stop when wind gusts exceed 40 kilometres per hour.',
+  ],
+  [
+    'MOBILE PLANT',
+    'Forklifts and elevated work platforms are operated only by licence holders.',
+    'Plant is pre-start checked at the beginning of each shift.',
+    'The site speed limit for plant is 10 kilometres per hour.',
+  ],
+  [
+    'TRAFFIC MANAGEMENT',
+    'Pedestrian walkways are marked in yellow and must be kept clear.',
+    'Reversing plant requires a spotter.',
+  ],
+  [
+    'NOISE AND VIBRATION',
+    'Noisy work is limited to 7am to 5pm on weekdays.',
+    'Jackhammer use is rotated between workers every 30 minutes.',
+  ],
+  [
+    'DUST AND SILICA',
+    'Cutting concrete or stone requires water suppression or on-tool extraction.',
+    'P2 respirators are required during dry cutting.',
+  ],
+  [
+    'MANUAL HANDLING',
+    'Loads over 20 kilograms require a two person lift or a mechanical aid.',
+  ],
+  [
+    'HOUSEKEEPING',
+    'Work areas are cleaned at the end of every shift.',
+    'Waste is separated into general, metal and timber skips.',
+  ],
+  [
+    'FIRST AID',
+    'Each crew of five or more carries a first aid kit.',
+    'The site first aid room is next to the gatehouse.',
+  ],
+  [
+    'HEAT STRESS',
+    'When the temperature exceeds 35 degrees, crews take a 10 minute break every hour.',
+    'Cool drinking water is provided at the gatehouse.',
+  ],
+  [
+    'TEMPORARY LIGHTING',
+    'Temporary lighting must provide at least 160 lux in work areas.',
+    'Lighting leads are run overhead, never across walkways.',
+  ],
+  [
+    'ENVIRONMENTAL CONTROLS',
+    'Spill kits are kept at every chemical store and refuelling point.',
+    'Stormwater drains are covered during concrete washout.',
+  ],
+  [
+    'SUBCONTRACTORS',
+    'A contractor may engage a subcontractor only with written approval from the site supervisor.',
+    'Subcontractors complete the same site induction.',
+  ],
+  [
+    'INSURANCE',
+    'Contractors hold public liability cover of at least 20 million dollars.',
+    'Certificates of currency are provided before the first day on site.',
+  ],
+  [
+    'AUDITS',
+    'The Site Safety Office audits each contractor at least once a quarter.',
+    'Audit findings rated high must be closed within 7 days.',
+  ],
+  [
+    'NON-COMPLIANCE',
+    'A first breach of this manual results in a written warning.',
+    'A second breach within twelve months removes the contractor from site for 14 days.',
+    'A serious breach ends the contract.',
+  ],
+  [
+    'CLOSING OUT WORK',
+    'When work is finished, permits are returned and signed closed.',
+    'The leading hand walks the area with the site supervisor before handover.',
+  ],
+  [
+    'REVIEW OF THIS MANUAL',
+    'This manual was last revised in March 2026.',
+    'Feedback on the manual goes to the Site Safety Office.',
+  ],
+]
+
+DOCS['contractor-safety-manual.pdf'] = CONTRACTOR_SECTIONS.map(
+  ([topic, ...lines], i) => [
+    `CONTRACTOR SAFETY MANUAL - SECTION ${i + 1} - ${topic}`,
+    ...lines,
+  ],
+)
+
 DOCS['site-operations-report.pdf'] = SITE_REPORT_PAGES
 DOCS['maintenance-log.pdf'] = MAINTENANCE_LOG_PAGES
 

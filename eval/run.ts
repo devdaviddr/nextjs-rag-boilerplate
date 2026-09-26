@@ -87,6 +87,10 @@ import { deleteObjectsUnderPrefix, putObject } from '@/lib/storage/client'
  *                                 # ONE comparison carrying both passes'
  *                                 # quality AND cost; gate on refusal accuracy
  *                                 # in the SAME run (0029 NFR3)
+ *   pnpm rag:eval --compare --label figures
+ *                                 # the same, saved as
+ *                                 # eval/results/{figures,figures-agentic}.json
+ *                                 # so the recorded baseline is kept (#102)
  */
 
 const EVAL_USER_ID = 'eval-harness-user'
@@ -142,6 +146,8 @@ const KNOWLEDGE_BASES = [
       'site-operations-report',
       'maintenance-log',
       'plant-services-manual',
+      // #102: thirty sections, longer than a whole-document request loads.
+      'contractor-safety-manual',
     ],
   },
 ] as const
@@ -172,7 +178,16 @@ interface AnswerFact {
 }
 
 type QuestionType =
-  'single-hop' | 'followup' | 'multi-hop' | 'layout' | 'section'
+  | 'single-hop'
+  | 'followup'
+  | 'multi-hop'
+  | 'layout'
+  | 'section'
+  // #102. `summary`: a whole-document request that must reach every page in
+  // `summaryPages`. `refusal`: standalone unanswerable questions added after
+  // the original 20, kept out of the headline pool so it stays comparable.
+  | 'summary'
+  | 'refusal'
 
 interface Question {
   id: string
@@ -225,6 +240,12 @@ interface Question {
    * never counted towards the section criterion.
    */
   gating?: boolean
+  /**
+   * `summary` only (#102): pages the whole-document retrieval must include,
+   * spread from the start of the document to its end. Passing means every one
+   * came back, so a request that loads only the opening chunks fails.
+   */
+  summaryPages?: number[]
 }
 
 function questionType(q: Question): QuestionType {
@@ -523,6 +544,14 @@ function scoreQuestion(
     const passed = facts.length > 0 && factRanks.every((rank) => rank !== null)
     return { rank: null, factRanks, passed }
   }
+  if (questionType(q) === 'summary') {
+    const factRanks = (q.summaryPages ?? []).map((page) =>
+      findRank(retrieved, titleById, q.document!, page),
+    )
+    const passed =
+      factRanks.length > 0 && factRanks.every((rank) => rank !== null)
+    return { rank: factRanks[0] ?? null, factRanks, passed }
+  }
   const rank = findRank(retrieved, titleById, q.document!, q.page!)
   if (questionType(q) === 'section') {
     return { rank, passed: sectionPassed(q, retrieved, rank) }
@@ -613,7 +642,7 @@ function buildResult(
 function logResult(r: QuestionResult): void {
   const mark = r.passed ? 'PASS' : 'FAIL'
   let where: string
-  if (r.type === 'multi-hop') {
+  if (r.type === 'multi-hop' || (r.type === 'summary' && r.answerable)) {
     where = (r.factRanks ?? [])
       .map((rank) => (rank === null ? 'missing' : `rank ${rank}`))
       .join(' + ')
@@ -861,6 +890,27 @@ interface CoreMetrics {
  * regression. They get their own metrics instead — see `multiHopMetrics` and
  * the followup section in `main`.
  */
+/**
+ * The summary slice (#102): the share of whole-document requests that reached
+ * every page they name. Not hit@k, because a whole-document request returns
+ * up to RAG_DOC_SCOPE_MAX_CHUNKS in reading order, not a ranked top k.
+ */
+function summaryMetrics(results: readonly QuestionResult[]): {
+  questions: number
+  allPagesReached: number
+} {
+  const rows = results.filter((r) => r.type === 'summary' && r.answerable)
+  return {
+    questions: rows.length,
+    allPagesReached:
+      rows.length === 0
+        ? 0
+        : Number(
+            (rows.filter((r) => r.passed).length / rows.length).toFixed(3),
+          ),
+  }
+}
+
 function coreMetrics(results: readonly QuestionResult[]): CoreMetrics {
   const answerable = results.filter((r) => r.answerable)
   const refusals = results.filter((r) => !r.answerable)
@@ -1294,6 +1344,7 @@ async function main(): Promise<void> {
   }
   const label = arg('label') ?? 'baseline'
   const baselineLabel = arg('baseline') ?? 'baseline'
+  const explicitLabel = arg('label') !== undefined
   const { questions } = JSON.parse(
     readFileSync('eval/questions.json', 'utf8'),
   ) as { questions: Question[] }
@@ -1395,6 +1446,9 @@ async function main(): Promise<void> {
   // fired back to back, so a run doesn't trip the free tier's rate limit on
   // its own.
   const agenticResults: QuestionResult[] = []
+  // #102: what the agentic pass retrieved, so `--answers` can also check the
+  // answers written from it. Follow-ups only resolve on this path.
+  const agenticRetrievedById = new Map<string, RetrievedChunk[]>()
   if (compare) {
     console.log('\nAgentic (spec 0029 loop) — per question:')
     const adaptive = aiSettings().RAG_AGENTIC_ROUTE === 'adaptive'
@@ -1417,6 +1471,7 @@ async function main(): Promise<void> {
           },
         )
         agenticResults.push(result)
+        agenticRetrievedById.set(q.id, retrievedById.get(q.id) ?? [])
         logResult(result)
         continue
       }
@@ -1436,6 +1491,7 @@ async function main(): Promise<void> {
         termination: outcome.termination,
       })
       agenticResults.push(result)
+      agenticRetrievedById.set(q.id, outcome.chunks)
       logResult(result)
       await sleep(400)
     }
@@ -1490,6 +1546,12 @@ async function main(): Promise<void> {
   // pool would move it for a reason that is not a retrieval regression.
   const baselineSection = baselineResults.filter((r) => r.type === 'section')
   const baselineSectionCore = coreMetrics(baselineSection)
+  // #102. Own slices, like layout and section, so the headline stays the
+  // original 20.
+  const baselineSummaryCore = summaryMetrics(baselineResults)
+  const baselineRefusalCore = coreMetrics(
+    baselineResults.filter((r) => r.type === 'refusal'),
+  )
   // Pooled over every question the pass ran, exactly like the agentic block —
   // not over the single-hop headline slice. Cost does not care which slice a
   // question belongs to, and pooling the two blocks differently would put two
@@ -1520,7 +1582,9 @@ async function main(): Promise<void> {
   }
 
   const baselineSummary = {
-    label: compare ? 'baseline' : label,
+    // Under --compare an explicit --label names both files (#102), so a run
+    // with different settings does not overwrite the recorded baseline.
+    label: compare && !explicitLabel ? 'baseline' : label,
     at: new Date().toISOString(),
     config: {
       topK: aiSettings().RAG_TOP_K,
@@ -1549,6 +1613,8 @@ async function main(): Promise<void> {
     multiHopRefusal: baselineMultiHopCore,
     // Spec 0033 1c, additive like `cost` below.
     section: { ...baselineSectionCore, line: sectionLine(baselineResults) },
+    summary: baselineSummaryCore,
+    refusal: baselineRefusalCore,
     parentAssembly: parentsAb ? true : aiSettings().RAG_PARENT_ASSEMBLY,
     // New in spec 0032, and purely additive: older files in eval/results/ have
     // no `cost` key at all, and the only field this harness ever reads back
@@ -1592,6 +1658,14 @@ async function main(): Promise<void> {
       `${baselineSection.filter((r) => r.gating).length} gating): ` +
       `${sectionLine(baselineResults)}  hit@1 ${baselineSectionCore.hitAt1}`,
   )
+  console.log(
+    `Baseline summary (n=${baselineSummaryCore.questions}): ` +
+      `every page reached ${baselineSummaryCore.allPagesReached}`,
+  )
+  console.log(
+    `Baseline refusal (n=${baselineRefusalCore.mustRefuse}): ` +
+      `refusal accuracy ${baselineRefusalCore.refusalAccuracy}`,
+  )
 
   // Printed on EVERY run, not only under --compare. A plain `pnpm rag:eval`
   // should be able to answer "how long does the fixed path take?" out of its
@@ -1633,7 +1707,6 @@ async function main(): Promise<void> {
   // from before spec 0029) — only meaningful outside --compare, for gating
   // one fixed-pipeline config change against another (e.g. hybrid vs dense).
   let savedLabelGateFailed = false
-  const explicitLabel = arg('label') !== undefined
   if (!compare && explicitLabel && label !== baselineLabel) {
     const baselinePath = join(RESULTS_DIR, `${baselineLabel}.json`)
     if (existsSync(baselinePath)) {
@@ -1685,8 +1758,33 @@ async function main(): Promise<void> {
     const agenticMultiHop = multiHopMetrics(agenticResults)
     const agenticCost = costSummary(agenticResults, 'agentic')
 
+    // #102: answer checks on what the agentic pass retrieved, reported apart
+    // from the fixed pipeline's.
+    let agenticAnswerChecks: AnswerCheck[] = []
+    if (hasFlag('answers')) {
+      console.log('\nAnswer checks (agentic) — generating from its retrieval:')
+      agenticAnswerChecks = await runAnswerChecks(
+        questions,
+        agenticRetrievedById,
+      )
+      for (const check of agenticAnswerChecks) {
+        console.log(
+          `  ${check.passed ? 'PASS' : 'FAIL'}  ${check.questionId} — ${check.detail}`,
+        )
+        if (!check.passed) {
+          console.log(
+            `        answer: ${check.answer.replace(/\s+/g, ' ').slice(0, 220)}`,
+          )
+        }
+      }
+      const failed = agenticAnswerChecks.filter((c) => !c.passed).length
+      console.log(
+        `  ${agenticAnswerChecks.length - failed}/${agenticAnswerChecks.length} answer checks passed`,
+      )
+    }
+    const agenticLabel = explicitLabel ? `${label}-agentic` : 'agentic'
     const agenticSummary = {
-      label: 'agentic',
+      label: agenticLabel,
       at: new Date().toISOString(),
       config: {
         topK: aiSettings().RAG_TOP_K,
@@ -1718,14 +1816,17 @@ async function main(): Promise<void> {
       // recorded on 2026-09-07; the four fields that block already had keep
       // their names and meanings.
       cost: agenticCost,
+      summary: summaryMetrics(agenticResults),
+      refusal: coreMetrics(agenticResults.filter((r) => r.type === 'refusal')),
+      answerChecks: agenticAnswerChecks,
       results: agenticResults,
     }
 
     writeFileSync(
-      join(RESULTS_DIR, 'agentic.json'),
+      join(RESULTS_DIR, `${agenticLabel}.json`),
       JSON.stringify(agenticSummary, null, 2),
     )
-    console.log('\nSaved eval/results/agentic.json')
+    console.log(`\nSaved eval/results/${agenticLabel}.json`)
 
     // --- The comparison table. Delta column so "is agentic better" is read
     // off the page, not reconstructed by the reader from two separate runs.
