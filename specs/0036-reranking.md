@@ -296,13 +296,40 @@ file, traced explicitly in `next.config.ts`.
 The gain is one question: `notice-period`, which the 1d tokenizer change had
 pushed to rank 2 ([0033](0033-retrieval-fundamentals.md)), is back at rank 1.
 
-**The cost is latency, and it is the runtime's.** WebAssembly runs this model
+**The cost is latency, and it is the runtime's.** (Superseded 2026-09-26 by
+_Backend 1, on the native runtime_ below; kept as the record of why.) WebAssembly runs this model
 far slower than native: a benchmark of 20 passages at ~320 tokens took ~5s
 single-threaded, where the native runtime scored short pairs in milliseconds;
 threads did not help and fp32 was no faster than int8. The eval's real chunks
 are shorter, hence +1.5s there. Reranking therefore stays **off by default**
 (FR4). A native runtime on a glibc base image is the way to make it cheap
 enough to turn on; that is a base-image decision, tracked separately.
+
+### Backend 1, on the native runtime (2026-09-26)
+
+Spike [#38](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/38)
+measured the move this section called for. On `node:22-slim` (glibc), native
+`onnxruntime-node` 1.30.0 scores the same 20 x ~250-token window with the same
+logits (within ~0.05) in **646ms at two threads** (1,298ms at one, 968ms at
+four on 2 vCPU), against **5,328ms** for `onnxruntime-web`. argon2, sharp and
+`@napi-rs/canvas` all load from glibc prebuilds; fonts are still required.
+
+So the production image is now `node:22-bookworm-slim`
+([#112](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/112)),
+`rerank-local.ts` runs `onnxruntime-node` with `RAG_RERANK_THREADS` intra-op
+threads, default 2
+([#113](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/113),
+[#115](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/115)), and
+`next.config.ts` traces only the build arch's Linux binary into standalone
+(24 MB arm64 / 44 MB x64 of a ~290 MB package,
+[#114](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/114)).
+The native runtime sends device telemetry to Microsoft
+(`mobile.events.data.microsoft.com`) unless `ORT_DISABLE_TELEMETRY` is set, which
+NFR3's "nothing leaves the deployment" rules out; `rerank-local.ts` sets it
+before loading the runtime, and the image sets it too.
+Native scoring is not milliseconds at this passage length, so reranking stays
+off by default until the eval is re-run on it
+([#116](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/116)).
 
 ## Acceptance criteria
 
@@ -315,7 +342,8 @@ enough to turn on; that is a base-image decision, tracked separately.
       interface a NIM reranker could satisfy — `src/lib/rag/rerank-local.ts`,
       a local cross-encoder behind `RerankerBackend`, selected by
       `RAG_RERANK_BACKEND=local`; `tests/unit/rag-rerank-local.test.ts`; runs
-      on the Alpine production base image (see _Backend 1, as built_)
+      on the production image (Alpine and WASM when built; Debian slim and native
+      since #112/#113, see _Backend 1, on the native runtime_)
 - [x] A backend that throws, times out or is absent leaves RRF order unchanged
       and never causes a refusal — `tests/unit/rag-rerank.test.ts`,
       _"leaves fusion order untouched when the backend %s"_ across throws,

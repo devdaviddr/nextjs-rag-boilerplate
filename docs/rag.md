@@ -1849,21 +1849,25 @@ This section lists what the system does not do yet.
   two backends, chosen by `RAG_RERANK_BACKEND`:
 
   - `local` (the default backend) uses `Xenova/ms-marco-MiniLM-L-6-v2`, a 23 MB
-    cross-encoder run in-process as WebAssembly. It needs no account, has no
+    cross-encoder run in-process on the native ONNX runtime. It needs no account, has no
     rate limit and sends nothing anywhere; the model downloads once into
     `RAG_RERANK_MODEL_DIR`. Measured 2026-09-25 on the fixed pipeline: hit@1
     and MRR **0.882 → 0.941**, refusal accuracy **1.000** unchanged, leakage 0.
-    The cost is latency. Retrieval went from ~0.55s to ~2.05s per question,
-    because WebAssembly runs the model far slower than a native runtime would,
-    and the native runtime does not load on the Alpine image.
+    The cost is latency. On the WebAssembly runtime the Alpine image forced,
+    retrieval went from ~0.55s to ~2.05s per question. The image is now Debian
+    slim and the reranker runs natively: 20 passages of ~250 tokens score in
+    ~0.65s at two threads on 2 vCPU, against ~5.3s as WebAssembly (#38).
+    `RAG_RERANK_THREADS` (default 2) sets the threads; more than the server
+    has cores is slower. Whether that is cheap enough to turn reranking on by
+    default is #116.
   - `llm` asks `RAG_PLANNER_MODEL` to score the candidates in one completion,
     over the same NIM account the answer uses. A hand probe put one call at a
     median of **8.4s** with a tail past 30s; it has not been run through the
     eval.
 
   Turning reranking on is therefore a measured trade instead of an experiment:
-  about 1.5s of retrieval latency for one more question at rank 1 on this
-  corpus, with refusal held.
+  retrieval latency for one more question at rank 1 on this corpus, with
+  refusal held.
 
 - **An exact identifier below the similarity floor still refuses.** A lexical
   hit is not allowed to admit a chunk on its own, because on the evaluation

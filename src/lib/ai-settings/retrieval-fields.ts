@@ -185,6 +185,14 @@ export const RETRIEVAL_GROUPS: readonly RetrievalGroup[] = [
         kind: 'text',
       },
       {
+        key: 'RAG_RERANK_THREADS',
+        label: 'Local reranker threads',
+        help: 'CPU threads the local reranker uses. More than the server has cores makes it slower, and each one is taken from answering requests.',
+        kind: 'integer',
+        min: 1,
+        max: 16,
+      },
+      {
         key: 'RAG_RERANK_CANDIDATES',
         label: 'Passages to rerank',
         help: 'How many passages the reranker reads before the best are kept.',
