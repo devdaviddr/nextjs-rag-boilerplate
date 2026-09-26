@@ -108,8 +108,12 @@ jobs:
         if: env.CODE == 'true'
       - run: pnpm specs:check
       - run: pnpm docs:check
-      # Blocks on critical advisories only; Renovate raises the rest as PRs.
-      - name: Audit dependencies
+      # What ships in the image blocks on high; dev tooling only on critical,
+      # and Renovate raises the rest as PRs (#129).
+      - name: Audit production dependencies
+        if: env.CODE == 'true'
+        run: pnpm audit --prod --audit-level=high
+      - name: Audit all dependencies
         if: env.CODE == 'true'
         run: pnpm audit --audit-level=critical
       # A release PR must pass the same check the tag will, before it merges.

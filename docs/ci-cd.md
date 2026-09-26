@@ -22,7 +22,8 @@ release tags.
 │ plan    : sorts the run (feature PR · release PR · release   │
 │           merge · other main push · manual) → which jobs run │
 │   quality : format:check · lint · typecheck · test:coverage  │
-│             · specs:check · pnpm audit (critical)  [all PRs] │
+│             · specs:check · pnpm audit (prod high, all      │
+│             critical)                             [all PRs] │
 │   e2e     : Postgres service + MinIO + Mailpit → migrate/seed │
 │             → build → Playwright           [release PR only] │
 │   docker  : per-arch native (amd64 + arm64); cache-only on   │
@@ -130,7 +131,8 @@ pnpm typecheck
 pnpm test:coverage
 pnpm specs:check
 pnpm docs:check                 # every docs/*.md indexed, every link and anchor resolves
-pnpm audit --audit-level=critical   # blocks on critical advisories only
+pnpm audit --prod --audit-level=high   # what ships in the image: blocks on high
+pnpm audit --audit-level=critical      # dev tooling too: blocks on critical only
 pnpm release:check                  # release/* PRs only: the check the tag will run
 ```
 
@@ -446,7 +448,7 @@ see [Backups & restore](backups.md).
 1. Put it in the `quality` job, the fast, blocking one, next to
    `format:check` / `lint` / `typecheck` / `test:coverage` / `specs:check`.
 2. If a check is exploratory or has a high false-positive rate, as
-   `pnpm audit` would at `high`, mark the step `continue-on-error: true` so it
+   `pnpm audit` would at `high` over dev tooling, mark the step `continue-on-error: true` so it
    reports without blocking merges. Don't leave it out entirely.
 3. Expose it as a `pnpm` script in `package.json` so a contributor can run it
    locally before pushing.

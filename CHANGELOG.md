@@ -27,6 +27,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   the agentic planner and the citation verifier see fenced text too (#126).
 - Removed two unused account-setup functions from the admin module, which
   were still registered as Server Actions (#155).
+- `lodash-es` is pinned to 4.17.24 or later, fixing a high and a moderate
+  advisory reached through the docs' Mermaid diagrams, and CI now fails on any
+  high-severity advisory in production dependencies (#129).
 
 ## [0.26.0] - 2026-09-26
 
