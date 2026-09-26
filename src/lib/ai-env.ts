@@ -31,8 +31,9 @@ export const aiEnvShape = {
     .default('https://integrate.api.nvidia.com/v1'),
   // Measured 2026-09-07: this is the only embedding model reachable on a
   // free NIM account, and it is fixed at 2048 dimensions (`dimensions: 1024`
-  // is rejected). Changing it almost certainly requires a schema migration —
-  // see EMBEDDING_DIMENSIONS in src/lib/rag/constants.ts.
+  // is rejected). It names the model of the first embedding generation; a
+  // different one is chosen in Settings, which re-indexes (#56). Changing it
+  // here after documents are indexed makes queries incomparable with them.
   RAG_EMBED_MODEL: z
     .string()
     .min(1)

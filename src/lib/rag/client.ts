@@ -7,6 +7,9 @@ import {
   connectionFor,
   modelFor,
 } from '@/lib/ai-settings'
+import { APP_NAME } from '@/lib/brand'
+import { presetHeaders } from '@/lib/ai-settings/presets'
+import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { annotateSpan } from '@/lib/observability/runs'
 import type { EmbeddingInputType } from './constants'
@@ -31,17 +34,27 @@ export function isRagConfigured(): boolean {
  * key, no RAG — while a saved connection may legitimately have none (a local
  * llama.cpp or Ollama server).
  */
-function keyFor(role: AiRole): { url: string; key: string | undefined } {
+function keyFor(role: AiRole): {
+  url: string
+  key: string | undefined
+  headers: Record<string, string>
+} {
   const connection = connectionFor(role)
   const url = connection.baseUrl.replace(/\/$/, '')
-  if (connection.id === ENV_CONNECTION_ID) return { url, key: requireKey() }
+  const headers = presetHeaders(connection.preset, {
+    url: env.APP_URL,
+    name: APP_NAME,
+  })
+  if (connection.id === ENV_CONNECTION_ID) {
+    return { url, key: requireKey(), headers }
+  }
   if (connection.keyUnreadable) {
     throw new RagUpstreamError(
       401,
       `the API key saved for "${connection.name}" can no longer be read; enter it again in Settings`,
     )
   }
-  return { url, key: connection.apiKey }
+  return { url, key: connection.apiKey, headers }
 }
 
 export class RagNotConfiguredError extends Error {
@@ -170,6 +183,7 @@ async function post(
       response = await fetch(url, {
         method: 'POST',
         headers: {
+          ...endpoint.headers,
           ...(key ? { Authorization: `Bearer ${key}` } : {}),
           'Content-Type': 'application/json',
           Accept: stream ? 'text/event-stream' : 'application/json',
@@ -252,18 +266,23 @@ export async function createEmbeddings(
   inputType: EmbeddingInputType,
   /** Cuts the request off, e.g. at the agentic loop's time budget (#92). */
   signal?: AbortSignal,
+  /**
+   * A model other than the active generation's: only for building a new
+   * generation (#56). Everything else must match the index it searches.
+   */
+  model: string = modelFor('embed'),
 ): Promise<number[][]> {
   if (input.length === 0) return []
 
   const response = await post(
     '/embeddings',
-    { input, model: modelFor('embed'), input_type: inputType },
+    { input, model, input_type: inputType },
     { role: 'embed', signal },
   )
 
   const json = (await response.json()) as EmbeddingsResponse
   annotateSpan({
-    model: modelFor('embed'),
+    model,
     attributes: { inputs: input.length },
   })
   // The API is documented to preserve order, but sorting by `index` makes the

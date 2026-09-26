@@ -215,10 +215,12 @@ export const pushSubscriptions = pgTable(
 const halfvec = customType<{
   data: number[]
   driverData: string
-  config: { dimensions: number }
+  config: { dimensions?: number }
 }>({
+  // Without dimensions the column is untyped, which is how `chunk_embeddings`
+  // holds vectors of every size (#64); each size gets its own index.
   dataType(config) {
-    return `halfvec(${config?.dimensions ?? 0})`
+    return config?.dimensions ? `halfvec(${config.dimensions})` : 'halfvec'
   },
   toDriver(value: number[]): string {
     return `[${value.join(',')}]`
@@ -542,7 +544,10 @@ export const chunks = pgTable(
     // every row written before this column existed.
     headingBbox: jsonb('heading_bbox').$type<ChunkBox>(),
     captionBbox: jsonb('caption_bbox').$type<ChunkBox>(),
-    embedding: halfvec('embedding', { dimensions: 2048 }).notNull(),
+    // Superseded by `chunk_embeddings` (#56): no longer written or read, and
+    // null for chunks ingested since. Kept one release so a rollback still
+    // finds its vectors; dropped after.
+    embedding: halfvec('embedding', { dimensions: 2048 }),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
@@ -554,6 +559,88 @@ export const chunks = pgTable(
     index('chunks_content_tsv_idx').using('gin', table.contentTsv),
     // The HNSW index itself is created in the migration — drizzle-kit cannot
     // express `halfvec_cosine_ops` for a custom type.
+  ],
+)
+
+/**
+ * One embedding model's index over every chunk (spec 0040 FR3, #64). Exactly
+ * one generation is `active`, and search uses it. Switching the model builds
+ * a new one as `building` while search stays on the active one, then swaps
+ * them in one transaction; the old one becomes `retired` and its vectors are
+ * deleted. `model` is null only for the generation the migration made from
+ * the existing vectors: it is whatever `RAG_EMBED_MODEL` names.
+ */
+export const EMBEDDING_GENERATION_STATUSES = [
+  'building',
+  'active',
+  'retired',
+] as const
+export type EmbeddingGenerationStatus =
+  (typeof EMBEDDING_GENERATION_STATUSES)[number]
+
+export const embeddingGenerations = pgTable(
+  'embedding_generations',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    model: text('model'),
+    dimensions: integer('dimensions').notNull(),
+    status: text('status').$type<EmbeddingGenerationStatus>().notNull(),
+    /** Chunks to embed and embedded so far, for the progress bar. */
+    totalChunks: integer('total_chunks').notNull().default(0),
+    embeddedChunks: integer('embedded_chunks').notNull().default(0),
+    /** The last error while building, shown in Settings; the build retries. */
+    error: text('error'),
+    /** A worker's lease on a `building` generation, as on `documents`. */
+    claimedAt: timestamp('claimed_at', { mode: 'date', withTimezone: true }),
+    createdBy: text('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    activatedAt: timestamp('activated_at', {
+      mode: 'date',
+      withTimezone: true,
+    }),
+  },
+  (table) => [
+    // At most one active and one building generation, enforced by Postgres.
+    uniqueIndex('embedding_generations_one_active_idx')
+      .on(table.status)
+      .where(sql`status = 'active'`),
+    uniqueIndex('embedding_generations_one_building_idx')
+      .on(table.status)
+      .where(sql`status = 'building'`),
+  ],
+)
+
+/**
+ * A chunk's vector in one generation (#64). The column is untyped `halfvec`
+ * so any size fits; each generation has a partial HNSW index on
+ * `(embedding::halfvec(N))` for its own rows, created by the app when the
+ * generation is built (see `src/lib/rag/generations.ts`), since drizzle-kit
+ * cannot express it. `owner_id` and `knowledge_base_id` are denormalised for
+ * the same reason as on `chunks`: the filter sits in the same query as the
+ * index scan, never behind a join.
+ */
+export const chunkEmbeddings = pgTable(
+  'chunk_embeddings',
+  {
+    chunkId: text('chunk_id')
+      .notNull()
+      .references(() => chunks.id, { onDelete: 'cascade' }),
+    generationId: text('generation_id')
+      .notNull()
+      .references(() => embeddingGenerations.id, { onDelete: 'cascade' }),
+    ownerId: text('owner_id').notNull(),
+    knowledgeBaseId: text('knowledge_base_id').notNull(),
+    embedding: halfvec('embedding').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.chunkId, table.generationId] }),
+    index('chunk_embeddings_generation_idx').on(table.generationId),
   ],
 )
 
@@ -839,6 +926,33 @@ export const aiConnections = pgTable('ai_connections', {
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
 })
+
+/**
+ * Every change made to AI settings from Settings (spec 0040 FR5): a saved or
+ * reset value, a job pointed at another connection, a connection added,
+ * edited or removed. Old and new are what the page showed, never a secret:
+ * an API key appears only as its `••••1a2b` hint. The user link survives the
+ * account being deleted as null, so the history stays.
+ */
+export const aiSettingsAudit = pgTable(
+  'ai_settings_audit',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    at: timestamp('at', { mode: 'date', withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    userId: text('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    /** `save`, `reset`, `connection-add`, `connection-edit`, `connection-remove`. */
+    action: text('action').notNull(),
+    /** The setting (`RAG_TOP_K`, `connection:chat`) or the connection's name. */
+    key: text('key').notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+  },
+  (table) => [index('ai_settings_audit_at_idx').on(table.at.desc())],
+)
 
 /**
  * Every log line, kept for the Logs page (spec 0042 FR3). Written in batches

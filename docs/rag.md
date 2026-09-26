@@ -98,7 +98,7 @@ flowchart TB
         U["Upload PDF"] --> X["Extract<br>unpdf, per page"]
         X --> C["Chunk<br>token-aware, page-bounded"]
         C --> E["Embed<br>input_type: passage"]
-        E --> S[("chunks<br>halfvec(2048) + HNSW")]
+        E --> S[("chunk_embeddings<br>halfvec + HNSW per model")]
     end
 
     subgraph query["Query — per question"]
@@ -365,6 +365,13 @@ floor low enough to admit it would admit junk on every other question. So
 `src/lib/rag/scope.ts` routes whole-document requests to retrieval by document
 instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
 
+A whole-document request reads at most `RAG_DOC_SCOPE_MAX_CHUNKS` (24)
+passages. A longer document is read across its sections, not from the start:
+each section's first passage (a run under one heading, or a page where none
+was found), then each section's next, back in reading order. With more
+sections than that, they are spread evenly from the first to the last. The
+writer is told when it has only part of the document, and says so (#99).
+
 Scoping is deliberately conservative. An ambiguous "summarise this" across
 several documents falls back to similarity search instead of guessing which
 document you meant.
@@ -614,8 +621,10 @@ RAG_PLANNER_MODEL=gpt-oss   # only matters with RAG_AGENTIC_ENABLED=true
 The planner needs a model that emits native tool calls reliably. On Ollama
 that is `gpt-oss`; coder GGUFs leak tool calls as text.
 
-The embedding side is harder: a local model must produce **2048-dimension**
-vectors to match the column, or you need a migration and a full re-ingest.
+The embedding side is changed from Settings: pick the local model as the
+embedding model and every document is re-indexed with it (see
+[Switching the embedding model](#switching-the-embedding-model)). It must
+return at most 4000 numbers per passage.
 
 ### Tuning
 
@@ -851,12 +860,43 @@ an occasional near-miss in exchange for not scanning the table.
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE INDEX chunks_embedding_idx
-  ON chunks USING hnsw (embedding halfvec_cosine_ops);
+-- One per embedding generation, on its own rows at its own size (#64).
+CREATE INDEX chunk_embeddings_initial_hnsw_idx
+  ON chunk_embeddings USING hnsw ((embedding::halfvec(2048)) halfvec_cosine_ops)
+  WHERE generation_id = 'initial';
 ```
 
-This was verified with `EXPLAIN ANALYZE` on 800 rows: the planner uses
-`Index Scan using chunks_embedding_idx`, not a sequential scan.
+The original `chunks_embedding_idx` on `chunks.embedding` was verified with
+`EXPLAIN ANALYZE` on 800 rows; the per-generation index was checked on
+pgvector 0.8.6 with vectors of two sizes in one column, each generation's
+query using its own index.
+
+### Switching the embedding model
+
+Vectors live in `chunk_embeddings`, one row per chunk per **generation**: the
+set of vectors one embedding model made (#56, #64). Exactly one generation is
+active, and search reads only that one. The column is an untyped `halfvec`, so
+any size fits, and each generation has its own partial HNSW index on
+`embedding::halfvec(N)`. Search writes the generation's id and size into the
+SQL as literals, because Postgres only uses a partial index when it can see
+while planning that the query matches it, and a bound parameter hides the
+value from a generic plan.
+
+Picking a new embedding model in Settings → Configuration → Models starts a
+re-index. The model is asked for one embedding first, which gives its size;
+more than 4000 is refused, because HNSW on `halfvec` stops there. A new
+generation is then built next to the active one: every chunk is embedded again
+with the new model, in batches, with a lease renewed every batch as ingestion
+does (spec 0034), so the background sweep resumes it if the process goes away.
+Search stays on the active generation the whole time. When every chunk has a
+vector, the new index is built and the new generation becomes active in one
+transaction. The old one is deleted a couple of minutes later, once every
+instance has reloaded its settings.
+
+Chunks, their text and their pages are never touched, and nothing is
+re-parsed. The relevance thresholds (`RAG_MIN_SIMILARITY` and the others) were
+tuned for the model in use when they were set, and a model with a different
+score spread may need them changed; Settings says so before starting.
 
 The `db` service image is **`pgvector/pgvector:pg17`**, not stock `postgres`,
 which does not ship the extension. That image is required in
@@ -877,6 +917,7 @@ erDiagram
     knowledge_bases ||--o{ documents : "cascade delete"
     knowledge_bases ||--o{ chunks : "cascade delete"
     documents ||--o{ chunks : "cascade delete"
+    chunks ||--o{ chunk_embeddings : "one per generation"
     files ||--|| documents : "stored PDF"
     conversations ||--o{ conversation_knowledge_bases : "fixed at creation"
     knowledge_bases ||--o{ conversation_knowledge_bases : "searchable from"
@@ -906,7 +947,13 @@ erDiagram
         int page_number
         int chunk_index
         int token_count
-        halfvec embedding "2048, HNSW cosine"
+    }
+    chunk_embeddings {
+        text chunk_id FK
+        text generation_id FK
+        text owner_id
+        text knowledge_base_id
+        halfvec embedding "any size, HNSW per generation"
     }
 ```
 
@@ -957,12 +1004,12 @@ therefore scales with the number of selected knowledge bases, up to a ceiling.
 ### The query itself
 
 ```sql
-SELECT c.id, d.title, c.content, c.page_number,
-       1 - (c.embedding <=> $query::halfvec) AS similarity
-FROM chunks c
-JOIN documents d ON d.id = c.document_id
-WHERE c.owner_id = $owner            -- tenant boundary, in the query
-ORDER BY c.embedding <=> $query::halfvec
+SELECT e.chunk_id,
+       1 - (e.embedding::halfvec(2048) <=> $query::halfvec(2048)) AS similarity
+FROM chunk_embeddings e
+WHERE e.generation_id = 'initial'    -- the active generation, as a literal
+  AND e.owner_id = $owner            -- tenant boundary, in the query
+ORDER BY e.embedding::halfvec(2048) <=> $query::halfvec(2048)
 LIMIT $top_k
 ```
 
@@ -1181,10 +1228,13 @@ whose only job is to emit the next search query as a tool call (a structured
 function call with typed arguments, instead of free text you would have to
 parse). The planner never writes the prose the user reads.
 
-It is behind `RAG_AGENTIC_ENABLED` and **off by default**. With the flag off the
+It is behind `RAG_AGENTIC_ENABLED`, **on by default**. With the flag off the
 fixed pipeline runs unchanged. The agentic path is roughly ten times slower and
 much better on follow-up and multi-hop questions; the measured trade is
 [below](#measured-agentic-vs-the-fixed-pipeline).
+
+For a one-page walk-through of the whole path, open
+[the agentic RAG diagram](agentic-rag-diagram.html) in a browser.
 
 The picture below has three bands: the router at the top, the bounded loop in
 the middle, and the floor-plus-refusal gate underneath it. The middle band is

@@ -1,10 +1,16 @@
 'use client'
 
-import { useCallback, useId, useRef, useState, useTransition } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, RotateCcw } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -17,21 +23,17 @@ import {
 import {
   type ConnectionView,
   type RoleView,
-  type Source,
+  cancelReindex,
   modelsFor,
   resetRole,
   saveRole,
   testRole,
 } from '@/lib/ai-settings/actions'
+import type { ReindexView } from '@/lib/rag/generations'
 import { InfoTip } from '@/components/ui/info-tip'
 import { FIELD_HELP, ROLE_LABELS } from './ai-role-labels'
 import { type ModelList, ModelPicker } from './model-picker'
-
-const SOURCE_TEXT: Record<Source, string> = {
-  saved: 'saved here',
-  env: 'from .env',
-  default: 'default',
-}
+import { SourceBadge } from './source-badge'
 
 type Status =
   | { kind: 'idle' }
@@ -44,11 +46,14 @@ function RoleRow({
   connections,
   modelList,
   loadModels,
+  locked,
 }: {
   role: RoleView
   connections: ConnectionView[]
   modelList: (connectionId: string) => ModelList
   loadModels: (connectionId: string) => void
+  /** `AI_SETTINGS_LOCKED`: shown and testable, never changed (FR5). */
+  locked: boolean
 }) {
   const router = useRouter()
   const listId = useId()
@@ -57,7 +62,7 @@ function RoleRow({
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [pending, startTransition] = useTransition()
   const labels = ROLE_LABELS[role.role]
-  const editable = role.role !== 'embed'
+  const editable = !locked
   const dirty = connectionId !== role.connectionId || model !== role.model
   const customised = role.source === 'saved' || role.connectionId !== 'env'
 
@@ -69,6 +74,18 @@ function RoleRow({
       })
       return
     }
+    if (
+      role.role === 'embed' &&
+      !window.confirm(
+        `Re-index every document with ${model}?\n\n` +
+          'Every passage is embedded again with the new model. Search keeps using ' +
+          'the current model until that finishes, then switches over in one step. ' +
+          'The relevance floor was tuned for the current model, so check answers ' +
+          'afterwards.',
+      )
+    ) {
+      return
+    }
     setStatus({ kind: 'busy', text: 'Saving…' })
     startTransition(async () => {
       const result = await saveRole({ role: role.role, connectionId, model })
@@ -76,7 +93,13 @@ function RoleRow({
         setStatus({ kind: 'error', text: result.error })
         return
       }
-      setStatus({ kind: 'ok', text: 'Saved. Applies to the next request.' })
+      setStatus({
+        kind: 'ok',
+        text:
+          role.role === 'embed'
+            ? 'Re-indexing started.'
+            : 'Saved. Applies to the next request.',
+      })
       router.refresh()
     })
   }
@@ -119,9 +142,7 @@ function RoleRow({
               <p key={d}>{d}</p>
             ))}
           </InfoTip>
-          <Badge variant="outline" className="font-normal">
-            {SOURCE_TEXT[role.source]}
-          </Badge>
+          <SourceBadge source={role.source} saved={role.saved} />
         </div>
         <p className="text-muted-foreground text-sm">{labels.help}</p>
       </div>
@@ -144,7 +165,7 @@ function RoleRow({
               setConnectionId(v)
               setStatus({ kind: 'idle' })
             }}
-            disabled={!role.canChangeConnection}
+            disabled={!role.canChangeConnection || locked}
           >
             <SelectTrigger id={`${listId}-conn`} className="w-full">
               <SelectValue />
@@ -198,7 +219,7 @@ function RoleRow({
         >
           Test
         </Button>
-        {editable && customised && (
+        {editable && customised && role.role !== 'embed' && (
           <Button size="sm" variant="ghost" onClick={reset} disabled={pending}>
             <RotateCcw /> Use .env
           </Button>
@@ -225,16 +246,107 @@ function RoleRow({
   )
 }
 
+/** How often the page re-reads a running re-index's progress. */
+const REINDEX_POLL_MS = 5000
+
+/**
+ * A re-index in progress (#56): how far it has got, its last error, and a
+ * way to stop it. Search is on the current model until it finishes.
+ */
+function ReindexPanel({
+  reindex,
+  locked,
+}: {
+  reindex: ReindexView
+  locked: boolean
+}) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const building = reindex.building
+
+  useEffect(() => {
+    if (!building) return
+    const timer = setInterval(() => router.refresh(), REINDEX_POLL_MS)
+    return () => clearInterval(timer)
+  }, [building, router])
+
+  if (!building) return null
+  const percent = building.totalChunks
+    ? Math.min(
+        100,
+        Math.round((building.embeddedChunks / building.totalChunks) * 100),
+      )
+    : 0
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="bg-muted/40 space-y-2 rounded-lg border p-4 text-sm"
+    >
+      <p>
+        Re-indexing with <span className="font-mono">{building.model}</span> (
+        {building.dimensions} dimensions):{' '}
+        {building.embeddedChunks.toLocaleString('en')} of{' '}
+        {building.totalChunks.toLocaleString('en')} passages.
+      </p>
+      <div
+        className="bg-muted h-2 overflow-hidden rounded-full"
+        aria-hidden="true"
+      >
+        <div
+          className="bg-primary h-full transition-[width]"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="text-muted-foreground">
+        Search uses <span className="font-mono">{reindex.activeModel}</span>{' '}
+        until this finishes, then switches over in one step.
+      </p>
+      {building.error && (
+        <p className="text-destructive">
+          Paused: {building.error}. It retries within a minute.
+        </p>
+      )}
+      {error && <p className="text-destructive">{error}</p>}
+      {!locked && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm('Stop re-indexing and discard its progress?'))
+              return
+            startTransition(async () => {
+              const result = await cancelReindex()
+              if (!result.ok) setError(result.error)
+              router.refresh()
+            })
+          }}
+        >
+          Cancel re-index
+        </Button>
+      )}
+    </div>
+  )
+}
+
 /**
  * Settings → Models (spec 0040 FR2): which connection and model each job
- * uses. A change applies to the next request; "Use .env" removes it.
+ * uses. A change applies to the next request; "Use .env" removes it. A new
+ * embedding model is a re-index (FR3).
  */
 export function AiModelsCard({
   roles,
   connections,
+  reindex,
+  locked = false,
 }: {
   roles: RoleView[]
   connections: ConnectionView[]
+  reindex?: ReindexView
+  locked?: boolean
 }) {
   // One /models request per connection, shared by every job's picker.
   const [lists, setLists] = useState<Record<string, ModelList>>({})
@@ -248,7 +360,11 @@ export function AiModelsCard({
       setLists((l) => ({
         ...l,
         [connectionId]: result.ok
-          ? { status: 'ready', models: result.data }
+          ? {
+              status: 'ready',
+              models: result.data.models,
+              details: result.data.details,
+            }
           : { status: 'error', error: result.error },
       }))
     })
@@ -260,8 +376,8 @@ export function AiModelsCard({
     <div className="space-y-4">
       <div>
         <p className="text-muted-foreground text-sm">
-          Pick from the models a connection lists, or type any name it serves.
-          Embeddings stay on the .env model until re-indexing lands.
+          Pick from the models a connection lists, or type any name it serves. A
+          new embedding model re-indexes every document first.
         </p>
       </div>
       <div>
@@ -274,10 +390,12 @@ export function AiModelsCard({
               connections={connections}
               modelList={modelList}
               loadModels={loadModels}
+              locked={locked}
             />
           ))}
         </ul>
       </div>
+      {reindex && <ReindexPanel reindex={reindex} locked={locked} />}
     </div>
   )
 }

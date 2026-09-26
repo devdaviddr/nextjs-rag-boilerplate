@@ -8,6 +8,56 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Switch the embedding model from Settings**
+  ([#56](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/56),
+  [#64](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/64),
+  spec 0040 FR3). Picking a new embedding model re-indexes every document
+  with it in the background, with progress and a Cancel button, while search
+  keeps using the current model; it switches over in one step when done.
+  Models of any size up to 4000 dimensions work, not only 2048. Vectors move
+  to a new `chunk_embeddings` table, and migration `0024` copies the existing
+  ones there.
+
+- **Tune retrieval and answering from Settings**
+  ([#57](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/57),
+  spec 0040 FR4). Settings → Configuration → Retrieval & answering holds the
+  switches and limits behind search: passages per answer, the relevance floor,
+  agentic search and its limits, reranking, HyDE and document processing. Each
+  applies to the next question, shows whether it is the default, from `.env`
+  or saved here, and is refused with its allowed range if out of bounds.
+- **See who changed AI settings, and lock them**
+  ([#58](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/58),
+  spec 0040 FR5). Every saved setting says who saved it, and Recent changes
+  lists each change old → new, with API keys only as their last four
+  characters. `AI_SETTINGS_LOCKED=true` makes the section read-only, enforced
+  by the server, for deployments that keep AI config in `.env`.
+- **OpenRouter and llama.cpp work as providers out of the box**
+  ([#67](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/67),
+  spec 0040 FR9). OpenRouter requests carry its attribution headers and its
+  model list shows context length and price. The chat test checks the endpoint
+  streams, and an embeddings test on a llama.cpp server without `--embeddings`
+  says so.
+
+### Changed
+
+- **Summaries cover the whole of a long document**
+  ([#99](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/99),
+  spec 0025 FR9a). "Summarise the handbook" read the document's first 24
+  passages, so a long document was summarised from its opening alone. It now
+  reads each section's opening across the whole document, and when that is
+  still only part of it, the answer says so.
+
+### Fixed
+
+- **"Afterwards" follow-ups reach the planner**
+  ([#106](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/106)).
+  With `RAG_AGENTIC_ROUTE=adaptive`, a follow-up such as "How long does the
+  fire watch stay afterwards?" was treated as a standalone question and
+  searched word for word. "Afterwards", "beforehand" and "meanwhile" now count
+  as pointing back at the conversation.
+
 ## [0.24.1] - 2026-09-26
 
 ### Changed

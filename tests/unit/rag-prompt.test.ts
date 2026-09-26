@@ -66,6 +66,31 @@ describe('buildUserMessage', () => {
     )
   })
 
+  it('says when a summary read only part of a long document (#99)', () => {
+    const partial = buildUserMessage(
+      'Summarise the manual',
+      [chunk()],
+      undefined,
+      {
+        shown: 24,
+        total: 30,
+      },
+    )
+    expect(partial).toContain(
+      "The sources are 24 of the document's 30 passages, taken from across all its sections.",
+    )
+    const whole = buildUserMessage(
+      'Summarise the policy',
+      [chunk()],
+      undefined,
+      {
+        shown: 3,
+        total: 3,
+      },
+    )
+    expect(whole).not.toContain('of the document')
+  })
+
   it('adds nothing when there is no reading, or it is the question itself', () => {
     for (const resolved of [undefined, '', '  ', 'When is leave approved?']) {
       expect(

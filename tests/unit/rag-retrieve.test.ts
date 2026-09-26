@@ -11,8 +11,10 @@ vi.mock('@/db', () => ({ db: { execute } }))
 vi.mock('@/lib/rag/embed', () => ({ embedQuery }))
 
 import {
+  chooseDocumentChunks,
   listReadyDocuments,
   retrieveDocumentChunks,
+  retrieveWholeDocument,
   retrieveForOwner,
   toVectorLiteral,
 } from '@/lib/rag/retrieve'
@@ -124,14 +126,27 @@ describe('retrieveForOwner — tenant isolation (spec 0025 NFR1)', () => {
     await retrieveForOwner('user-a', 'a question', KB_A)
     // embedQuery is the only exported path for questions; embedPassages is a
     // separate function, so using the wrong input_type is not reachable here.
-    expect(embedQuery).toHaveBeenCalledWith('a question', undefined)
+    expect(embedQuery).toHaveBeenCalledWith(
+      'a question',
+      undefined,
+      expect.objectContaining({ generationId: 'initial', dimensions: 2048 }),
+    )
   })
 
   it('orders by raw distance so the HNSW index can be used', async () => {
     await retrieveForOwner('user-a', 'anything', KB_A)
     const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
-    expect(text).toMatch(/ORDER BY\s+c\.embedding\s*<=>/)
-    expect(text).toContain('::halfvec')
+    expect(text).toMatch(/ORDER BY\s+e\.embedding::halfvec\(2048\)\s*<=>/)
+  })
+
+  it('reads the active generation, with its id and size as literals (#56)', async () => {
+    await retrieveForOwner('user-a', 'anything', KB_A)
+    const { text, params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    const vecCte = text.slice(text.indexOf('vec AS'), text.indexOf('lex AS'))
+    // A literal, so the generation's partial index matches under any plan.
+    expect(vecCte).toContain("e.generation_id = 'initial'")
+    expect(vecCte).toMatch(/e\.owner_id\s*=/)
+    expect(params).not.toContain('initial')
   })
 })
 
@@ -141,7 +156,7 @@ describe('retrieveForOwner — knowledge-base isolation (spec 0028 FR6, NFR1)', 
     const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
 
     const vecCte = text.slice(text.indexOf('vec AS'), text.indexOf('lex AS'))
-    expect(vecCte).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+    expect(vecCte).toMatch(/e\.knowledge_base_id\s*=\s*ANY/)
   })
 
   it('scopes the lexical CTE to the permitted knowledge bases', async () => {
@@ -266,6 +281,95 @@ describe('retrieveDocumentChunks — the dangerous one (spec 0028)', () => {
     const results = await retrieveDocumentChunks('user-a', 'doc-1', [])
     expect(results).toEqual([])
     expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('filters the text load exactly as the outline, and reports the document size (#99)', async () => {
+    execute
+      .mockResolvedValueOnce([
+        { id: 'c1', chunk_index: 0, page_number: 1, heading: null },
+        { id: 'c2', chunk_index: 1, page_number: 2, heading: null },
+      ])
+      .mockResolvedValueOnce([
+        {
+          chunk_id: 'c1',
+          document_id: 'doc-1',
+          document_title: 'Handbook',
+          content: 'text',
+          page_number: 1,
+          kind: 'text',
+        },
+      ])
+    const whole = await retrieveWholeDocument('user-a', 'doc-1', KB_A)
+    expect(whole.totalChunks).toBe(2)
+    const { text, params } = inspect(execute.mock.calls[1]?.[0] as SqlChunk)
+    expect(text).toMatch(/WHERE\s+c\.owner_id\s*=/)
+    expect(text).toMatch(/c\.document_id\s*=/)
+    expect(text).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+    expect(params).toEqual(
+      expect.arrayContaining(['user-a', 'doc-1', 'c1', 'c2']),
+    )
+  })
+})
+
+describe('chooseDocumentChunks — the whole document, not its opening (#99)', () => {
+  const pages = (
+    n: number,
+    heading: (i: number) => string | null = () => null,
+  ) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `c${i}`,
+      chunkIndex: i,
+      pageNumber: i + 1,
+      heading: heading(i),
+    }))
+
+  it('keeps every chunk of a document that fits', () => {
+    expect(chooseDocumentChunks(pages(5), 24)).toEqual([
+      'c0',
+      'c1',
+      'c2',
+      'c3',
+      'c4',
+    ])
+  })
+
+  it('spreads across every section, first to last, when there are more sections than slots', () => {
+    const chosen = chooseDocumentChunks(pages(30), 24)
+    expect(chosen).toHaveLength(24)
+    expect(chosen[0]).toBe('c0')
+    expect(chosen.at(-1)).toBe('c29')
+    // In reading order, no repeats.
+    const idx = chosen.map((id) => Number(id.slice(1)))
+    expect(idx).toEqual([...idx].sort((a, b) => a - b))
+    expect(new Set(idx).size).toBe(24)
+    // Never the old behaviour: the first 24 in a row.
+    expect(chosen).not.toEqual(pages(24).map((r) => r.id))
+  })
+
+  it('takes each section’s opening, then its next chunks in turn', () => {
+    // Three sections under headings, of 10, 10 and 10 chunks; 6 slots.
+    const rows = pages(30, (i) => `Section ${Math.floor(i / 10) + 1}`)
+    expect(chooseDocumentChunks(rows, 6)).toEqual([
+      'c0',
+      'c1',
+      'c10',
+      'c11',
+      'c20',
+      'c21',
+    ])
+  })
+
+  it('treats each page as a section where no heading was found', () => {
+    const rows = [
+      ...pages(3).map((r) => ({ ...r, pageNumber: 1 })),
+      ...pages(3).map((r) => ({
+        ...r,
+        id: `p2-${r.id}`,
+        chunkIndex: r.chunkIndex + 3,
+        pageNumber: 2,
+      })),
+    ]
+    expect(chooseDocumentChunks(rows, 2)).toEqual(['c0', 'p2-c0'])
   })
 })
 

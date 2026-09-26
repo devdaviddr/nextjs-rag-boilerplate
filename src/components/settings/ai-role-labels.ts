@@ -51,10 +51,11 @@ export const ROLE_LABELS: Record<
   },
   embed: {
     label: 'Embeddings',
-    help: 'Turns passages and questions into vectors. Changing it needs a re-index, which is not available yet (#56).',
+    help: 'Turns passages and questions into vectors. Changing it re-indexes every document first.',
     details: [
       'Turns every passage, and every question, into a list of numbers that captures its meaning. Search compares those numbers, which is how it finds passages that mean the same as the question even when the words differ.',
-      'Your whole index was built with this model, and numbers from two different models cannot be compared. Changing it means processing every document again, so it is locked until re-indexing is available.',
+      'Your whole index was built with this model, and numbers from two different models cannot be compared. So saving a new one starts re-indexing: every passage is embedded again, search stays on the current model until that finishes, then switches over in one step.',
+      'The model must return at most 4000 numbers per passage. It stays on the .env connection for now.',
     ],
   },
 }

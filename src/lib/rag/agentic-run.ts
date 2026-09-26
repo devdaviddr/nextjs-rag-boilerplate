@@ -21,8 +21,8 @@ import {
 import { outageQueries, previousUserTurn, type RewriteTurn } from './rewrite'
 import {
   type RetrievedChunk,
-  retrieveDocumentChunks,
   retrieveForOwner,
+  retrieveWholeDocument,
 } from './retrieve'
 import { routeTurn } from './route-intent'
 import { resolveScope } from './scope'
@@ -42,6 +42,8 @@ export interface AgenticResult {
   searches: number
   /** Planning, figure reading and every other call the loop paid for (#96). */
   tokensUsed: number
+  /** A whole-document request: how much of the document was read (#99). */
+  coverage?: { shown: number; total: number }
 }
 
 /** Recent turns shown to the planner. Enough for a pronoun, not a summary. */
@@ -198,15 +200,16 @@ export async function runAgenticRetrieval(input: {
   //    short-circuits the loop entirely (spec 0025 behaviour, preserved).
   const scope = resolveScope(question, documents)
   if (scope.mode === 'document') {
-    const chunks = await retrieveDocumentChunks(
+    const whole = await retrieveWholeDocument(
       userId,
       scope.documentId,
       permittedKbIds,
     )
     return empty({
-      chunks,
+      chunks: whole.chunks,
       query: question,
       termination: 'whole-document',
+      coverage: { shown: whole.chunks.length, total: whole.totalChunks },
     })
   }
 

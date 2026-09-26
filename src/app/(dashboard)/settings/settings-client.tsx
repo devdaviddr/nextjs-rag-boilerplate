@@ -14,8 +14,10 @@ import { AdminPanel } from '@/components/auth/admin-panel'
 import { ConnectedAccounts } from '@/components/auth/connected-accounts'
 import { FilesPanel } from '@/components/files/files-panel'
 import { NotificationsPanel } from '@/components/push/notifications-panel'
+import { AiChangesCard } from '@/components/settings/ai-changes-card'
 import { AiConnectionsCard } from '@/components/settings/ai-connections-card'
 import { AiModelsCard } from '@/components/settings/ai-models-card'
+import { AiRetrievalCard } from '@/components/settings/ai-retrieval-card'
 import { BuildInfoCard } from '@/components/settings/build-info-card'
 import type { AiSettingsView } from '@/lib/ai-settings/actions'
 import { InfoTip } from '@/components/ui/info-tip'
@@ -125,7 +127,7 @@ export function SettingsClient({
   activeModel,
 }: SettingsClientProps) {
   const formattedRoles = roles.map((r) => ({ id: r.id, name: r.name }))
-  // Spec 0040 FR8. Retrieval & answering joins with #57.
+  // Spec 0040 FR8.
   const sections: SectionDef[] = [
     {
       id: 'account',
@@ -139,7 +141,7 @@ export function SettingsClient({
             id: 'configuration',
             title: 'Configuration',
             description:
-              'Which AI providers this app can use, and which model does each job. A change applies to the next request.',
+              'Which AI providers this app can use, which model does each job, and how search and answering behave. A change applies to the next request.',
             icon: SlidersHorizontal,
           },
         ]
@@ -228,6 +230,16 @@ export function SettingsClient({
           {ai && (
             <>
               <Section def={def('configuration')} current={current}>
+                {ai.locked && (
+                  <p
+                    role="note"
+                    className="bg-muted/40 rounded-lg border p-4 text-sm"
+                  >
+                    These settings are locked on this deployment (
+                    <code>AI_SETTINGS_LOCKED</code>). They can be viewed and
+                    tested here, and changed only in <code>.env</code>.
+                  </p>
+                )}
                 <div id="providers" className="space-y-4">
                   <h3 className="flex items-center gap-1.5 font-semibold">
                     Providers
@@ -237,11 +249,27 @@ export function SettingsClient({
                       ))}
                     </InfoTip>
                   </h3>
-                  <AiConnectionsCard connections={ai.connections} />
+                  <AiConnectionsCard
+                    connections={ai.connections}
+                    locked={ai.locked}
+                  />
                 </div>
                 <div id="models" className="space-y-4 border-t pt-6">
                   <h3 className="font-semibold">Models</h3>
-                  <AiModelsCard roles={ai.roles} connections={ai.connections} />
+                  <AiModelsCard
+                    roles={ai.roles}
+                    connections={ai.connections}
+                    reindex={ai.reindex}
+                    locked={ai.locked}
+                  />
+                </div>
+                <div id="retrieval" className="space-y-4 border-t pt-6">
+                  <h3 className="font-semibold">Retrieval &amp; answering</h3>
+                  <AiRetrievalCard fields={ai.retrieval} locked={ai.locked} />
+                </div>
+                <div id="changes" className="space-y-4 border-t pt-6">
+                  <h3 className="font-semibold">Recent changes</h3>
+                  <AiChangesCard changes={ai.recentChanges} />
                 </div>
               </Section>
             </>

@@ -162,6 +162,20 @@
       "when": 1790369478116,
       "tag": "0022_message_request_id",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790398810545,
+      "tag": "0023_ai_settings_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790399922545,
+      "tag": "0024_embedding_generations",
+      "breakpoints": true
     }
   ]
 }

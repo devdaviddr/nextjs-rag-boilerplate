@@ -121,6 +121,13 @@ const envSchema = z
     // it the key is derived from AUTH_SECRET. Changing whichever is in use
     // makes saved keys unreadable, and Settings asks for them again.
     SETTINGS_ENCRYPTION_KEY: optionalStr,
+    // Makes the AI settings read-only, in the page and in its server actions
+    // (spec 0040 FR5), for deployments that keep config in .env or GitOps.
+    // Deliberately not an AI setting itself: the page cannot unlock itself.
+    AI_SETTINGS_LOCKED: z
+      .string()
+      .optional()
+      .transform((v) => v === 'true'),
 
     // --- RAG / NVIDIA NIM (spec 0025) — the fields live in ai-env.ts ------
     ...aiEnvShape,

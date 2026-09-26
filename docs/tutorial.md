@@ -522,7 +522,7 @@ passages.
 
 The **agentic path** addresses both. A separate, cheaper **planner** model
 chooses the search query, looks at what came back, and searches again if the
-first attempt was thin. It is off by default, and it is roughly ten times
+first attempt was thin. It is on by default, and it is roughly ten times
 slower.
 
 Measure before you switch:

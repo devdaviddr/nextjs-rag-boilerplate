@@ -1061,7 +1061,7 @@
     {
       "id": "followup-hot-work-fire-watch",
       "type": "followup",
-      "question": "How long does the fire watch stay after it?",
+      "question": "How long does the fire watch stay afterwards?",
       "turns": [
         {
           "role": "user",
@@ -1076,7 +1076,7 @@
       "page": 5,
       "answerable": true,
       "answerMustContain": ["60 minutes"],
-      "hard": "'it' is hot work, named only in the previous turn"
+      "hard": "'afterwards' means after hot work, named only in the previous turn"
     },
     {
       "id": "followup-no-answer-confined-space-training",

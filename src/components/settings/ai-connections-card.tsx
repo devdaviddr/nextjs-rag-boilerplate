@@ -135,6 +135,7 @@ function ConnectionDialog({
             id: form.id,
             baseUrl: form.baseUrl,
             apiKey: form.apiKey,
+            preset: form.preset,
           }),
         ),
       )
@@ -302,8 +303,11 @@ function ConnectionDialog({
  */
 export function AiConnectionsCard({
   connections,
+  locked = false,
 }: {
   connections: ConnectionView[]
+  /** `AI_SETTINGS_LOCKED`: connections can be tested, not changed (FR5). */
+  locked?: boolean
 }) {
   const router = useRouter()
   const [dialog, setDialog] = useState<FormState | null>(null)
@@ -339,9 +343,11 @@ export function AiConnectionsCard({
           {connections.length} connection{connections.length === 1 ? '' : 's'}.
           Choose which job uses which below.
         </p>
-        <Button size="sm" onClick={() => setDialog(emptyForm())}>
-          <Plus /> Add connection
-        </Button>
+        {!locked && (
+          <Button size="sm" onClick={() => setDialog(emptyForm())}>
+            <Plus /> Add connection
+          </Button>
+        )}
       </div>
       <div>
         <ul className="divide-y rounded-lg border">
@@ -387,7 +393,7 @@ export function AiConnectionsCard({
                   >
                     Test
                   </Button>
-                  {!c.builtIn && (
+                  {!c.builtIn && !locked && (
                     <>
                       <Button
                         size="sm"

@@ -172,10 +172,16 @@ default next to the floor, and the eval must be run after an embedding switch.
       live 2026-09-25: chat, planner (tool call) and embeddings tests pass on NIM
 - [ ] FR3: a wrong-dimension model is rejected; after a switch every document
       re-embeds and retrieval never mixes generations; eval refusal 1.000
-- [ ] FR4: every listed setting applies on the next request; out-of-range values
-      are rejected with the allowed range
-- [ ] FR5: source badges, reset, audit (secrets redacted), and
-      `AI_SETTINGS_LOCKED` enforced server-side
+- [x] FR4: every listed setting applies on the next request; out-of-range values
+      are rejected with the allowed range — `saveRetrievalSetting` saves through
+      `saveAiSetting`, which reloads at once; `ai-settings-actions.test.ts`
+      _"FR4"_ (range messages), `ai-settings-retrieval.test.ts` (every stated
+      range equals its variable's), e2e `settings-ai.spec.ts` _"tunes a
+      retrieval setting"_
+- [x] FR5: source badges, reset, audit (secrets redacted), and
+      `AI_SETTINGS_LOCKED` enforced server-side — `ai-settings-actions.test.ts`
+      _"FR5"_ (audit without the key, who saved it, every write refused when
+      locked), `ai-settings.test.ts` (save and reset audited old → new)
 - [x] FR6: no direct `env.RAG_*` reads remain outside the resolver (lint rule or
       grep check in CI) — `no-restricted-syntax` in `eslint.config.mjs`, run by
       `pnpm lint` in CI; resolver behaviour in `tests/unit/ai-settings.test.ts`
@@ -246,6 +252,50 @@ environment's exactly.
   `/models`, fetched once per connection and shared by every job; any name
   can still be typed, since not every server lists all it serves.
 
+### As built: retrieval, provenance and providers (#57, #58, #67)
+
+- **Retrieval & answering** is a third block in the Configuration tab, not a
+  tab of its own. The settings it offers, their labels and ranges are listed in
+  `src/lib/ai-settings/retrieval-fields.ts`; a test holds each stated range to
+  its zod field, which still decides. Beyond the FR4 list it includes the
+  spec 0043 knobs (when to plan, planner call limit, planner reasoning, early
+  stop) and the whole-document passage limit. There is no re-ingest action yet,
+  so passage size and cracking say they affect new uploads and that a document
+  is re-indexed by uploading it again.
+- **Audit** is one table, `ai_settings_audit`: save, reset, a job's connection
+  and connection add / edit / remove, old → new as the page shows it. A
+  connection is recorded as `preset · URL · key ••••1a2b`. The latest 20 are
+  listed under Recent changes.
+- **`AI_SETTINGS_LOCKED`** lives in `env.ts`, not `ai-env.ts`, so the page can
+  never save or unlock it. Tests still run while locked; every changing action
+  refuses.
+- **Providers (FR9)**: OpenRouter requests carry `HTTP-Referer` (`APP_URL`) and
+  `X-Title` (the app name), from the app and from Settings' tests. The picker
+  shows context length and prompt price where `/models` lists them. The chat
+  test streams, and fails if the endpoint does not. An embeddings test that
+  gets a 404 or 501 suggests `--embeddings` for llama.cpp.
+
+### As built: switching the embedding model (#56)
+
+- Decision 3's design, as recorded there. The migration copies the existing
+  vectors into generation `initial` (model null, meaning `RAG_EMBED_MODEL`)
+  with its own index; `chunks.embedding` becomes nullable and unused, and is
+  dropped a release later.
+- `activeEmbedding()` in the resolver gives the active generation's id, model
+  and size, loaded with the settings. Queries are embedded with its model and
+  searched at its size, both read once per search; ingestion writes into it.
+- Saving a new embedding model in Models starts the build instead of saving a
+  setting (`src/lib/rag/generations.ts`), after the page confirms. The build
+  runs after the response and on the ingestion recovery sweep, with a two-minute
+  lease renewed every 64 chunks. Settings shows progress, the last error, and
+  Cancel, and polls while it runs. The switch and a cancel are audited.
+- The retired generation is deleted by the sweep once the new one has been
+  active for four settings TTLs, so instances that have not reloaded keep
+  searching a complete index.
+- Not done: moving embeddings to another connection (they stay on `.env`),
+  and thresholds calibrated per generation. The confirmation says the
+  relevance floor was tuned for the current model.
+
 ## Security & privacy
 
 - API keys: encrypted at rest, write-only in the UI, redacted in logs and audit.
@@ -280,6 +330,32 @@ environment's exactly.
    other roles can move to any provider in v1; embeddings in practice stay on a
    2048-dimension model. Supporting other sizes is tracked separately in
    [#64](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/64).
+
+   > **Decided 2026-09-26 (#64): embeddings move to a table of generations.**
+   > Vectors leave `chunks.embedding` for `chunk_embeddings` (chunk id,
+   > generation id, `owner_id` and `knowledge_base_id` denormalised as on
+   > `chunks`, and an **untyped** `halfvec`). `embedding_generations` records
+   > each generation's model, dimensions, status (`building`, `active`,
+   > `retired`) and its calibrated similarity thresholds. Each generation gets
+   > its own partial expression index,
+   > `USING hnsw ((embedding::halfvec(N)) halfvec_cosine_ops) WHERE generation_id = '<id>'`,
+   > and search casts to the active generation's size. Verified on pgvector
+   > 0.8.6: 1536- and 3072-dimension vectors in one column, each index used
+   > for its own generation with the owner filter applied, and a 4096-dimension
+   > index refused (HNSW on `halfvec` stops at 4000).
+   >
+   > A switch (FR3, #56) creates a `building` generation, re-embeds every chunk
+   > into it through the resumable ingestion path while search stays on the
+   > `active` one, builds its index, then flips `active` in one transaction and
+   > deletes the retired rows and index. The chunks and their text are never
+   > touched. Models over 4000 dimensions are refused up front.
+   >
+   > Considered and not chosen: `ALTER COLUMN ... TYPE halfvec(N)` (simple, but
+   > nothing can be searched until every chunk is re-embedded), and a table per
+   > generation (DDL created at run time, which Drizzle's schema cannot
+   > describe). The existing vectors become generation 1 in a migration that
+   > copies them, and `chunks.embedding` is dropped a release later.
+
 4. **Non-admins see a read-only line under About** — the active chat model and
    provider name, never URLs or keys (FR7).
 

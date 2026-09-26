@@ -1,9 +1,15 @@
 import 'server-only'
 
-import { eq, like } from 'drizzle-orm'
+import { desc, eq, like } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { aiConnections, aiSettings } from '@/db/schema'
+import {
+  aiConnections,
+  aiSettings,
+  aiSettingsAudit,
+  embeddingGenerations,
+  users,
+} from '@/db/schema'
 
 /**
  * The `ai_settings` table, and nothing else. Kept apart from the resolver so
@@ -13,12 +19,28 @@ import { aiConnections, aiSettings } from '@/db/schema'
 export interface SavedRow {
   key: string
   value: string
+  /** Who saved it and when, for the "saved" badge (spec 0040 FR5). */
+  updatedBy?: string | null
+  updatedAt?: Date | null
 }
 
 export async function readSavedRows(): Promise<SavedRow[]> {
   return db
-    .select({ key: aiSettings.key, value: aiSettings.value })
+    .select({
+      key: aiSettings.key,
+      value: aiSettings.value,
+      updatedBy: users.name,
+      updatedByEmail: users.email,
+      updatedAt: aiSettings.updatedAt,
+    })
     .from(aiSettings)
+    .leftJoin(users, eq(users.id, aiSettings.updatedBy))
+    .then((rows) =>
+      rows.map(({ updatedByEmail, ...row }) => ({
+        ...row,
+        updatedBy: row.updatedBy ?? updatedByEmail,
+      })),
+    )
 }
 
 export async function writeSavedRow(
@@ -38,6 +60,24 @@ export async function writeSavedRow(
 
 export async function deleteSavedRow(key: string): Promise<void> {
   await db.delete(aiSettings).where(eq(aiSettings.key, key))
+}
+
+/** The active embedding generation, if the table has one (#56). */
+export async function readActiveGeneration(): Promise<{
+  id: string
+  model: string | null
+  dimensions: number
+} | null> {
+  const [row] = await db
+    .select({
+      id: embeddingGenerations.id,
+      model: embeddingGenerations.model,
+      dimensions: embeddingGenerations.dimensions,
+    })
+    .from(embeddingGenerations)
+    .where(eq(embeddingGenerations.status, 'active'))
+    .limit(1)
+  return row ?? null
 }
 
 export async function readConnectionRows() {
@@ -115,4 +155,52 @@ export async function deleteConnection(id: string): Promise<void> {
     }
     await tx.delete(aiConnections).where(eq(aiConnections.id, id))
   })
+}
+
+/** One change for the audit log (spec 0040 FR5). Never a secret. */
+export interface AuditWrite {
+  action:
+    | 'save'
+    | 'reset'
+    | 'connection-add'
+    | 'connection-edit'
+    | 'connection-remove'
+  key: string
+  oldValue: string | null
+  newValue: string | null
+}
+
+export async function writeAudit(
+  entry: AuditWrite,
+  userId: string | null,
+): Promise<void> {
+  await db.insert(aiSettingsAudit).values({ ...entry, userId })
+}
+
+export interface AuditRow extends AuditWrite {
+  at: Date
+  by: string | null
+}
+
+/** The latest changes, newest first. */
+export async function readRecentAudit(limit: number): Promise<AuditRow[]> {
+  const rows = await db
+    .select({
+      at: aiSettingsAudit.at,
+      action: aiSettingsAudit.action,
+      key: aiSettingsAudit.key,
+      oldValue: aiSettingsAudit.oldValue,
+      newValue: aiSettingsAudit.newValue,
+      name: users.name,
+      email: users.email,
+    })
+    .from(aiSettingsAudit)
+    .leftJoin(users, eq(users.id, aiSettingsAudit.userId))
+    .orderBy(desc(aiSettingsAudit.at), desc(aiSettingsAudit.id))
+    .limit(limit)
+  return rows.map(({ name, email, ...row }) => ({
+    ...row,
+    action: row.action as AuditWrite['action'],
+    by: name ?? email,
+  }))
 }

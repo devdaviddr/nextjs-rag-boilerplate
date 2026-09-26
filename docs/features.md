@@ -88,7 +88,7 @@ you can search. [RAG](rag.md) walks through each step.
 
 ### Optional: agentic retrieval
 
-`RAG_AGENTIC_ENABLED`, off by default. The model plans its own searches via a
+`RAG_AGENTIC_ENABLED`, on by default. The model plans its own searches via a
 tool call, resolves conversational references, and can search again when the
 first attempt is thin, inside hard caps on searches, wall-clock and tokens.
 Citation verification then strips claims their sources do not support. It is
@@ -97,22 +97,41 @@ in [RAG → The agentic path](rag.md#the-agentic-path).
 
 ### Choosing the provider and models from Settings
 
-Admins get two sections in **Settings** (spec 0040):
+Admins get a **Configuration** section in **Settings** (spec 0040):
 
 - **AI provider** lists the endpoints the app can send questions to. The
   `.env` endpoint is always there. Add more with a preset (NVIDIA NIM,
   OpenRouter, a llama.cpp server, OpenAI, Ollama, vLLM / LM Studio) or any
   OpenAI-compatible URL. API keys are encrypted at rest (AES-256-GCM) and never
   sent back to the browser; the page shows the last four characters at most.
-  **Test** lists the endpoint's models.
+  **Test** lists the endpoint's models; for OpenRouter the model picker also
+  shows each model's context length and price, and requests carry its
+  optional attribution headers.
 - **Models** sets the connection and model for each job: chat, planner, HyDE,
   vision and page parsing. A change applies to the next request, with no
-  restart. **Test** tries the job as configured: a short completion, a tool
-  call for the planner (a llama.cpp planner without `--jinja` is told so), or
-  one embedding of the size the index needs. **Use .env** removes the change.
+  restart. **Test** tries the job as configured: a streamed answer for chat, a
+  short completion, a tool call for the planner (a llama.cpp planner without
+  `--jinja` is told so), or one embedding of the size the index needs (a
+  llama.cpp server without `--embeddings` is told so). **Use .env** removes
+  the change.
+- **Retrieval & answering** holds the switches and limits behind search:
+  passages per answer, the relevance floor, agentic search and its limits,
+  reranking, HyDE, and how documents are processed. Each is saved on its own,
+  applies to the next question, and is refused with the allowed range if out
+  of bounds. Passage size and document cracking affect documents uploaded
+  after the change.
+- **Recent changes** lists who changed what, old → new. API keys appear only
+  as their last four characters.
 
-Embeddings stay on the `.env` endpoint and model for now, because the index
-holds that model's vectors and changing it means re-indexing (#56). Choosing a
+Every setting shows where its value comes from: the default, `.env`, or saved
+here (with who saved it). `AI_SETTINGS_LOCKED=true` makes the whole section
+read-only, for deployments that keep their AI config in `.env`.
+
+A new **embedding** model re-indexes every document before it is used, because
+the index holds one model's vectors and two models' vectors cannot be compared.
+Settings asks first, shows progress, and can cancel; search stays on the
+current model until the new index is complete. Embeddings stay on the `.env`
+endpoint for now. Choosing a
 provider also chooses who sees your document text: the questions and the
 retrieved passages go to it.
 

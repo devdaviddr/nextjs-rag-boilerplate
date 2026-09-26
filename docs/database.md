@@ -25,10 +25,10 @@ the question the same way and find the stored lists closest to it.
 Postgres cannot do this on its own. **pgvector** is the extension that adds the
 missing pieces:
 
-- A column type that holds an embedding. Here it is `halfvec(2048)`: 2048
-  numbers, each stored at half precision. The size is fixed by the model. The
-  embedding model this repo uses emits exactly 2048 numbers, so the column and
-  the model must agree exactly or nothing can be inserted.
+- A column type that holds an embedding: `halfvec`, numbers stored at half
+  precision. `chunk_embeddings.embedding` is untyped, so models of any size fit
+  (2048 for the default model), and each model's vectors are indexed at their
+  own size.
 - A distance operator, `<=>`, which measures how far apart two embeddings
   point. `1 - (a <=> b)` is the cosine similarity, a 0-to-1 score where 1 means
   near-identical meaning.
@@ -49,11 +49,12 @@ With those in place, the dense half of retrieval is an ordinary SQL query. This
 is its shape, simplified from `src/lib/rag/retrieve.ts`:
 
 ```sql
-SELECT c.id, 1 - (c.embedding <=> $1::halfvec) AS similarity
-FROM chunks c
-WHERE c.owner_id = $2
-  AND c.knowledge_base_id = ANY($3)
-ORDER BY c.embedding <=> $1::halfvec
+SELECT e.chunk_id, 1 - (e.embedding::halfvec(2048) <=> $1::halfvec(2048)) AS similarity
+FROM chunk_embeddings e
+WHERE e.generation_id = 'initial'
+  AND e.owner_id = $2
+  AND e.knowledge_base_id = ANY($3)
+ORDER BY e.embedding::halfvec(2048) <=> $1::halfvec(2048)
 LIMIT 8;
 ```
 
@@ -86,13 +87,15 @@ RAG uses `knowledge_bases`, `documents`, `chunks`, `conversations`, `messages`
 and `conversation_knowledge_bases`. Retrieval queries drive the shape of these
 tables, so they are worth understanding before you read the diagram.
 
-Settings uses `ai_settings` and `ai_connections`. `ai_settings` holds AI
+Settings uses `ai_settings`, `ai_connections` and `ai_settings_audit`. `ai_settings` holds AI
 settings saved from Settings, one row per environment variable name, with the
 string you would put in `.env`: a row overrides the variable, and no row means
 the environment applies. It also records which connection each job uses
 (`connection:chat` and so on). `ai_connections` holds the endpoints added in
 Settings → AI provider, with the API key encrypted (AES-256-GCM) and its last
-four characters for display.
+four characters for display. `ai_settings_audit` records every change made
+from Settings: who, when, the setting or connection, and old → new. An API key
+appears there only as its last four characters.
 
 Observability uses `app_logs`, `rag_runs` and `rag_spans` (spec 0042).
 `app_logs` holds every log line, with its level, category, request id and
@@ -103,7 +106,11 @@ row per question answered or document ingested, keyed by the request id, and
 A knowledge base is a named collection of documents owned by one user. A
 document is one uploaded PDF, and it lives in exactly one knowledge base. A
 chunk is a short passage of that PDF, a few paragraphs long, stored as its own
-searchable row with its embedding. A conversation is pinned to a set of
+searchable row. Its embedding is in `chunk_embeddings`, one row per embedding
+generation: `embedding_generations` records each model's set of vectors, and
+exactly one is active (see
+[RAG → Switching the embedding model](rag.md#switching-the-embedding-model)).
+A conversation is pinned to a set of
 knowledge bases when it is created. That set is recorded in
 `conversation_knowledge_bases`, and retrieval can never see outside it.
 

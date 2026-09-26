@@ -105,7 +105,10 @@ test('every AI setting explains itself: hover, click and keyboard', async ({
   await page.goto('/settings#configuration')
 
   // One ⓘ per job, plus one per field in each job row and one for Providers.
-  const planner = page.getByRole('button', { name: 'About Planner' })
+  const planner = page.getByRole('button', {
+    name: 'About Planner',
+    exact: true,
+  })
   await planner.hover()
   await expect(page.getByRole('dialog')).toContainText('tool calls')
   await page.mouse.move(0, 0)
@@ -133,7 +136,7 @@ test('every AI setting explains itself: hover, click and keyboard', async ({
     'Embeddings',
   ]) {
     await expect(
-      page.getByRole('button', { name: `About ${job}` }),
+      page.getByRole('button', { name: `About ${job}`, exact: true }),
     ).toHaveCount(1)
   }
 
@@ -146,4 +149,36 @@ test('every AI setting explains itself: hover, click and keyboard', async ({
   await expect(
     page.locator('li[data-role="chat"]').getByRole('status'),
   ).toContainText('Nothing to save')
+})
+
+test('an admin tunes a retrieval setting, sees who saved it, and resets it', async ({
+  page,
+}) => {
+  await signIn(page)
+  await page.goto('/settings#configuration')
+
+  const row = page.locator('li[data-setting="RAG_TOP_K"]')
+  const box = row.getByLabel('Passages per answer', { exact: true })
+
+  // Out of range: refused, with the allowed range.
+  await box.fill('0')
+  await row.getByRole('button', { name: 'Save' }).click()
+  await expect(row.getByRole('status')).toContainText(
+    'Passages per answer must be a whole number from 1 up.',
+  )
+
+  await box.fill('6')
+  await row.getByRole('button', { name: 'Save' }).click()
+  await expect(
+    page.locator('li[data-setting="RAG_TOP_K"]').getByText('saved here by'),
+  ).toBeVisible()
+  await expect(page.locator('#changes')).toContainText('RAG_TOP_K')
+
+  await page
+    .locator('li[data-setting="RAG_TOP_K"]')
+    .getByRole('button', { name: 'Use .env' })
+    .click()
+  await expect(
+    page.locator('li[data-setting="RAG_TOP_K"]').getByText('saved here'),
+  ).toHaveCount(0)
 })

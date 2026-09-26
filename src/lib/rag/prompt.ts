@@ -46,10 +46,19 @@ export function buildUserMessage(
   question: string,
   chunks: RetrievedChunk[],
   resolved?: string,
+  /**
+   * For a whole-document request that read only part of a long document
+   * (#99): how many of its passages the sources are.
+   */
+  coverage?: { shown: number; total: number },
 ): string {
   const meaning =
     resolved && resolved.trim() && resolved.trim() !== question.trim()
       ? `\n(In this conversation, the question means: ${resolved.trim()})`
       : ''
-  return `${buildContextBlock(chunks)}\n\nQUESTION: ${question}${meaning}`
+  const partial =
+    coverage && coverage.shown < coverage.total
+      ? `\n(The sources are ${coverage.shown} of the document's ${coverage.total} passages, taken from across all its sections. Say that the summary is based on part of the document.)`
+      : ''
+  return `${buildContextBlock(chunks)}\n\nQUESTION: ${question}${meaning}${partial}`
 }

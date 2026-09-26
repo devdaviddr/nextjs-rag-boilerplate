@@ -4,8 +4,9 @@ import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
 import type { ChunkKind } from '@/db/schema'
-import { aiSettings } from '@/lib/ai-settings'
+import { activeEmbedding, aiSettings } from '@/lib/ai-settings'
 import { embedQuery } from './embed'
+import { generationLiteral, halfvecType } from './generation-sql'
 import { hypotheticalQuery } from './hyde'
 import {
   type PageRow,
@@ -295,6 +296,11 @@ export async function retrieveForOwner(
   // typed — the one channel whose value is that it matches what was actually
   // asked.
   // Each stage is a step of the current run, if there is one (spec 0042).
+  // The generation this search reads, read once (#56): the question is
+  // embedded with its model and compared at its size, even if a swap lands
+  // while this runs.
+  const active = activeEmbedding()
+
   const hypothetical = aiSettings().RAG_HYDE_ENABLED
     ? await span('hyde', async (step) => {
         const drafted = await hypotheticalQuery(question, {
@@ -306,7 +312,7 @@ export async function retrieveForOwner(
     : null
   const queryVector = toVectorLiteral(
     await span('embed-question', () =>
-      embedQuery(hypothetical ?? question, options.signal),
+      embedQuery(hypothetical ?? question, options.signal, active),
     ),
   )
 
@@ -324,6 +330,11 @@ export async function retrieveForOwner(
   // ever ran, starving real candidates and, at RAG_HYBRID_CANDIDATES=20,
   // excluding correct results (spec 0028). The tenant boundary is not
   // something fusion is trusted to preserve, and neither is the KB one.
+  // Its id and size go in as literals so its partial index is always usable
+  // (see generation-sql.ts).
+  const generation = generationLiteral(active.generationId)
+  const vecType = halfvecType(active.dimensions)
+
   const rows = await span('search-index', async (step) => {
     const found = await db.execute<Row>(sql`
     WITH q AS (
@@ -345,12 +356,13 @@ export async function retrieveForOwner(
       FROM unnest(to_tsvector('english', ${question}))
     ),
     vec AS (
-      SELECT c.id,
-             ROW_NUMBER() OVER (ORDER BY c.embedding <=> ${queryVector}::halfvec) AS pos
-      FROM chunks c
-      WHERE c.owner_id = ${ownerId}
-        AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
-      ORDER BY c.embedding <=> ${queryVector}::halfvec
+      SELECT e.chunk_id AS id,
+             ROW_NUMBER() OVER (ORDER BY e.embedding::${vecType} <=> ${queryVector}::${vecType}) AS pos
+      FROM chunk_embeddings e
+      WHERE e.generation_id = ${generation}
+        AND e.owner_id = ${ownerId}
+        AND e.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
+      ORDER BY e.embedding::${vecType} <=> ${queryVector}::${vecType}
       LIMIT ${candidates}
     ),
     lex AS (
@@ -383,13 +395,15 @@ export async function retrieveForOwner(
       c.kind          AS kind,
       c.heading       AS heading,
       c.heading_bbox  AS heading_bbox,
-      1 - (c.embedding <=> ${queryVector}::halfvec) AS similarity,
+      COALESCE(1 - (e.embedding::${vecType} <=> ${queryVector}::${vecType}), 0) AS similarity,
       f.lexical_rank  AS lexical_rank,
       f.vec_rank      AS vec_rank,
       f.lex_rank_pos  AS lex_rank_pos
     FROM fused f
     JOIN chunks c ON c.id = f.id
     JOIN documents d ON d.id = c.document_id
+    LEFT JOIN chunk_embeddings e
+      ON e.chunk_id = c.id AND e.generation_id = ${generation}
     WHERE c.owner_id = ${ownerId}
       AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
     ORDER BY f.rrf DESC
@@ -570,6 +584,80 @@ export async function listReadyDocuments(
   return Array.from(rows).map((r) => ({ id: r.id, title: r.title }))
 }
 
+/** One chunk of a document, before its text is loaded (#99). */
+export interface DocumentOutlineRow {
+  id: string
+  chunkIndex: number
+  pageNumber: number
+  heading: string | null
+}
+
+/**
+ * Which chunks of a document a whole-document request reads (#99).
+ *
+ * Up to `max`, all of them. Past that, the first `max` would describe only the
+ * opening of a long document, so the choice is made across all of it:
+ *
+ * 1. The document is split into sections: a run of chunks under one heading,
+ *    or, where no heading was detected, one page.
+ * 2. With no more sections than `max`, every section's first chunk is taken,
+ *    then the remaining slots go to each section's next chunk in turn.
+ * 3. With more sections than `max`, `max` sections are taken, spread evenly
+ *    from the first to the last, and each gives its first chunk.
+ *
+ * Returned in reading order. Pure, so it is tested without a database.
+ */
+export function chooseDocumentChunks(
+  rows: readonly DocumentOutlineRow[],
+  max: number,
+): string[] {
+  const ordered = [...rows].sort((a, b) => a.chunkIndex - b.chunkIndex)
+  if (ordered.length <= max) return ordered.map((r) => r.id)
+  if (max <= 0) return []
+
+  const sections: DocumentOutlineRow[][] = []
+  let key: string | null = null
+  for (const row of ordered) {
+    const rowKey = row.heading?.trim()
+      ? `h:${row.heading.trim()}`
+      : `p:${row.pageNumber}`
+    if (rowKey !== key || sections.length === 0) {
+      sections.push([])
+      key = rowKey
+    }
+    sections.at(-1)!.push(row)
+  }
+
+  const chosen = new Set<string>()
+  if (sections.length > max) {
+    const last = sections.length - 1
+    for (let i = 0; i < max; i++) {
+      const at = max === 1 ? 0 : Math.round((i * last) / (max - 1))
+      chosen.add(sections[at]![0]!.id)
+    }
+  } else {
+    for (let depth = 0; chosen.size < max; depth++) {
+      let added = false
+      for (const section of sections) {
+        const row = section[depth]
+        if (row && chosen.size < max) {
+          chosen.add(row.id)
+          added = true
+        }
+      }
+      if (!added) break
+    }
+  }
+  return ordered.filter((r) => chosen.has(r.id)).map((r) => r.id)
+}
+
+/** A whole document as a whole-document request reads it (#99). */
+export interface WholeDocument {
+  chunks: RetrievedChunk[]
+  /** How many chunks the document has; more than `chunks.length` when sampled. */
+  totalChunks: number
+}
+
 /**
  * Retrieve a whole document in reading order, for summarise/overview requests
  * that similarity search structurally cannot serve (see scope.ts).
@@ -590,14 +678,40 @@ export async function listReadyDocuments(
  * reason a user made a second knowledge base may be to keep this out of
  * reach of exactly this kind of request.
  */
-export async function retrieveDocumentChunks(
+export async function retrieveWholeDocument(
   ownerId: string,
   documentId: string,
   knowledgeBaseIds: readonly string[],
-): Promise<RetrievedChunk[]> {
-  if (knowledgeBaseIds.length === 0) return []
+): Promise<WholeDocument> {
+  if (knowledgeBaseIds.length === 0) return { chunks: [], totalChunks: 0 }
 
-  const rows = await db.execute<DocumentChunkRow>(sql`
+  // The outline first: ids and positions only, so a long document's text is
+  // never loaded just to be left out.
+  const outline = await db.execute<
+    Record<string, unknown> & {
+      id: string
+      chunk_index: number
+      page_number: number
+      heading: string | null
+    }
+  >(sql`
+    SELECT c.id AS id, c.chunk_index AS chunk_index,
+           c.page_number AS page_number, c.heading AS heading
+    FROM chunks c
+    WHERE c.owner_id = ${ownerId}
+      AND c.document_id = ${documentId}
+      AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
+  `)
+  const rows = Array.from(outline).map((r) => ({
+    id: r.id,
+    chunkIndex: Number(r.chunk_index),
+    pageNumber: Number(r.page_number),
+    heading: r.heading,
+  }))
+  const ids = chooseDocumentChunks(rows, aiSettings().RAG_DOC_SCOPE_MAX_CHUNKS)
+  if (ids.length === 0) return { chunks: [], totalChunks: rows.length }
+
+  const loaded = await db.execute<DocumentChunkRow>(sql`
     SELECT c.id            AS chunk_id,
            c.document_id   AS document_id,
            d.title         AS document_title,
@@ -609,20 +723,36 @@ export async function retrieveDocumentChunks(
     WHERE c.owner_id = ${ownerId}
       AND c.document_id = ${documentId}
       AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
+      AND c.id IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})
     ORDER BY c.chunk_index ASC
-    LIMIT ${aiSettings().RAG_DOC_SCOPE_MAX_CHUNKS}
   `)
 
   // Similarity is not meaningful here — the whole document was requested, not
   // the passages nearest a query. Reported as 1 so the citation shape is
   // identical for the UI.
-  return Array.from(rows).map((r) => ({
-    chunkId: r.chunk_id,
-    documentId: r.document_id,
-    documentTitle: r.document_title,
-    content: r.content,
-    pageNumber: Number(r.page_number),
-    similarity: 1,
-    kind: r.kind,
-  }))
+  return {
+    chunks: Array.from(loaded).map((r) => ({
+      chunkId: r.chunk_id,
+      documentId: r.document_id,
+      documentTitle: r.document_title,
+      content: r.content,
+      pageNumber: Number(r.page_number),
+      similarity: 1,
+      kind: r.kind,
+    })),
+    totalChunks: rows.length,
+  }
+}
+
+/** The chunks of `retrieveWholeDocument`, for callers that need no count. */
+export async function retrieveDocumentChunks(
+  ownerId: string,
+  documentId: string,
+  knowledgeBaseIds: readonly string[],
+): Promise<RetrievedChunk[]> {
+  return (await retrieveWholeDocument(ownerId, documentId, knowledgeBaseIds))
+    .chunks
 }
