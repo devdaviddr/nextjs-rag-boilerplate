@@ -1,7 +1,5 @@
 # Specs — Spec-Driven Development
 
-[← Back to README](../README.md)
-
 **What this covers:** how design decisions get written down before they get
 built, and the index of every spec in this repo.
 
