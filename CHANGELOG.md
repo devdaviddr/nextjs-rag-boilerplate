@@ -8,6 +8,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The planner no longer gives up on a passing NVIDIA hiccup**
+  ([#82](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/82)).
+  NIM sometimes answers a model it does serve with a 404, "Function … Not
+  found for account", and answers normally a moment later. That is now
+  retried like other transient errors, instead of dropping the planner and
+  falling back to one plain search. A wrong model name still fails at once.
+
 ## [0.23.0] - 2026-09-26
 
 ### Added

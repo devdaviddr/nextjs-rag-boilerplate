@@ -69,6 +69,9 @@ function requireKey(): string {
 }
 
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+
+/** NIM's transient "can't find the model's backend right now" 404 body (#82). */
+const NIM_ROUTING_BLIP = /Function '[^']*': Not found for account/
 const MAX_ATTEMPTS = 4
 
 /**
@@ -199,7 +202,15 @@ async function post(
     // explaining itself; this did not. Narrow on purpose: a genuine 404 (a
     // misconfigured RAG_CHAT_MODEL) still fails immediately rather than
     // retrying four times and hiding a config error behind a slow failure.
-    const transientNotFound = response.status === 404 && lastDetail.length === 0
+    //
+    // NIM's "Function '…': Not found for account" is the same kind of blip with
+    // a body (#82): it names a model the account IS served — listed in
+    // /models and answering moments later — whose backend NIM briefly could
+    // not route to. Measured: a wrong model name gets `404 page not found`
+    // instead, so that one still fails at once.
+    const transientNotFound =
+      response.status === 404 &&
+      (lastDetail.length === 0 || NIM_ROUTING_BLIP.test(lastDetail))
 
     if (
       (!RETRYABLE.has(response.status) && !transientNotFound) ||
