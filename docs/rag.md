@@ -549,9 +549,13 @@ because there is no model call.
 labels it as data, never instructions. An uploaded PDF is untrusted input that
 reaches the model, which makes it the indirect-injection surface. (Someone can
 put "ignore your instructions and…" in a PDF; the fence tells the model that
-block is material to read and not orders to follow.) Fencing mitigates the risk
-without eliminating it. The primary defence remains that the model is not called
-at all when nothing is retrieved.
+block is material to read and not orders to follow.) The fence's markers carry
+a random id made fresh for every prompt, and any run of `<<<` or `>>>` in the
+document text is shortened, so a document cannot close the fence early and have
+the text after it read as instructions. The planner's view of search results
+and the citation verifier's sources are fenced the same way. Fencing mitigates
+the risk without eliminating it. The primary defence remains that the model is
+not called at all when nothing is retrieved.
 
 The route streams NDJSON, one JSON object per line, so the browser can act on
 each frame the moment it arrives instead of waiting for the whole answer:

@@ -13,6 +13,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - The helper that removes a deleted user's stored files is no longer
   reachable as a Server Action; it now runs only from the admin-checked
   delete-user path (#125).
+- A document can no longer close the fence around retrieved text and have what
+  follows read as instructions. The fence now uses a random id per prompt, and
+  the agentic planner and the citation verifier see fenced text too (#126).
 
 ## [0.26.0] - 2026-09-26
 
