@@ -83,6 +83,8 @@ export const TERMINATION_LABEL: Record<string, string> = {
   'time-budget': 'Time budget ran out',
   'token-budget': 'Token budget ran out',
   'planner-unavailable': 'Planner unavailable, fell back',
+  confident: 'Strong first match',
+  'planner-slow': 'Planner slow, kept what it had',
   'whole-document': 'Whole document',
   'no-scope': 'No knowledge base',
   'no-evidence': 'Nothing found',

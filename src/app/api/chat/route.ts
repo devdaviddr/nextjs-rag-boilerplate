@@ -27,6 +27,7 @@ import {
   withRequestContext,
 } from '@/lib/observability/context'
 import { logger } from '@/lib/logger'
+import { planRoute } from '@/lib/rag/plan-route'
 import { RAG_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
 import {
@@ -261,18 +262,37 @@ async function answer(request: Request, requestId: string) {
     // prevents the latter from getting this far.
     if (permittedKbIds.length === 0) return []
 
+    // The last few turns, oldest first, for pronoun resolution. Read before
+    // deciding whether to plan, because that decision depends on them.
+    const turns = aiSettings().RAG_AGENTIC_ENABLED
+      ? (
+          await db
+            .select({ role: messages.role, content: messages.content })
+            .from(messages)
+            .where(eq(messages.conversationId, conversationId))
+            .orderBy(desc(messages.createdAt))
+            .limit(REWRITE_CONTEXT_TURNS + 1)
+        )
+          // Drop the question just persisted above — it is the thing being
+          // rewritten, not context for the rewrite.
+          .slice(1)
+          .reverse()
+      : []
+    // Plan only when it pays (spec 0043): follow-ups and multi-part
+    // questions. A standalone question takes the fixed pipeline below.
+    const route = planRoute(question, turns)
+    const plan =
+      aiSettings().RAG_AGENTIC_ENABLED &&
+      (aiSettings().RAG_AGENTIC_ROUTE === 'always' || route.plan)
     if (aiSettings().RAG_AGENTIC_ENABLED) {
-      // The last few turns, oldest first, for pronoun resolution.
-      const priorRows = await db
-        .select({ role: messages.role, content: messages.content })
-        .from(messages)
-        .where(eq(messages.conversationId, conversationId))
-        .orderBy(desc(messages.createdAt))
-        .limit(REWRITE_CONTEXT_TURNS + 1)
-      // Drop the question just persisted above — it is the thing being
-      // rewritten, not context for the rewrite.
-      const turns = priorRows.slice(1).reverse()
+      logger.info(plan ? 'Planning this question' : 'Skipping the planner', {
+        category: 'agent',
+        route: route.reason,
+        mode: aiSettings().RAG_AGENTIC_ROUTE,
+      })
+    }
 
+    if (plan) {
       const result = await runAgenticRetrieval({
         userId,
         permittedKbIds,

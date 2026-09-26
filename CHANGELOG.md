@@ -8,6 +8,51 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-26
+
+### Added
+
+- **Plan only when it pays**
+  ([#85](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/85),
+  [#86](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/86),
+  [#87](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/87),
+  spec 0043). Three settings to stop paying for the agentic planner where it
+  does not help: `RAG_AGENTIC_ROUTE=adaptive` plans only follow-ups and
+  multi-part questions; `RAG_AGENTIC_CONFIDENT_SIMILARITY` skips the second
+  planner decision when the first search is a strong match;
+  `RAG_PLANNER_CALL_MS` caps each planner call so a stall costs seconds, not
+  the whole loop budget. Each defaults to the old behaviour until the eval
+  sets it. The activity drawer and Overview name the new outcomes.
+- **`RAG_PLANNER_REASONING=off` lets the planner skip its hidden reasoning**
+  ([#84](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/84)).
+  For planner models that honour it (Nemotron and Qwen3 on NIM or vLLM), each
+  decision comes back faster: 1.3 s instead of 2.4 s typical in a benchmark,
+  with the same searches chosen. Off by default until the retrieval eval has
+  compared the two.
+
+### Changed
+
+- **The documentation reads more plainly**
+  ([#70](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/70)).
+  The pages under Docs were rewritten in plain language, with the same facts.
+
+### Fixed
+
+- **Running out of time after a search is no longer called a planner failure**
+  ([#83](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/83)).
+  When the agentic search's time limit cut off a planner decision after it
+  had already found passages, the log warned that the planner was
+  unavailable and Observability counted it that way, though the answer was
+  written from those passages as normal. It is now recorded as a stop at the
+  time limit, with an info line saying how many passages were kept.
+- **A model NVIDIA lists but does not serve now says so**
+  ([#82](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/82)).
+  NIM's model list includes some models it does not run for the account;
+  choosing one (in Settings → Models) made every call fail with an opaque
+  "Function … Not found for account" 404. The error now names the model and
+  says to choose another, and fails at once instead of looking like a
+  provider outage.
+
 ## [0.23.0] - 2026-09-26
 
 ### Added
@@ -1173,7 +1218,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.0...v0.21.1

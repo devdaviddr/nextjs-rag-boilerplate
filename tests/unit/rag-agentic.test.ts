@@ -681,6 +681,44 @@ describe('runAgenticLoop — the wall-clock budget actually binds', () => {
     }
   })
 
+  it('treats running out of time after a search as a time-budget stop, not a planner failure (#83)', async () => {
+    vi.useFakeTimers()
+    try {
+      const onPlanFailure = vi.fn()
+      const plan = vi
+        .fn()
+        .mockResolvedValueOnce({
+          decision: { action: 'search', query: 'leave' },
+          tokens: 10,
+        })
+        // The second decision is slow: it never returns inside the budget.
+        .mockImplementation(
+          (_steps: unknown, callSignal: AbortSignal) =>
+            new Promise((_resolve, reject) => {
+              callSignal.addEventListener('abort', () =>
+                reject(callSignal.reason),
+              )
+            }),
+        )
+      const search = vi.fn().mockResolvedValue([chunk('a', 0.6)])
+
+      const outcome = runAgenticLoop(
+        { maxSearches: 3, maxMs: 5_000, maxTokens: 8_000 },
+        deps({ plan, search, onPlanFailure, fallbackQuery: 'leave' }),
+        signal,
+      )
+      await vi.advanceTimersByTimeAsync(6_000)
+      const result = await outcome
+
+      expect(result.termination).toBe('time-budget')
+      expect(result.chunks.map((c) => c.chunkId)).toEqual(['a'])
+      expect(search).toHaveBeenCalledTimes(1)
+      expect(onPlanFailure).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('bounds a figure read the same way it bounds planning', async () => {
     let figureSignal: AbortSignal | undefined
     const plan = vi
@@ -714,5 +752,107 @@ describe('runAgenticLoop — the wall-clock budget actually binds', () => {
     // A vision call is expensive in tokens as well as seconds — the loop must
     // count it, or the token budget silently means nothing.
     expect(out.tokensUsed).toBeGreaterThanOrEqual(6600)
+  })
+})
+
+describe('runAgenticLoop — plan only when it pays (spec 0043)', () => {
+  const searchThen = (second: unknown) =>
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        decision: { action: 'search', query: 'leave' },
+        tokens: 10,
+      })
+      .mockImplementation(second as never)
+
+  it('ends on a strong first match without a second decision (FR2)', async () => {
+    const plan = searchThen(async () => ({
+      decision: { action: 'answer' },
+      tokens: 10,
+    }))
+    const out = await runAgenticLoop(
+      { ...BUDGET, confidentSimilarity: 0.6 },
+      deps({ plan, search: vi.fn().mockResolvedValue([chunk('a', 0.72)]) }),
+      signal,
+    )
+    expect(out.termination).toBe('confident')
+    expect(plan).toHaveBeenCalledTimes(1)
+    expect(out.chunks.map((c) => c.chunkId)).toEqual(['a'])
+  })
+
+  it('asks again when the first match is weak', async () => {
+    const plan = searchThen(async () => ({
+      decision: { action: 'answer' },
+      tokens: 10,
+    }))
+    const out = await runAgenticLoop(
+      { ...BUDGET, confidentSimilarity: 0.6 },
+      deps({ plan, search: vi.fn().mockResolvedValue([chunk('a', 0.45)]) }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-answered')
+    expect(plan).toHaveBeenCalledTimes(2)
+  })
+
+  it('never stops early when no threshold is set (multi-part questions)', async () => {
+    const plan = searchThen(async () => ({
+      decision: { action: 'answer' },
+      tokens: 10,
+    }))
+    const out = await runAgenticLoop(
+      BUDGET,
+      deps({ plan, search: vi.fn().mockResolvedValue([chunk('a', 0.95)]) }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-answered')
+    expect(plan).toHaveBeenCalledTimes(2)
+  })
+
+  it('caps a stalled planner call after a search: planner-slow, evidence kept (FR3)', async () => {
+    vi.useFakeTimers()
+    try {
+      const stall = (_s: unknown, callSignal: AbortSignal) =>
+        new Promise((_resolve, reject) =>
+          callSignal.addEventListener('abort', () => reject(callSignal.reason)),
+        )
+      const plan = searchThen(stall)
+      const outcome = runAgenticLoop(
+        { ...BUDGET, maxMs: 15_000, planCallMs: 4_000 },
+        deps({ plan, search: vi.fn().mockResolvedValue([chunk('a', 0.5)]) }),
+        signal,
+      )
+      await vi.advanceTimersByTimeAsync(4_100)
+      const out = await outcome
+      expect(out.termination).toBe('planner-slow')
+      expect(out.chunks).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('treats a stalled FIRST call as an outage: falls back to a search at the cap, not the budget', async () => {
+    vi.useFakeTimers()
+    try {
+      const plan = vi.fn(
+        (_s: unknown, callSignal: AbortSignal) =>
+          new Promise((_resolve, reject) =>
+            callSignal.addEventListener('abort', () =>
+              reject(callSignal.reason),
+            ),
+          ) as Promise<never>,
+      )
+      const search = vi.fn().mockResolvedValue([chunk('a', 0.5)])
+      const outcome = runAgenticLoop(
+        { ...BUDGET, maxMs: 15_000, planCallMs: 4_000 },
+        deps({ plan, search, fallbackQuery: 'leave' }),
+        signal,
+      )
+      await vi.advanceTimersByTimeAsync(4_100)
+      const out = await outcome
+      expect(out.termination).toBe('planner-unavailable')
+      expect(search).toHaveBeenCalledWith('leave', undefined)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

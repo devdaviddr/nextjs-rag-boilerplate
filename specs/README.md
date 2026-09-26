@@ -1,7 +1,5 @@
 # Specs — Spec-Driven Development
 
-[← Back to README](../README.md)
-
 **What this covers:** how design decisions get written down before they get
 built, and the index of every spec in this repo.
 
@@ -107,6 +105,7 @@ other — one isn't a substitute for the other.
 | [0040](0040-ai-provider-and-model-settings.md)        | Configure the AI provider and models from Settings                                   | Proposed | —       |
 | [0041](0041-in-app-documentation.md)                  | Read the platform documentation inside the app                                       | Shipped  | v0.23.0 |
 | [0042](0042-observability.md)                         | See what the RAG pipeline and its agents are doing                                   | Shipped  | v0.23.0 |
+| [0043](0043-adaptive-planning.md)                     | Plan only when it pays                                                               | Proposed | —       |
 
 <!-- specs:index:end -->
 
