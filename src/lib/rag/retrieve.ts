@@ -96,6 +96,12 @@ export interface RetrieveOptions {
    * flat list and the assembled one from the same retrieval.
    */
   assembleParents?: boolean
+  /**
+   * Cuts off the model calls this search makes (HyDE, the query embedding),
+   * e.g. at the agentic loop's time budget (#92). The database query itself
+   * is not interruptible and is fast next to either.
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -291,13 +297,17 @@ export async function retrieveForOwner(
   // Each stage is a step of the current run, if there is one (spec 0042).
   const hypothetical = aiSettings().RAG_HYDE_ENABLED
     ? await span('hyde', async (step) => {
-        const drafted = await hypotheticalQuery(question)
+        const drafted = await hypotheticalQuery(question, {
+          signal: options.signal,
+        })
         step.set({ drafted: drafted !== null, passage: drafted })
         return drafted
       })
     : null
   const queryVector = toVectorLiteral(
-    await span('embed-question', () => embedQuery(hypothetical ?? question)),
+    await span('embed-question', () =>
+      embedQuery(hypothetical ?? question, options.signal),
+    ),
   )
 
   // Hybrid retrieval (spec 0027, 1b): a dense channel and a lexical one, fused

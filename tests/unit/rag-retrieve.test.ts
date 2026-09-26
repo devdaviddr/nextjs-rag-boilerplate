@@ -124,7 +124,7 @@ describe('retrieveForOwner — tenant isolation (spec 0025 NFR1)', () => {
     await retrieveForOwner('user-a', 'a question', KB_A)
     // embedQuery is the only exported path for questions; embedPassages is a
     // separate function, so using the wrong input_type is not reachable here.
-    expect(embedQuery).toHaveBeenCalledWith('a question')
+    expect(embedQuery).toHaveBeenCalledWith('a question', undefined)
   })
 
   it('orders by raw distance so the HNSW index can be used', async () => {

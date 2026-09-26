@@ -78,7 +78,9 @@ export const STEP_LABEL: Record<string, string> = {
 /** Why an agentic search loop stopped, in words. */
 export const TERMINATION_LABEL: Record<string, string> = {
   'planner-answered': 'Planner had enough',
+  // No longer produced (#96); kept so runs recorded before then still read.
   'planner-refused': 'Planner found nothing',
+  'repeated-query': 'Planner repeated a search',
   'search-budget': 'Search limit reached',
   'time-budget': 'Time budget ran out',
   'token-budget': 'Token budget ran out',

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   type RawChoice,
+  SEARCH_TOOL,
   parseJsonDecision,
+  parseParallelSearches,
   parseToolCallDecision,
 } from '@/lib/rag/planner'
 
@@ -28,11 +30,15 @@ describe('parseToolCallDecision', () => {
     })
   })
 
-  it('carries a documentId hint through', () => {
+  it('offers no way to name a document, and drops one if sent (#98)', () => {
+    expect(SEARCH_TOOL.function.parameters.properties).not.toHaveProperty(
+      'documentId',
+    )
     const decision = parseToolCallDecision(
       toolChoice('{"query":"notice period","documentId":"doc-1"}'),
     )
-    expect(decision?.documentId).toBe('doc-1')
+    expect(decision).toEqual({ action: 'search', query: 'notice period' })
+    expect(decision).not.toHaveProperty('documentId')
   })
 
   it('treats a stop with content as a decision to answer', () => {
@@ -80,15 +86,11 @@ describe('parseToolCallDecision', () => {
     ).toBeNull()
   })
 
-  it('caps an over-long query and documentId rather than passing them through', () => {
+  it('caps an over-long query rather than passing it through', () => {
     const decision = parseToolCallDecision(
-      toolChoice(
-        JSON.stringify({ query: 'q'.repeat(900), documentId: 'd'.repeat(200) }),
-      ),
+      toolChoice(JSON.stringify({ query: 'q'.repeat(900) })),
     )
     expect(decision?.query).toHaveLength(500)
-    // An over-long id is dropped entirely, not truncated into a different id.
-    expect(decision?.documentId).toBeUndefined()
   })
 
   /**
@@ -134,12 +136,13 @@ describe('parseJsonDecision', () => {
     expect(parseJsonDecision(content)?.query).toBe('refund window')
   })
 
-  it('reads answer and refuse actions', () => {
+  it('reads answer, and a refuse as a stop (#96)', () => {
     expect(parseJsonDecision('{"action":"answer"}')).toEqual({
       action: 'answer',
     })
+    // The floor, not the model, decides whether to refuse.
     expect(parseJsonDecision('{"action":"refuse"}')).toEqual({
-      action: 'refuse',
+      action: 'answer',
     })
   })
 
@@ -172,5 +175,51 @@ describe('parseJsonDecision', () => {
   it('returns null for a search with no query', () => {
     expect(parseJsonDecision('{"action":"search"}')).toBeNull()
     expect(parseJsonDecision('{"action":"search","query":""}')).toBeNull()
+  })
+})
+
+describe('parseParallelSearches (#93)', () => {
+  const calls = (...args: string[]): RawChoice => ({
+    finish_reason: 'tool_calls',
+    message: {
+      content: null,
+      tool_calls: args.map((a) => ({
+        function: { name: 'search_documents', arguments: a },
+      })),
+    },
+  })
+
+  it('returns every search after the first, in order', () => {
+    expect(
+      parseParallelSearches(
+        calls(
+          '{"query":"hot work permit validity"}',
+          '{"query":"confined space permit validity"}',
+          '{"query":"harness inspection"}',
+        ),
+      ),
+    ).toEqual([
+      { action: 'search', query: 'confined space permit validity' },
+      { action: 'search', query: 'harness inspection' },
+    ])
+  })
+
+  it('skips unusable and duplicate calls without failing', () => {
+    expect(
+      parseParallelSearches(
+        calls(
+          '{"query":"a"}',
+          'not json',
+          '{}',
+          '{"query":"b"}',
+          '{"query":"b"}',
+        ),
+      ),
+    ).toEqual([{ action: 'search', query: 'b' }])
+  })
+
+  it('returns nothing for a single call or no calls', () => {
+    expect(parseParallelSearches(calls('{"query":"a"}'))).toEqual([])
+    expect(parseParallelSearches(undefined)).toEqual([])
   })
 })

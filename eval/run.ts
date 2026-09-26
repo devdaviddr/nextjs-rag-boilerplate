@@ -760,6 +760,8 @@ async function agenticRetrieve(
   documents: readonly { id: string; title: string }[],
 ): Promise<{
   chunks: RetrievedChunk[]
+  /** The planner's reading of the question, when it differs from it. */
+  resolved?: string
   searches: number
   latencyMs: number
   tokensUsed: number
@@ -787,6 +789,7 @@ async function agenticRetrieve(
     })
     return {
       chunks: outcome.chunks,
+      ...(outcome.rewritten ? { resolved: outcome.query } : {}),
       searches: outcome.searches,
       latencyMs: Date.now() - startedAt,
       tokensUsed: outcome.tokensUsed,
@@ -812,6 +815,8 @@ async function agenticRetrieve(
 async function runAnswerChecks(
   questions: readonly Question[],
   retrievedById: Map<string, RetrievedChunk[]>,
+  /** The planner's reading of each follow-up, as the chat route passes it (#97). */
+  resolvedById: ReadonlyMap<string, string> = new Map(),
 ): Promise<AnswerCheck[]> {
   const checks: AnswerCheck[] = []
 
@@ -838,7 +843,10 @@ async function runAnswerChecks(
     const { choice } = await createChatCompletion(
       [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserMessage(q.question, chunks) },
+        {
+          role: 'user',
+          content: buildUserMessage(q.question, chunks, resolvedById.get(q.id)),
+        },
       ],
       { maxTokens: 400, temperature: 0.2 },
     )
@@ -1449,6 +1457,7 @@ async function main(): Promise<void> {
   // #102: what the agentic pass retrieved, so `--answers` can also check the
   // answers written from it. Follow-ups only resolve on this path.
   const agenticRetrievedById = new Map<string, RetrievedChunk[]>()
+  const agenticResolvedById = new Map<string, string>()
   if (compare) {
     console.log('\nAgentic (spec 0029 loop) — per question:')
     const adaptive = aiSettings().RAG_AGENTIC_ROUTE === 'adaptive'
@@ -1492,6 +1501,7 @@ async function main(): Promise<void> {
       })
       agenticResults.push(result)
       agenticRetrievedById.set(q.id, outcome.chunks)
+      if (outcome.resolved) agenticResolvedById.set(q.id, outcome.resolved)
       logResult(result)
       await sleep(400)
     }
@@ -1766,6 +1776,7 @@ async function main(): Promise<void> {
       agenticAnswerChecks = await runAnswerChecks(
         questions,
         agenticRetrievedById,
+        agenticResolvedById,
       )
       for (const check of agenticAnswerChecks) {
         console.log(

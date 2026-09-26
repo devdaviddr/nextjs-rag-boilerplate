@@ -29,6 +29,7 @@ const pctText = (v: number | null) =>
 const TERMINATION_COLOUR: Record<string, string> = {
   'planner-answered': 'bg-emerald-500',
   'planner-refused': 'bg-amber-500',
+  'repeated-query': 'bg-amber-500',
   'search-budget': 'bg-orange-500',
   'time-budget': 'bg-red-400',
   'token-budget': 'bg-rose-500',

@@ -81,8 +81,11 @@ export async function embedPassages(texts: string[]): Promise<number[][]> {
 }
 
 /** Embed a single search query. Never use this for document text. */
-export async function embedQuery(text: string): Promise<number[]> {
-  const [vector] = await createEmbeddings([text], 'query')
+export async function embedQuery(
+  text: string,
+  signal?: AbortSignal,
+): Promise<number[]> {
+  const [vector] = await createEmbeddings([text], 'query', signal)
   if (!vector) throw new Error('Embedding model returned no vector for query.')
   assertDimensions([vector])
   return vector

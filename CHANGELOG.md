@@ -8,6 +8,46 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **The agentic search spends its searches better**
+  ([#93](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/93),
+  [#94](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/94),
+  [#95](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/95),
+  [#100](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/100)).
+  When the planner asks for two searches in one reply, both now run together
+  instead of the second being dropped. A search it already ran is not run
+  again; the loop stops with what it has (`repeated-query` in Observability).
+  The planner is told how many searches it has left, and sees past answers cut
+  to 300 characters instead of in full.
+- **Agent token counts include figure reads**
+  ([#96](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/96)).
+  The log and Observability counted planner tokens only.
+
+### Fixed
+
+- **Figure questions are answered from what the figure shows**
+  ([#90](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/90),
+  [#91](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/91),
+  spec 0031 FR14, FR15). What `read_figure` saw only reached the planner, so
+  the answer was written from the figure's label and refused or guessed. The
+  reading now reaches the answer and is cited as the figure. A figure read also
+  no longer raises the relevance bar, which had dropped the very figure it read.
+- **Follow-up answers know what "it" refers to**
+  ([#97](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/97)).
+  The answer was written from the literal follow-up, so "Who signs it off?"
+  could name the signer of the wrong permit. It now gets the planner's reading
+  of the question too.
+- **The planner can no longer skip the relevance floor**
+  ([#98](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/98)).
+  Its search tool offered a document id it was never shown, so any id was
+  invented and wasted a search, and a real one would have returned a whole
+  document past the floor. The option is removed.
+- **A slow search can no longer overrun the agentic time limit**
+  ([#92](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/92)).
+  Searches, including the fallback when the planner is down, are now cut off
+  at `RAG_MAX_LOOP_MS` like planner calls.
+
 ## [0.24.0] - 2026-09-26
 
 ### Added

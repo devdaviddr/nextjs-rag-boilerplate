@@ -4,12 +4,18 @@ import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { planRoute } from './plan-route'
 import { span } from '@/lib/observability/runs'
-import { type LoopStep, effectiveFloor, runAgenticLoop } from './agentic'
+import {
+  type LoopFigureReading,
+  type LoopStep,
+  effectiveFloor,
+  runAgenticLoop,
+} from './agentic'
 import { createChatCompletion } from './client'
 import { READ_FIGURE_TOOL, readFigure } from './figure'
 import {
   type PlannerDecision,
   SEARCH_TOOL,
+  parseParallelSearches,
   parseToolCallDecision,
 } from './planner'
 import { outageQueries, previousUserTurn, type RewriteTurn } from './rewrite'
@@ -34,11 +40,19 @@ export interface AgenticResult {
   steps: LoopStep[]
   termination: string
   searches: number
+  /** Planning, figure reading and every other call the loop paid for (#96). */
   tokensUsed: number
 }
 
 /** Recent turns shown to the planner. Enough for a pronoun, not a summary. */
 export const PLANNER_CONTEXT_TURNS = 4
+
+/**
+ * Most of one past ASSISTANT turn the planner is shown (#100). It needs the
+ * turn to work out what "it" refers to, not the whole answer, and a full
+ * answer was up to ~2k tokens re-sent on every planner call in the loop.
+ */
+export const PLANNER_ASSISTANT_TURN_CHARS = 300
 
 /**
  * Smallest loop budget that can actually complete a figure question.
@@ -68,22 +82,48 @@ Call search_documents when answering needs information from the user's documents
 The search has NO memory of the conversation. Resolve pronouns and references from the conversation before searching: "what about carrying it over?" after a question about annual leave must be searched as "carrying over annual leave", never as the literal words the user typed.
 Look at what previous searches returned. If they found nothing useful, try a DIFFERENT phrasing or a more specific term rather than repeating the same query.
 When you have enough to answer, reply with a short confirmation instead of calling the tool.
+If the question asks about two separate things, call search_documents once for each in the same reply.
 
 When a search result is marked FIGURE, its text is only a label — call read_figure with the id shown and a specific question to see what the figure actually contains. Never guess a value from a figure you have not looked at.
 
-Never invent document ids or figure ids. Only pass an id that was given to you.`
+Never invent figure ids. Only pass an id that was given to you.`
 
-function historyPrompt(
+/** One past turn as the planner sees it, assistant turns cut short (#100). */
+function plannerTurn(turn: RewriteTurn): string {
+  if (turn.role === 'user') return `User: ${turn.content}`
+  const text = turn.content.replace(/\s+/g, ' ').trim()
+  return `Assistant: ${
+    text.length > PLANNER_ASSISTANT_TURN_CHARS
+      ? `${text.slice(0, PLANNER_ASSISTANT_TURN_CHARS)}…`
+      : text
+  }`
+}
+
+/**
+ * How many searches are left, said plainly (#95). On the last one the planner
+ * is asked to make it count: a narrow final search that misses leaves nothing.
+ */
+function budgetLine(searchesLeft: number): string {
+  if (searchesLeft <= 0) return ''
+  if (searchesLeft === 1) {
+    return '\n\nYou have 1 search left. Make it broad enough to cover whatever is still missing.'
+  }
+  return `\n\nYou have ${searchesLeft} searches left.`
+}
+
+export function historyPrompt(
   question: string,
   turns: readonly RewriteTurn[],
   steps: readonly LoopStep[],
+  maxSearches: number,
 ): string {
   const transcript = turns
     .slice(-PLANNER_CONTEXT_TURNS)
-    .map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content}`)
+    .map(plannerTurn)
     .join('\n')
   const preamble = transcript ? `Conversation so far:\n${transcript}\n\n` : ''
-  if (steps.length === 0) return `${preamble}Question: ${question}`
+  const left = budgetLine(maxSearches - steps.length)
+  if (steps.length === 0) return `${preamble}Question: ${question}${left}`
   const summary = steps
     .map(
       (s) =>
@@ -94,7 +134,7 @@ function historyPrompt(
         (s.found ? `\n${s.found}` : ''),
     )
     .join('\n')
-  return `${preamble}Question: ${question}\n\nSearches so far:\n${summary}\n\nIf these passages already answer the question, say so instead of searching again.`
+  return `${preamble}Question: ${question}\n\nSearches so far:\n${summary}\n\nIf these passages already answer the question, say so instead of searching again.${left}`
 }
 
 /**
@@ -104,10 +144,9 @@ function historyPrompt(
  *
  * `userId` and `permittedKbIds` are bound HERE, from the session and the
  * conversation, and closed over by the search function. The planner supplies a
- * query and at most a `documentId` hint. It cannot widen scope, because there
- * is no parameter through which to do so: an out-of-scope `documentId` reaches
- * `retrieveDocumentChunks`, which filters on the same permitted set and returns
- * nothing — indistinguishable from a document that does not exist.
+ * query and nothing else (#98). It cannot widen scope, because there is no
+ * parameter through which to do so. A figure id for `read_figure` is checked
+ * against the same permitted set in `resolveFigure`.
  *
  * Resolved once per question, never per tool call, so a multi-search question
  * cannot end up with citations spanning two different notions of what was
@@ -173,7 +212,6 @@ export async function runAgenticRetrieval(input: {
 
   // 3. The bounded loop. Reference resolution happens INSIDE it, not as a
   //    separate call — see the note on `effectiveQuery` below.
-  let tokens = 0
   // Figures are only worth offering when something could have produced one.
   // With cracking off no chunk is a figure, so advertising the tool would cost
   // planner tokens on every question to describe something that cannot exist.
@@ -199,9 +237,10 @@ export async function runAgenticRetrieval(input: {
   // loop, except for a question that asks two things at once.
   const multiPart = planRoute(question, turns).reason === 'multi-part'
   const confident = aiSettings().RAG_AGENTIC_CONFIDENT_SIMILARITY
+  const maxSearches = aiSettings().RAG_MAX_SEARCHES
   const outcome = await runAgenticLoop(
     {
-      maxSearches: aiSettings().RAG_MAX_SEARCHES,
+      maxSearches,
       maxMs,
       maxTokens,
       planCallMs: aiSettings().RAG_PLANNER_CALL_MS || undefined,
@@ -215,7 +254,10 @@ export async function runAgenticRetrieval(input: {
           const { choice, tokens: used } = await createChatCompletion(
             [
               { role: 'system', content: PLANNER_SYSTEM_PROMPT },
-              { role: 'user', content: historyPrompt(question, turns, steps) },
+              {
+                role: 'user',
+                content: historyPrompt(question, turns, steps, maxSearches),
+              },
             ],
             {
               role: 'planner',
@@ -226,8 +268,9 @@ export async function runAgenticRetrieval(input: {
               signal: planSignal,
             },
           )
-          tokens += used
           const decision: PlannerDecision | null = parseToolCallDecision(choice)
+          const parallel =
+            decision?.action === 'search' ? parseParallelSearches(choice) : []
           // What the agent chose, as it chose it (spec 0042 FR6).
           logger.info(
             decision
@@ -238,7 +281,7 @@ export async function runAgenticRetrieval(input: {
               iteration: steps.length + 1,
               action: decision?.action ?? null,
               query: decision?.query,
-              documentId: decision?.documentId,
+              parallel: parallel.map((d) => d.query),
               tokens: used,
               finishReason: choice.finish_reason,
             },
@@ -247,9 +290,9 @@ export async function runAgenticRetrieval(input: {
             iteration: steps.length + 1,
             action: decision?.action ?? null,
             query: decision?.query,
-            documentId: decision?.documentId,
+            parallel: parallel.map((d) => d.query),
           })
-          return { decision, tokens: used }
+          return { decision, parallel, tokens: used }
         }),
       fallbackQuery: question,
       outageQueries: outageQueries(question, turns),
@@ -271,18 +314,20 @@ export async function runAgenticRetrieval(input: {
           aborted: signal.aborted,
         })
       },
-      search: (searchQuery, documentId) =>
+      search: (searchQuery, searchSignal) =>
         span('search', async (step) => {
           const started = Date.now()
-          const found = documentId
-            ? await retrieveDocumentChunks(userId, documentId, permittedKbIds)
-            : await retrieveForOwner(userId, searchQuery, permittedKbIds)
+          const found = await retrieveForOwner(
+            userId,
+            searchQuery,
+            permittedKbIds,
+            { signal: searchSignal },
+          )
           logger.info(
             `Search found ${found.length} passage${found.length === 1 ? '' : 's'}`,
             {
               category: 'retrieval',
               query: searchQuery,
-              documentId,
               results: found.length,
               bestSimilarity: found.reduce<number | null>(
                 (best, c) =>
@@ -294,7 +339,6 @@ export async function runAgenticRetrieval(input: {
           )
           step.set({
             query: searchQuery,
-            documentId,
             results: found.length,
             passages: found.slice(0, 5).map((c) => ({
               document: c.documentTitle,
@@ -344,12 +388,18 @@ export async function runAgenticRetrieval(input: {
   // Apply the attempt-scaled floor to everything the loop gathered. Done here,
   // once, rather than inside the loop: the loop must still SEE weak results so
   // its planner can judge that a second phrasing is worth trying.
+  //
+  // Text searches only (spec 0031 FR15): a figure read is not another chance to
+  // match a passage by luck, so it must not raise the bar on the figure it read.
   const floor = effectiveFloor(
     aiSettings().RAG_MIN_SIMILARITY,
-    outcome.searches,
+    outcome.textSearches,
     aiSettings().RAG_AGENTIC_FLOOR_STEP,
   )
-  const kept = outcome.chunks.filter((c) => c.similarity >= floor)
+  const kept = withFigureReadings(
+    outcome.chunks.filter((c) => c.similarity >= floor),
+    outcome.figureReadings,
+  )
 
   logger.info('Agentic retrieval', {
     category: 'agent',
@@ -357,9 +407,10 @@ export async function runAgenticRetrieval(input: {
     rewritten,
     searches: outcome.searches,
     termination: outcome.termination,
-    tokensUsed: tokens,
+    tokensUsed: outcome.tokensUsed,
     elapsedMs: outcome.elapsedMs,
     chunkCount: kept.length,
+    figureReadings: outcome.figureReadings.length,
     floor,
   })
 
@@ -371,8 +422,40 @@ export async function runAgenticRetrieval(input: {
     steps: outcome.steps,
     termination: outcome.termination,
     searches: outcome.searches,
-    tokensUsed: tokens,
+    tokensUsed: outcome.tokensUsed,
   }
+}
+
+/**
+ * Give the answer what `read_figure` saw (spec 0031 FR14).
+ *
+ * A reading replaces its figure chunk's text, the search key, with the
+ * reading itself, labelled as a reading and not the document's words. The
+ * writer then answers from it, a claim drawn from it cites the figure chunk,
+ * and citation checking judges that claim against the reading.
+ *
+ * Only a figure chunk that cleared the floor gets its reading: the floor, not
+ * the reading, still decides whether there is anything to answer from, so
+ * refusal cannot move. Several readings of one figure are all kept, in order.
+ */
+export function withFigureReadings(
+  chunks: readonly RetrievedChunk[],
+  readings: readonly LoopFigureReading[],
+): RetrievedChunk[] {
+  if (readings.length === 0) return [...chunks]
+  return chunks.map((chunk) => {
+    const mine = readings.filter((r) => r.chunkId === chunk.chunkId)
+    if (chunk.kind !== 'figure' || mine.length === 0) return chunk
+    const body = mine
+      .map((r) => `Asked: ${r.question}\nSeen: ${r.text}`)
+      .join('\n\n')
+    return {
+      ...chunk,
+      content:
+        `[A reading of this figure by a vision model, not the document's own text.]\n` +
+        `Figure label: ${chunk.content.replace(/\s+/g, ' ').trim()}\n${body}`,
+    }
+  })
 }
 
 /**

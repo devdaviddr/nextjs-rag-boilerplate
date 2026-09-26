@@ -523,8 +523,17 @@ measurement in **Problem** exists to justify.
       figure it came from (FR14) — #90
 - [ ] Citation checking keeps a claim the reading supports and strips one it
       does not (FR14) — #90
-- [ ] A figure found on the first search at the base floor survives a
-      `read_figure` in the same loop (FR15) — #91
+- [x] A figure found on the first search at the base floor survives a
+      `read_figure` in the same loop (FR15) — #91,
+      `tests/unit/rag-agentic.test.ts` ("counts a figure read against the
+      budget but not as a text search")
+
+> **Not verified end to end yet (2026-09-26).** The two FR14 criteria above are
+> implemented (`withFigureReadings` in `src/lib/rag/agentic-run.ts`, unit-tested
+> in `tests/unit/rag-agentic-run.test.ts`) but not yet confirmed on a live
+> figure question: that needs `pnpm rag:eval --compare --answers` with
+> `RAG_CRACK_ENABLED` and `RAG_READ_FIGURE_ENABLED` on, which #102 records. Tick
+> them from that run's `layout-figure-*` answer checks.
 
 > **Resolved, and not the way the first draft assumed (2026-09-10).** "Answers
 > a table question the current pipeline cannot" was an acceptance criterion in

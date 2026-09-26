@@ -1201,16 +1201,16 @@ flowchart TB
     subgraph LOOP["Bounded loop — 3 searches, 15s, 8k tokens"]
         direction TB
         PL["Plan<br>tool call, sees recent turns"] --> D{"Decision"}
-        D -->|"search"| SR["search_documents<br>owner + KB set SERVER-BOUND"]
+        D -->|"search, one or several"| SR["search_documents<br>owner + KB set SERVER-BOUND"]
         D -->|"answer, no evidence yet"| FORCE["Forced first search<br>with the original question"]
         FORCE --> SR
         SR --> ACC["Accumulate + dedup"]
         ACC --> PL
         D -->|"answer, with evidence"| OUT
-        D -->|"refuse / budget spent"| OUT
+        D -->|"repeat / budget spent"| OUT
     end
 
-    OUT["Attempt-scaled floor<br>0.35 + 0.04 per extra search"] --> GATE{"Anything left?"}
+    OUT["Attempt-scaled floor<br>0.35 + 0.04 per extra text search"] --> GATE{"Anything left?"}
     WD --> GATE
     GATE -->|no| REF["REFUSE — code path,<br>model never drafts"]
     GATE -->|yes| DRAFT["Draft + stream<br>one retry if empty"]
@@ -1242,10 +1242,14 @@ already settled. Four guardrails keep it bounded, and each is covered below.
 
 `userId` and the permitted knowledge bases are bound **once per question**, from
 the session and the conversation, and closed over by the search function. The
-planner supplies a query and at most a `documentId` hint. It cannot widen scope
-because it has no parameter to do so with. An out-of-scope `documentId` reaches
-`retrieveDocumentChunks`, which filters on the same permitted set and returns
-nothing, which looks the same as a document that does not exist.
+planner supplies a query and nothing else. It cannot widen scope because it has
+no parameter to do so with. A figure id for `read_figure` is checked against the
+same permitted set in `resolveFigure`.
+
+There used to be a `documentId` hint as well. The planner was never shown a
+document id, so any id it sent was invented, and a real one would have returned
+the whole document with its similarity forced to 1, past the floor. It was
+removed (#98).
 
 Scope is resolved once per question instead of per tool call, so a multi-search
 question cannot end up with citations spanning two different notions of what was
@@ -1268,7 +1272,7 @@ Every exit is named in the trace, never swallowed:
 | Termination           | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `planner-answered`    | The planner judged the evidence sufficient                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `planner-refused`     | The planner said the corpus cannot answer this                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `repeated-query`      | The planner asked only for searches it had already run, so nothing new could come back (#94)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `search-budget`       | `RAG_MAX_SEARCHES` reached; answer from what was found, or refuse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `time-budget`         | `RAG_MAX_LOOP_MS` reached; never a partial ungrounded answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `token-budget`        | `RAG_MAX_LOOP_TOKENS` reached                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -1280,10 +1284,40 @@ Budgets are checked **before** each expensive call, never after, because
 checking afterwards lets each bound be exceeded by exactly one call. Each call
 also carries a signal composed from the time the loop has left, so
 `RAG_MAX_LOOP_MS` bounds work already in flight instead of only deciding whether
-to start more. Underneath that, every inference request has a **60-second
+to start more. That includes searches (#92): the query embedding (and HyDE, when
+on) is cut off at the budget, and so are the fallback searches when the planner
+is down. Underneath that, every inference request has a **60-second
 per-attempt deadline**. `fetch` has no timeout of its own, and without one a
 stalled endpoint hung a request indefinitely while the loop budget did nothing
 (measured: one planner call at 86s where it normally takes 3–6).
+
+### Two searches at once, and never the same one twice
+
+When the planner sends several `search_documents` calls in one reply, usually
+one per part of a two-part question, they all run together in parallel, each
+counted against `RAG_MAX_SEARCHES` (#93). A query that matches one already run,
+ignoring case, punctuation and spacing, is not run again (#94). The planner is
+also told how many searches it has left, and asked to make the last one broad
+(#95). Past assistant answers it sees are cut to 300 characters: it needs them
+to work out what "it" means, not to reread the answer (#100).
+
+### Figure readings reach the answer
+
+What `read_figure` sees is reported to the planner and also kept for the
+answer (spec 0031 FR14). A figure chunk that cleared the floor has its search
+key replaced by the reading, labelled as a vision model's reading and not the
+document's words. The writer answers from it, a claim drawn from it cites the
+figure, and citation checking judges that claim against the reading. A figure
+read counts against the search budget but not towards the floor, which rises
+with text searches only (FR15): reading a figure is not another chance to match
+a passage by luck.
+
+### The writer knows what a follow-up means
+
+The writer sees no conversation. When the planner rewrote a follow-up to search
+it, the writer is given that reading next to the question, e.g.
+`(In this conversation, the question means: who signs off a confined space
+permit)`, so "Who signs it off?" is answered about the right permit (#97).
 
 ### The first pass always searches
 

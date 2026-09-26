@@ -45,7 +45,9 @@ export interface LoopBudget {
 /** Why the loop stopped. Every value is reported in the trace, not swallowed. */
 export type LoopTermination =
   | 'planner-answered'
-  | 'planner-refused'
+  // The planner asked only for searches it had already run (#94): nothing new
+  // could come back, so the loop stops with the evidence it has.
+  | 'repeated-query'
   | 'search-budget'
   | 'time-budget'
   // The first search found a strong match; no second decision (spec 0043).
@@ -73,18 +75,47 @@ export interface LoopStep {
   elapsedMs: number
 }
 
+/**
+ * What `read_figure` saw, kept so the answer can use it (spec 0031 FR14).
+ *
+ * Not a retrieved chunk and never accumulated into `chunks`: it has no
+ * similarity, and the floor is applied to chunks alone. The caller attaches a
+ * reading to its figure chunk only if that chunk cleared the floor.
+ */
+export interface LoopFigureReading {
+  chunkId: string
+  question: string
+  text: string
+  documentTitle: string
+  pageNumber: number
+}
+
 export interface LoopOutcome {
   /** Everything retrieved, deduplicated, best-scoring first. */
   chunks: RetrievedChunk[]
   termination: LoopTermination
   steps: LoopStep[]
+  /** Every step that spent the search budget: text searches and figure reads. */
   searches: number
+  /**
+   * Text searches only (spec 0031 FR15). The attempt-scaled floor rises with
+   * THIS, because only a text search is another chance to match a passage by
+   * luck. A figure read counts against the budget but not against the floor.
+   */
+  textSearches: number
+  figureReadings: LoopFigureReading[]
   tokensUsed: number
   elapsedMs: number
 }
 
 export interface PlanResult {
   decision: PlannerDecision | null
+  /**
+   * Further searches the planner asked for in the SAME reply (#93). Models
+   * often return several tool calls at once for a two-part question; they
+   * are run together, in parallel, each counting against the budget.
+   */
+  parallel?: PlannerDecision[]
   /** Total tokens the planning call consumed, from the provider's usage frame. */
   tokens: number
 }
@@ -102,9 +133,13 @@ export interface LoopDeps {
   /**
    * Run one search. Owner and permitted knowledge bases are bound by the
    * CALLER, not passed in here — the loop has no way to widen its own scope
-   * even if the planner asks it to (spec 0028 boundary).
+   * even if the planner asks it to (spec 0028 boundary). The planner supplies
+   * a query and nothing else (#98).
+   *
+   * `signal` carries whatever is left of the wall-clock budget (#92), so a
+   * slow embedding call is cut off rather than allowed to overrun it.
    */
-  search: (query: string, documentId?: string) => Promise<RetrievedChunk[]>
+  search: (query: string, signal: AbortSignal) => Promise<RetrievedChunk[]>
   /**
    * Look at one figure and answer one question about it (spec 0031 FR9).
    *
@@ -196,6 +231,17 @@ export function effectiveFloor(
 }
 
 /**
+ * A query reduced to what makes it the same search as another (#94): case,
+ * punctuation and spacing do not change what comes back.
+ */
+export function sameSearchKey(query: string): string {
+  return query
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+/**
  * Merge new results into the accumulator, keeping the best score per chunk.
  *
  * Two searches routinely return overlapping passages. Without dedup the same
@@ -283,8 +329,10 @@ export async function runAgenticLoop(
 
   let chunks: RetrievedChunk[] = []
   const steps: LoopStep[] = []
+  const figureReadings: LoopFigureReading[] = []
   let tokensUsed = 0
   let searches = 0
+  let textSearches = 0
 
   const elapsed = () => now() - startedAt
 
@@ -324,9 +372,29 @@ export async function runAgenticLoop(
     termination,
     steps,
     searches,
+    textSearches,
+    figureReadings,
     tokensUsed,
     elapsedMs: elapsed(),
   })
+
+  /**
+   * One search, bounded by what is left of the wall-clock budget (#92).
+   * Returns null when the budget cut it off; any other failure propagates.
+   */
+  const boundedSearch = async (
+    query: string,
+  ): Promise<RetrievedChunk[] | null> => {
+    const call = callSignal()
+    try {
+      return await deps.search(query, call.signal)
+    } catch (error) {
+      if (!signal.aborted && elapsed() >= budget.maxMs) return null
+      throw error
+    } finally {
+      call.clear()
+    }
+  }
 
   /**
    * Stop because the planner is unusable — but never with NO evidence.
@@ -358,16 +426,20 @@ export async function runAgenticLoop(
       const literal = new Set<string>()
       let baseline: Map<string, number> | null = null
       for (const [i, query] of queries.entries()) {
+        // The fallback is bounded by the same clock as everything else (#92).
+        if (elapsed() >= budget.maxMs) break
         searches += 1
-        let found = await deps.search(query, undefined)
+        textSearches += 1
+        let found = await boundedSearch(query)
+        if (found === null) break
         if (i === 0) {
           found.forEach((c) => literal.add(c.chunkId))
         } else if (deps.outageBaseline?.trim()) {
-          baseline ??= new Map(
-            (await deps.search(deps.outageBaseline.trim(), undefined)).map(
-              (c) => [c.chunkId, c.similarity],
-            ),
-          )
+          if (!baseline) {
+            const yard = await boundedSearch(deps.outageBaseline.trim())
+            if (yard === null) break
+            baseline = new Map(yard.map((c) => [c.chunkId, c.similarity]))
+          }
           const yardstick = baseline
           found = found.filter(
             (c) =>
@@ -447,7 +519,6 @@ export async function runAgenticLoop(
         return finish('planner-answered')
       }
     }
-    if (decision.action === 'refuse') return finish('planner-refused')
 
     // Looking at a figure costs a step and a vision call, so it is bounded by
     // the SAME search budget rather than getting its own. Measured at ~4s for
@@ -474,7 +545,16 @@ export async function runAgenticLoop(
       } finally {
         figureCall.clear()
       }
-      if (reading) tokensUsed += reading.tokens
+      if (reading) {
+        tokensUsed += reading.tokens
+        figureReadings.push({
+          chunkId,
+          question: figureQuestion,
+          text: reading.text,
+          documentTitle: reading.documentTitle,
+          pageNumber: reading.pageNumber,
+        })
+      }
 
       steps.push({
         iteration: searches,
@@ -500,36 +580,55 @@ export async function runAgenticLoop(
       return unavailable()
     }
 
-    searches += 1
-    const found = await deps.search(query, decision.documentId)
-    chunks = accumulate(chunks, found)
+    // Every search in this reply (#93), minus any already run (#94) and any
+    // the budget cannot pay for. Checked BEFORE searching, like every bound.
+    const seen = new Set(steps.map((s) => sameSearchKey(s.query)))
+    const round: string[] = []
+    for (const q of [query, ...(result.parallel ?? []).map((d) => d.query)]) {
+      const text = q?.trim()
+      if (!text) continue
+      const key = sameSearchKey(text)
+      if (seen.has(key)) continue
+      seen.add(key)
+      round.push(text)
+    }
+    if (round.length === 0) return finish('repeated-query')
+    const affordable = round.slice(0, budget.maxSearches - searches)
 
-    steps.push({
-      iteration: searches,
-      query,
-      documentId: decision.documentId,
-      resultCount: found.length,
-      bestSimilarity: found.length
-        ? Math.max(...found.map((c) => c.similarity))
-        : null,
-      // Top few only, truncated. The planner needs enough to judge
-      // sufficiency; the whole passage set would blow the token budget it is
-      // simultaneously being measured against.
-      found: found
-        .slice(0, 3)
-        .map((c) =>
-          c.kind === 'figure'
-            ? // A figure's indexed text is a search key, not its content, so
-              // quoting it back would invite the planner to answer from a
-              // label. It is shown as something to LOOK AT instead, with the
-              // id read_figure needs — the only place the model ever learns a
-              // chunk id, and still no more authority than a hint.
-              `    [${c.documentTitle} p${c.pageNumber}] FIGURE (id ${c.chunkId}) — ${c.content.replace(/\s+/g, ' ').slice(0, 120)}. Use read_figure to see what it shows.`
-            : `    [${c.documentTitle} p${c.pageNumber}] ${c.content.replace(/\s+/g, ' ').slice(0, 240)}`,
-        )
-        .join('\n'),
-      elapsedMs: elapsed(),
-    })
+    searches += affordable.length
+    textSearches += affordable.length
+    const results = await Promise.all(affordable.map((q) => boundedSearch(q)))
+    for (const [i, found] of results.entries()) {
+      if (found === null) continue
+      chunks = accumulate(chunks, found)
+      steps.push({
+        iteration: steps.length + 1,
+        query: affordable[i]!,
+        resultCount: found.length,
+        bestSimilarity: found.length
+          ? Math.max(...found.map((c) => c.similarity))
+          : null,
+        // Top few only, truncated. The planner needs enough to judge
+        // sufficiency; the whole passage set would blow the token budget it is
+        // simultaneously being measured against.
+        found: found
+          .slice(0, 3)
+          .map((c) =>
+            c.kind === 'figure'
+              ? // A figure's indexed text is a search key, not its content, so
+                // quoting it back would invite the planner to answer from a
+                // label. It is shown as something to LOOK AT instead, with the
+                // id read_figure needs — the only place the model ever learns a
+                // chunk id, and still no more authority than a hint.
+                `    [${c.documentTitle} p${c.pageNumber}] FIGURE (id ${c.chunkId}) — ${c.content.replace(/\s+/g, ' ').slice(0, 120)}. Use read_figure to see what it shows.`
+              : `    [${c.documentTitle} p${c.pageNumber}] ${c.content.replace(/\s+/g, ' ').slice(0, 240)}`,
+          )
+          .join('\n'),
+        elapsedMs: elapsed(),
+      })
+    }
+    // The clock cut a search off: the evidence in hand stands.
+    if (results.some((found) => found === null)) return finish('time-budget')
 
     // A strong first match needs no second decision (spec 0043 FR2). That
     // decision reads the passages and is the slow one; the score already says
@@ -537,6 +636,7 @@ export async function runAgenticLoop(
     const best = steps.at(-1)?.bestSimilarity ?? null
     if (
       searches === 1 &&
+      textSearches === 1 &&
       budget.confidentSimilarity !== undefined &&
       best !== null &&
       best >= budget.confidentSimilarity
