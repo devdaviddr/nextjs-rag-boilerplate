@@ -36,7 +36,9 @@ pnpm dev
    pnpm lint && pnpm typecheck && pnpm test && pnpm build
    ```
 
-6. Open a pull request into `main` and fill in the template. The title is a
+6. Push the branch. In this repository, pull requests into `main` are opened
+   as part of a ship (`/ship`), when the maintainer starts one; your branch is
+   picked up then. Each PR gets the template filled in. The title is a
    Conventional Commit header, and the body says `Closes #N` (or `Part of #N`).
    CI runs the gate and the Playwright suite, and the **PR checks** job checks
    the title, every commit message, the issue link, and — for `feat`, `fix`,

@@ -108,7 +108,13 @@ Do not start a change that has no issue.
 - **Milestones** name the release an issue is planned for (`v0.21.0`).
 - **Branch** off `main` as `<type>/<issue#>-<slug>` — `feat/16-reranking`,
   `fix/18-minio-images`, `chore/19-release-process`.
-- **PR** into `main` with a Conventional Commit title, `Closes #N` (or
+- **Push the branch; do not open the PR.** Pull requests into `main` are
+  opened only when the owner starts a ship (`/ship`), which opens one per
+  finished branch, merges each on green CI, then cuts the release. Never run
+  `gh pr create --base main` or `gh pr merge` outside a ship the owner asked
+  for. GitHub cannot enforce this (the agent acts as the owner's account), so
+  it is a working rule.
+- **At ship, each PR** has a Conventional Commit title, `Closes #N` (or
   `Part of #N`) in the body, and the template filled in. The `PR checks` job
   fails without the issue link, and fails a `feat`/`fix`/`perf`/`revert` or
   breaking PR that doesn't touch `CHANGELOG.md` unless it has the
