@@ -13,6 +13,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - Every grounded answer is now checked against its sources, not only answers
   from the agentic path, and a sentence without a citation is checked too. An
   invented claim with no `[n]` used to reach the user unchecked (#127).
+- Admins now see why adding, editing, deleting or changing the roles of a user
+  failed (for example "An account with this email already exists."). In
+  production builds these messages were replaced by a generic error (#128).
 
 ### Security
 

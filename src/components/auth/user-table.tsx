@@ -55,7 +55,11 @@ export function UserTable({
     setIsDeleting(true)
     setDeleteError(null)
     try {
-      await deleteUser(userToDelete)
+      const result = await deleteUser(userToDelete)
+      if (!result.ok) {
+        setDeleteError(result.error)
+        return
+      }
       setDeleteDialogOpen(false)
       setUserToDelete(null)
       onUsersChange()

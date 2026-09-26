@@ -62,3 +62,30 @@ test('an admin invites a user who then claims the account', async ({
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/chat/)
 })
+
+// #128: an expected failure reaches the admin as its message. A thrown error
+// would be redacted to a generic one in the production build CI runs.
+test('an admin sees why a user could not be created', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('demo@example.com')
+  await page.getByLabel('Password', { exact: true }).fill('Password123')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/chat/)
+
+  await page.goto('/settings#users')
+  await page.getByRole('button', { name: 'Add User' }).click()
+
+  const dialog = page.getByRole('dialog')
+  await dialog.getByPlaceholder('Ada Lovelace').fill('Duplicate')
+  await dialog.getByPlaceholder('user@example.com').fill('demo@example.com')
+  await dialog
+    .locator('label')
+    .filter({ hasText: /^member$/ })
+    .getByRole('checkbox')
+    .click()
+  await dialog.getByRole('button', { name: 'Create' }).click()
+
+  await expect(
+    dialog.getByText('An account with this email already exists.'),
+  ).toBeVisible()
+})

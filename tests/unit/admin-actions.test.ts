@@ -194,23 +194,27 @@ describe('createUser', () => {
 
   it('rejects non-admins', async () => {
     mockGetSession.mockResolvedValue(memberSession)
-    await expect(createUser(input)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(await createUser(input)).toEqual({
+      ok: false,
+      error: expect.any(String),
+    })
   })
 
   it('rejects invalid input', async () => {
     mockGetSession.mockResolvedValue(adminSession)
-    await expect(
-      createUser({ name: '', email: 'not-an-email', roleIds: [] }),
-    ).rejects.toThrow()
+    expect(
+      await createUser({ name: '', email: 'not-an-email', roleIds: [] }),
+    ).toEqual({ ok: false, error: expect.any(String) })
   })
 
   it('rejects a duplicate email', async () => {
     mockGetSession.mockResolvedValue(adminSession)
     dbMock.query.users.findFirst.mockResolvedValueOnce({ id: 'existing' })
 
-    await expect(createUser(input)).rejects.toThrow(
-      'An account with this email already exists.',
-    )
+    expect(await createUser(input)).toEqual({
+      ok: false,
+      error: 'An account with this email already exists.',
+    })
   })
 
   it('rejects unknown role ids', async () => {
@@ -218,9 +222,10 @@ describe('createUser', () => {
     dbMock.query.users.findFirst.mockResolvedValueOnce(null) // no duplicate
     dbMock.query.roles.findMany.mockResolvedValueOnce([]) // none match
 
-    await expect(createUser(input)).rejects.toThrow(
-      'One or more roles do not exist.',
-    )
+    expect(await createUser(input)).toEqual({
+      ok: false,
+      error: 'One or more roles do not exist.',
+    })
   })
 
   it('creates the user and returns an invite token when email is disabled', async () => {
@@ -236,14 +241,16 @@ describe('createUser', () => {
 
     const result = await createUser(input)
 
-    expect(result).toMatchObject({
+    expect(result.ok).toBe(true)
+    const created = result.ok ? result.data : null
+    expect(created).toMatchObject({
       id: NEW_USER_ID,
       hasPassword: false,
       emailSent: false,
       roles: [memberRoleRow],
     })
-    expect(result.inviteToken).toEqual(expect.any(String))
-    expect(result.inviteToken.length).toBeGreaterThan(0)
+    expect(created?.inviteToken).toEqual(expect.any(String))
+    expect(created?.inviteToken.length).toBeGreaterThan(0)
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
@@ -261,7 +268,7 @@ describe('createUser', () => {
 
     const result = await createUser(input)
 
-    expect(result.emailSent).toBe(true)
+    expect(result).toMatchObject({ ok: true, data: { emailSent: true } })
     expect(mockSendEmail).toHaveBeenCalledOnce()
   })
 })
@@ -271,18 +278,20 @@ describe('createUser', () => {
 describe('updateUser', () => {
   it('rejects non-admins', async () => {
     mockGetSession.mockResolvedValue(memberSession)
-    await expect(updateUser(NEW_USER_ID, { name: 'X' })).rejects.toBeInstanceOf(
-      ForbiddenError,
-    )
+    expect(await updateUser(NEW_USER_ID, { name: 'X' })).toEqual({
+      ok: false,
+      error: expect.any(String),
+    })
   })
 
   it('errors when the target user does not exist', async () => {
     mockGetSession.mockResolvedValue(adminSession)
     dbMock.query.users.findFirst.mockResolvedValueOnce(null)
 
-    await expect(updateUser(NEW_USER_ID, { name: 'X' })).rejects.toThrow(
-      'User not found.',
-    )
+    expect(await updateUser(NEW_USER_ID, { name: 'X' })).toEqual({
+      ok: false,
+      error: 'User not found.',
+    })
   })
 
   it('rejects an email change to an address already in use', async () => {
@@ -291,9 +300,12 @@ describe('updateUser', () => {
       .mockResolvedValueOnce(userRow()) // target
       .mockResolvedValueOnce({ id: 'someone-else' }) // uniqueness check
 
-    await expect(
-      updateUser(NEW_USER_ID, { email: 'taken@example.com' }),
-    ).rejects.toThrow('An account with this email already exists.')
+    expect(
+      await updateUser(NEW_USER_ID, { email: 'taken@example.com' }),
+    ).toEqual({
+      ok: false,
+      error: 'An account with this email already exists.',
+    })
   })
 
   it('prevents an admin from removing their own admin role', async () => {
@@ -304,9 +316,12 @@ describe('updateUser', () => {
     dbMock.query.roles.findMany.mockResolvedValueOnce([memberRoleRow])
     dbMock.query.roles.findFirst.mockResolvedValueOnce(adminRoleRow)
 
-    await expect(
-      updateUser(ADMIN_USER_ID, { roleIds: [MEMBER_ROLE_ID] }),
-    ).rejects.toBeInstanceOf(ForbiddenError)
+    expect(
+      await updateUser(ADMIN_USER_ID, { roleIds: [MEMBER_ROLE_ID] }),
+    ).toEqual({
+      ok: false,
+      error: 'Cannot remove your own admin role.',
+    })
   })
 
   it('updates name and roles for another user', async () => {
@@ -322,7 +337,7 @@ describe('updateUser', () => {
       roleIds: [MEMBER_ROLE_ID],
     })
 
-    expect(result.name).toBe('Renamed')
+    expect(result).toMatchObject({ ok: true, data: { name: 'Renamed' } })
     expect(dbMock.update).toHaveBeenCalled()
     expect(dbMock.delete).toHaveBeenCalled() // replaces userRoles
   })
@@ -333,28 +348,47 @@ describe('updateUser', () => {
 describe('deleteUser', () => {
   it('rejects non-admins', async () => {
     mockGetSession.mockResolvedValue(memberSession)
-    await expect(deleteUser(NEW_USER_ID)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(await deleteUser(NEW_USER_ID)).toEqual({
+      ok: false,
+      error: expect.any(String),
+    })
   })
 
   it('prevents an admin from deleting their own account', async () => {
     mockGetSession.mockResolvedValue(adminSession)
-    await expect(deleteUser(ADMIN_USER_ID)).rejects.toBeInstanceOf(
-      ForbiddenError,
-    )
+    // #128: returned, not thrown, so production doesn't redact the reason.
+    expect(await deleteUser(ADMIN_USER_ID)).toEqual({
+      ok: false,
+      error: 'Cannot delete your own account.',
+    })
   })
 
   it('errors when the target user does not exist', async () => {
     mockGetSession.mockResolvedValue(adminSession)
     dbMock.query.users.findFirst.mockResolvedValueOnce(null)
 
-    await expect(deleteUser(MEMBER_USER_ID)).rejects.toThrow('User not found.')
+    expect(await deleteUser(MEMBER_USER_ID)).toEqual({
+      ok: false,
+      error: 'User not found.',
+    })
+  })
+
+  it('still throws an unexpected fault, so production redacts it', async () => {
+    mockGetSession.mockResolvedValue(adminSession)
+    dbMock.query.users.findFirst.mockRejectedValueOnce(
+      new Error('connection refused'),
+    )
+
+    await expect(deleteUser(MEMBER_USER_ID)).rejects.toThrow(
+      'connection refused',
+    )
   })
 
   it('deletes an existing target user', async () => {
     mockGetSession.mockResolvedValue(adminSession)
     dbMock.query.users.findFirst.mockResolvedValueOnce({ id: MEMBER_USER_ID })
 
-    await expect(deleteUser(MEMBER_USER_ID)).resolves.toBeUndefined()
+    expect(await deleteUser(MEMBER_USER_ID)).toEqual({ ok: true, data: null })
     expect(dbMock.delete).toHaveBeenCalled()
     // S3 objects must be removed before the user row (and its files rows)
     // cascade-delete — otherwise the bucket keys are lost.
@@ -369,14 +403,20 @@ describe('assignRoles', () => {
 
   it('rejects non-admins', async () => {
     mockGetSession.mockResolvedValue(memberSession)
-    await expect(assignRoles(input)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(await assignRoles(input)).toEqual({
+      ok: false,
+      error: expect.any(String),
+    })
   })
 
   it('errors when the target user does not exist', async () => {
     mockGetSession.mockResolvedValue(adminSession)
     dbMock.query.users.findFirst.mockResolvedValueOnce(null)
 
-    await expect(assignRoles(input)).rejects.toThrow('User not found.')
+    expect(await assignRoles(input)).toEqual({
+      ok: false,
+      error: 'User not found.',
+    })
   })
 
   it('rejects unknown role ids', async () => {
@@ -384,9 +424,10 @@ describe('assignRoles', () => {
     dbMock.query.users.findFirst.mockResolvedValueOnce({ id: MEMBER_USER_ID })
     dbMock.query.roles.findMany.mockResolvedValueOnce([])
 
-    await expect(assignRoles(input)).rejects.toThrow(
-      'One or more roles do not exist.',
-    )
+    expect(await assignRoles(input)).toEqual({
+      ok: false,
+      error: 'One or more roles do not exist.',
+    })
   })
 
   it('prevents an admin from removing their own admin role', async () => {
@@ -395,9 +436,9 @@ describe('assignRoles', () => {
     dbMock.query.roles.findMany.mockResolvedValueOnce([memberRoleRow])
     dbMock.query.roles.findFirst.mockResolvedValueOnce(adminRoleRow)
 
-    await expect(
-      assignRoles({ userId: ADMIN_USER_ID, roleIds: [MEMBER_ROLE_ID] }),
-    ).rejects.toBeInstanceOf(ForbiddenError)
+    expect(
+      await assignRoles({ userId: ADMIN_USER_ID, roleIds: [MEMBER_ROLE_ID] }),
+    ).toEqual({ ok: false, error: 'Cannot remove your own admin role.' })
   })
 
   it('replaces roles for another user', async () => {
@@ -406,7 +447,7 @@ describe('assignRoles', () => {
     dbMock.query.roles.findMany.mockResolvedValueOnce([memberRoleRow])
     dbMock.insert.mockReturnValueOnce(insertChain())
 
-    await expect(assignRoles(input)).resolves.toBeUndefined()
+    expect(await assignRoles(input)).toEqual({ ok: true, data: null })
     expect(dbMock.delete).toHaveBeenCalled()
     expect(dbMock.insert).toHaveBeenCalled()
   })
