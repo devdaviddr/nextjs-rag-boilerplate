@@ -114,9 +114,15 @@ export function plainLine(
     // fallback. Each line says its own part.
     const reason = str(meta.reason) ?? ''
     if (/fall(ing)? back/i.test(reason)) {
-      return 'Carried on without the planner: one plain search instead'
+      const searches = /falling back to (\d+) searches/i.exec(reason)?.[1]
+      return searches
+        ? `Carried on without the planner: ${searches} plain searches, using the conversation`
+        : 'Carried on without the planner: one plain search instead'
     }
     const error = str(meta.errorMessage)
+    if (error && /took too long/i.test(error)) {
+      return 'The planner was too slow, so the app went ahead without it'
+    }
     if (error && /time budget/i.test(error)) {
       return 'The planner ran out of time before deciding'
     }

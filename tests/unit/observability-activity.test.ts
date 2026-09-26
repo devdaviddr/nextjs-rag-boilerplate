@@ -102,6 +102,20 @@ describe('plain lines', () => {
           'planner unavailable before searching; falling back to one search',
       }),
     ).toBe('Carried on without the planner: one plain search instead')
+    expect(
+      plainLine('Agentic planner unavailable', {
+        reason: 'planner call threw',
+        errorMessage: 'Planner call took too long',
+      }),
+    ).toBe('The planner was too slow, so the app went ahead without it')
+    expect(
+      plainLine('Agentic planner unavailable', {
+        reason:
+          'planner unavailable before searching; falling back to 2 searches',
+      }),
+    ).toBe(
+      'Carried on without the planner: 2 plain searches, using the conversation',
+    )
   })
 
   it('keeps any other message as it is, and hides the raw trace', () => {
