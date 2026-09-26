@@ -309,6 +309,32 @@ environment's exactly.
    other roles can move to any provider in v1; embeddings in practice stay on a
    2048-dimension model. Supporting other sizes is tracked separately in
    [#64](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/64).
+
+   > **Decided 2026-09-26 (#64): embeddings move to a table of generations.**
+   > Vectors leave `chunks.embedding` for `chunk_embeddings` (chunk id,
+   > generation id, `owner_id` and `knowledge_base_id` denormalised as on
+   > `chunks`, and an **untyped** `halfvec`). `embedding_generations` records
+   > each generation's model, dimensions, status (`building`, `active`,
+   > `retired`) and its calibrated similarity thresholds. Each generation gets
+   > its own partial expression index,
+   > `USING hnsw ((embedding::halfvec(N)) halfvec_cosine_ops) WHERE generation_id = '<id>'`,
+   > and search casts to the active generation's size. Verified on pgvector
+   > 0.8.6: 1536- and 3072-dimension vectors in one column, each index used
+   > for its own generation with the owner filter applied, and a 4096-dimension
+   > index refused (HNSW on `halfvec` stops at 4000).
+   >
+   > A switch (FR3, #56) creates a `building` generation, re-embeds every chunk
+   > into it through the resumable ingestion path while search stays on the
+   > `active` one, builds its index, then flips `active` in one transaction and
+   > deletes the retired rows and index. The chunks and their text are never
+   > touched. Models over 4000 dimensions are refused up front.
+   >
+   > Considered and not chosen: `ALTER COLUMN ... TYPE halfvec(N)` (simple, but
+   > nothing can be searched until every chunk is re-embedded), and a table per
+   > generation (DDL created at run time, which Drizzle's schema cannot
+   > describe). The existing vectors become generation 1 in a migration that
+   > copies them, and `chunks.embedding` is dropped a release later.
+
 4. **Non-admins see a read-only line under About** — the active chat model and
    provider name, never URLs or keys (FR7).
 
