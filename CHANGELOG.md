@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-26
+
 ### Added
 
 - **Switch the embedding model from Settings**
