@@ -22,23 +22,26 @@
  * because it is safer.
  */
 
-export type PlannerAction = 'search' | 'answer' | 'refuse' | 'read-figure'
+/**
+ * There is no `refuse`. Refusal is a code path around the loop, taken when no
+ * evidence clears the floor (spec 0029 NFR1), and native tool calling had no
+ * way to express it anyway, so the action was unreachable (#96).
+ */
+export type PlannerAction = 'search' | 'answer' | 'read-figure'
 
 export interface PlannerDecision {
   action: PlannerAction
-  /** Present when `action === 'search'`. */
-  query?: string
   /**
-   * An optional narrowing hint. The model may name a document it believes is
-   * relevant. It is validated server-side against the caller's own documents
-   * AND the conversation's permitted knowledge bases before use; a value
-   * outside either is treated exactly as a missing one.
+   * Present when `action === 'search'`. The query is ALL the planner supplies
+   * to a search: `ownerId` and the permitted knowledge-base set are resolved
+   * from the session and the conversation, never from this object (spec 0028).
    *
-   * The model supplies nothing that decides WHERE it may search. `ownerId` and
-   * the permitted knowledge-base set are resolved from the session and the
-   * conversation, never from this object. See spec 0028's boundary statement.
+   * There used to be a `documentId` narrowing hint. The planner was never
+   * shown a document id, so any id it sent was invented, and a real one would
+   * have returned a whole document with its similarity forced to 1, past the
+   * floor (#98). Removed rather than repaired.
    */
-  documentId?: string
+  query?: string
   /**
    * Present when `action === 'read-figure'` (spec 0031 FR9): which figure to
    * look at, and what to look for.
@@ -80,12 +83,6 @@ export const SEARCH_TOOL = {
             'A self-contained search query. Resolve pronouns and references ' +
             'from the conversation — the search has no memory of earlier turns.',
         },
-        documentId: {
-          type: 'string',
-          description:
-            'Optional. Restrict the search to one document, by id, when the ' +
-            'user named a specific document.',
-        },
       },
       required: ['query'],
       additionalProperties: false,
@@ -122,7 +119,7 @@ function parseFigureArguments(argumentsJson: string): PlannerDecision | null {
   if (!args || typeof args !== 'object') return null
   const record = args as Record<string, unknown>
 
-  const chunkId = cleanDocumentId(record.chunkId)
+  const chunkId = cleanId(record.chunkId)
   const figureQuestion = cleanQuery(record.question)
   // Both halves are required: a figure with no question gets a blind
   // description, which is precisely the 15-30%-wrong path this tool exists to
@@ -132,7 +129,7 @@ function parseFigureArguments(argumentsJson: string): PlannerDecision | null {
   return { action: 'read-figure', chunkId, figureQuestion }
 }
 
-function cleanDocumentId(value: unknown): string | undefined {
+function cleanId(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const id = value.trim()
   // Never trusted as scope — only ever used to narrow within an already
@@ -189,11 +186,39 @@ export function parseToolCallDecision(
   // caller falls back rather than issuing an empty retrieval.
   if (!query) return null
 
-  return {
-    action: 'search',
-    query,
-    documentId: cleanDocumentId(record.documentId),
+  return { action: 'search', query }
+}
+
+/**
+ * Every search after the first in one reply (#93), deduplicated.
+ *
+ * `parseToolCallDecision` reads the first `search_documents` call; a model
+ * answering a two-part question often sends one per part in the same reply,
+ * and dropping the rest cost a whole planner round trip each. Unusable calls
+ * are skipped, never fatal: the first call alone is still a decision.
+ */
+export function parseParallelSearches(
+  choice: RawChoice | undefined,
+): PlannerDecision[] {
+  const calls = (choice?.message?.tool_calls ?? []).filter(
+    (c) => c.function?.name === SEARCH_TOOL.function.name,
+  )
+  const seen = new Set<string>()
+  const searches: PlannerDecision[] = []
+  for (const call of calls.slice(1)) {
+    let args: unknown
+    try {
+      args = JSON.parse(call.function?.arguments ?? '')
+    } catch {
+      continue
+    }
+    if (!args || typeof args !== 'object') continue
+    const query = cleanQuery((args as Record<string, unknown>).query)
+    if (!query || seen.has(query)) continue
+    seen.add(query)
+    searches.push({ action: 'search', query })
   }
+  return searches
 }
 
 /**
@@ -228,15 +253,12 @@ export function parseJsonDecision(
 
   const record = parsed as Record<string, unknown>
   const action = record.action
-  if (action === 'answer') return { action: 'answer' }
-  if (action === 'refuse') return { action: 'refuse' }
+  // A `refuse` is read as "stop": the floor, not the model, decides whether
+  // what was gathered is enough to answer from (#96).
+  if (action === 'answer' || action === 'refuse') return { action: 'answer' }
   if (action !== 'search') return null
 
   const query = cleanQuery(record.query)
   if (!query) return null
-  return {
-    action: 'search',
-    query,
-    documentId: cleanDocumentId(record.documentId),
-  }
+  return { action: 'search', query }
 }

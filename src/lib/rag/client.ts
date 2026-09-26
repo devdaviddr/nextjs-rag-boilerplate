@@ -250,13 +250,15 @@ interface EmbeddingsResponse {
 export async function createEmbeddings(
   input: string[],
   inputType: EmbeddingInputType,
+  /** Cuts the request off, e.g. at the agentic loop's time budget (#92). */
+  signal?: AbortSignal,
 ): Promise<number[][]> {
   if (input.length === 0) return []
 
   const response = await post(
     '/embeddings',
     { input, model: modelFor('embed'), input_type: inputType },
-    { role: 'embed' },
+    { role: 'embed', signal },
   )
 
   const json = (await response.json()) as EmbeddingsResponse

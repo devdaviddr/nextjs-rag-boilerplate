@@ -304,7 +304,7 @@ describe('retrieveForOwner with HyDE', () => {
     await retrieveForOwner('owner', 'How much annual leave?', ['kb'])
 
     expect(embedQuery).toHaveBeenCalledTimes(1)
-    expect(embedQuery).toHaveBeenCalledWith('How much annual leave?')
+    expect(embedQuery).toHaveBeenCalledWith('How much annual leave?', undefined)
     expect(createChatCompletion).not.toHaveBeenCalled()
   })
 
@@ -316,7 +316,7 @@ describe('retrieveForOwner with HyDE', () => {
     await retrieveForOwner('owner', 'How much annual leave?', ['kb'])
 
     expect(embedQuery).toHaveBeenCalledTimes(1)
-    expect(embedQuery).toHaveBeenCalledWith(PASSAGE)
+    expect(embedQuery).toHaveBeenCalledWith(PASSAGE, undefined)
   })
 
   it('embeds the question when the generation fails', async () => {
@@ -326,7 +326,7 @@ describe('retrieveForOwner with HyDE', () => {
 
     await retrieveForOwner('owner', 'How much annual leave?', ['kb'])
 
-    expect(embedQuery).toHaveBeenCalledWith('How much annual leave?')
+    expect(embedQuery).toHaveBeenCalledWith('How much annual leave?', undefined)
   })
 
   it('embeds the question when the model hedges', async () => {
@@ -336,7 +336,7 @@ describe('retrieveForOwner with HyDE', () => {
 
     await retrieveForOwner('owner', 'How much annual leave?', ['kb'])
 
-    expect(embedQuery).toHaveBeenCalledWith('How much annual leave?')
+    expect(embedQuery).toHaveBeenCalledWith('How much annual leave?', undefined)
   })
 
   it('never lets the hypothetical reach the lexical channel', async () => {

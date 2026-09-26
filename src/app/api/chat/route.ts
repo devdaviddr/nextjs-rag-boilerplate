@@ -559,7 +559,16 @@ async function answer(request: Request, requestId: string) {
           const upstream = await createChatStream(
             [
               { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: buildUserMessage(question, retrieved) },
+              {
+                role: 'user',
+                // The planner's reading of a follow-up, so the writer knows
+                // what "it" refers to (#97).
+                content: buildUserMessage(
+                  question,
+                  retrieved,
+                  agenticTrace?.rewritten ? agenticTrace.query : undefined,
+                ),
+              },
             ],
             request.signal,
           )

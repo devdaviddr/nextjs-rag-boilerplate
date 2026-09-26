@@ -4,7 +4,7 @@ title: Index tables, figures and complex layouts
 status: Shipped
 release: v0.21.0
 created: 2026-09-10
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # 0031 — Index tables, figures and complex layouts
@@ -236,6 +236,16 @@ the correct outcome and the same one the spec started from.
   once at a higher render scale, falls back to its text layer, then is recorded
   as unindexed with a reason.
 - **FR13** — Ingestion reports per-page progress, not just a coarse status.
+- **FR14** — A `read_figure` reading reaches the answer. It is given to the
+  answer writer as its own labelled source, a reading of a figure and not the
+  document's words, and a claim drawn from it cites the figure chunk it was
+  read from, presented as FR10 requires. The FR7 guard runs on the reading
+  before it is passed on. Citation checking judges that citation against the
+  reading, not against the figure's search key. _(Added 2026-09-26, #90.)_
+- **FR15** — A `read_figure` call counts against the loop's `maxSearches`,
+  `maxMs` and `maxTokens`, but not towards the attempt-scaled similarity floor
+  from [`0029`](0029-agentic-retrieval-loop.md), which rises with text searches
+  only. _(Added 2026-09-26, #91.)_
 
 ### Non-functional
 
@@ -401,6 +411,24 @@ whole allowance looking at pictures.
 > Worse, `maxMs` turned out not to be a bound at all — see the note in
 > [`0029`](0029-agentic-retrieval-loop.md).
 
+> **The reading never reached the answer (found 2026-09-26, #90, #91).** The
+> loop reports a reading to the planner as a step, and deliberately keeps it out
+> of the retrieved chunks, because it is not a passage and has no similarity.
+> But the answer writer is only given those chunks (`buildContextBlock` in
+> `src/lib/rag/prompt.ts`). So the planner could read "Q3 is the tallest bar",
+> decide it had enough, and the answer was written from the figure's search key
+> alone. Keeping the reading out of the chunks was right; giving the writer no
+> other way to see it was not. FR14 adds that way.
+>
+> A second defect made it worse. A figure read added one to the loop's search
+> count, and the similarity floor rises with that count, so a figure found at
+> 0.37 on the first search was dropped by the 0.39 floor that the read itself
+> raised. The floor rises to stop repeated searching from finding a weak match
+> by luck, and a figure read is not another search. FR15 separates the two.
+>
+> Still to decide in #90: whether the reading is stored with the citation, so
+> a reopened conversation shows what the figure was read as.
+
 ### Schema
 
 ```
@@ -491,6 +519,21 @@ measurement in **Problem** exists to justify.
       — `pnpm rag:eval --answers`, `layout-q2-downtime-hours`: the answer
       declines the Q2 value while correctly quoting the per-site hours the
       table does print
+- [ ] A question answered after a `read_figure` uses the reading and cites the
+      figure it came from (FR14) — #90
+- [ ] Citation checking keeps a claim the reading supports and strips one it
+      does not (FR14) — #90
+- [x] A figure found on the first search at the base floor survives a
+      `read_figure` in the same loop (FR15) — #91,
+      `tests/unit/rag-agentic.test.ts` ("counts a figure read against the
+      budget but not as a text search")
+
+> **Not verified end to end yet (2026-09-26).** The two FR14 criteria above are
+> implemented (`withFigureReadings` in `src/lib/rag/agentic-run.ts`, unit-tested
+> in `tests/unit/rag-agentic-run.test.ts`) but not yet confirmed on a live
+> figure question: that needs `pnpm rag:eval --compare --answers` with
+> `RAG_CRACK_ENABLED` and `RAG_READ_FIGURE_ENABLED` on, which #102 records. Tick
+> them from that run's `layout-figure-*` answer checks.
 
 > **Resolved, and not the way the first draft assumed (2026-09-10).** "Answers
 > a table question the current pipeline cannot" was an acceptance criterion in

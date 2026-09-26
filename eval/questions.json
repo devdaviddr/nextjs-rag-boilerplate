@@ -3,6 +3,7 @@
   "$comment-0032": "Spec 0032 grew the two slices that carry the RAG_AGENTIC_ENABLED decision: followup 3 -> 20 and multi-hop 2 -> 15, so one question no longer moves a metric by a third. Every new fact is traceable to eval/make-corpus.mjs, or — for the maintenance log's scanned Appendix B — to eval/corpus-assets/make-appendix-b-scan.py, which was written for this change so that page's ground truth is readable in source instead of only inside a JPEG. No document was added: the retrieval pool is the same six the recorded baseline ran against. The followup slice spans four reference kinds (pronoun, elided subject, correction, and a referent two turns back rather than one) and the multi-hop slice spans three shapes (two facts in one document, two facts across two documents, and a fact needing a table or figure plus prose).",
   "$comment-0032-refusals": "Four followups and three multi-hops are `answerable: false` so the refusal gate covers the new slices. NOTE for whoever owns eval/run.ts: `scoreQuestion` tests `type === 'multi-hop'` BEFORE it tests `!q.answerable`, so an unanswerable multi-hop takes the multi-hop branch, finds no `answerDocuments`, and scores `passed: false` however well the system refuses — multi-hop refusal accuracy reads 0.000 until those two branches are reordered. The questions below are shaped correctly (no `answerDocuments`, the same way an unanswerable single-hop carries no `document`/`page`); the scorer is what needs the fix.",
   "$comment-0033": "Spec 0033 1c (parent-child assembly) adds `type: \"section\"`: a question answered by a WHOLE section, never by one paragraph of it. `sectionMustContain` lists substrings drawn from different paragraphs of that section, so no single chunk can satisfy it. A section question passes only when the first correct-page result is an assembled parent (two or more members) whose content contains every substring, and no other retrieved item is one of its members. They need eval/corpus/records-policy.pdf, the only document whose pages carry more than one chunk per section: every legacy page is set in one point size, so layout.ts finds no heading and each is a single chunk, which leaves the original 20 single-hop questions as the control for this change. `gating: false` marks a diagnostic question that is reported and never counted towards the section criterion.",
+  "$comment-0102": "#102 adds contractor-safety-manual (30 one-page sections, longer than the 24 chunks a whole-document request loads) and five kinds of question for the planned RAG fixes: `summary` whole-document requests scored on reaching every page in `summaryPages` (#99); follow-ups whose answer checks need the writer to know what 'it' is, because each permit has a different signer (#97); `refusal`, standalone unanswerable questions kept out of the headline pool, several naming a real document title (#98); two-part questions (#93); and figure questions only answerable by reading Figure 3.2 (#90, #91), which need RAG_CRACK_ENABLED and RAG_READ_FIGURE_ENABLED.",
   "questions": [
     {
       "id": "leave-entitlement",
@@ -963,6 +964,305 @@
       "answerable": true,
       "hard": "Diagnostic, not gating. With cracking off, Table 3.1 is read from the text layer as one line per row and no heading, so its rows are one heading-less run on the page. Shows whether a real text-layer table page assembles into one parent when several rows clear the floor.",
       "sectionMustContain": ["Ballarat", "Geelong", "Bendigo"]
+    },
+    {
+      "id": "summary-contractor-manual",
+      "type": "summary",
+      "question": "Give me an overview of the contractor safety manual.",
+      "document": "contractor-safety-manual",
+      "page": 2,
+      "summaryPages": [2, 15, 28],
+      "answerable": true,
+      "hard": "30 sections; a whole-document request that loads only the first 24 chunks never reaches section 28"
+    },
+    {
+      "id": "summary-contractor-manual-closing",
+      "type": "summary",
+      "question": "Summarise the contractor safety manual, including insurance, audits and non-compliance.",
+      "document": "contractor-safety-manual",
+      "page": 26,
+      "summaryPages": [26, 27, 28],
+      "answerable": true,
+      "hard": "every requested section sits past chunk 24"
+    },
+    {
+      "id": "summary-records-policy",
+      "type": "summary",
+      "question": "Summarise the records policy.",
+      "document": "records-policy",
+      "page": 1,
+      "summaryPages": [1],
+      "answerable": true,
+      "hard": "control: a one-page document is reached in full"
+    },
+    {
+      "id": "followup-confined-space-signoff",
+      "type": "followup",
+      "question": "Who signs it off?",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How long is a confined space permit valid?"
+        },
+        {
+          "role": "assistant",
+          "content": "A confined space permit is valid for 4 hours."
+        }
+      ],
+      "document": "contractor-safety-manual",
+      "page": 6,
+      "answerable": true,
+      "answerMustContain": ["entry supervisor"],
+      "answerMustNotMatch": "duty engineer|rigging coordinator|civil engineer",
+      "hard": "four permits, four different signers; the answer is only right if the writer knows which permit 'it' is"
+    },
+    {
+      "id": "followup-heights-signoff",
+      "type": "followup",
+      "question": "Who approves the permit for that?",
+      "turns": [
+        {
+          "role": "user",
+          "content": "When do I need a harness?"
+        },
+        {
+          "role": "assistant",
+          "content": "A harness is required for any work above 2 metres without edge protection."
+        }
+      ],
+      "document": "contractor-safety-manual",
+      "page": 7,
+      "answerable": true,
+      "answerMustContain": ["rigging coordinator"],
+      "answerMustNotMatch": "duty engineer|entry supervisor|civil engineer",
+      "hard": "'that' is working at heights, named only in the previous turn"
+    },
+    {
+      "id": "followup-excavation-signoff",
+      "type": "followup",
+      "question": "And who signs off the permit?",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How deep can a trench go before it needs shoring?"
+        },
+        {
+          "role": "assistant",
+          "content": "Trenches deeper than 1.5 metres must be shored or battered."
+        }
+      ],
+      "document": "contractor-safety-manual",
+      "page": 13,
+      "answerable": true,
+      "answerMustContain": ["civil engineer"],
+      "answerMustNotMatch": "duty engineer|entry supervisor|rigging coordinator",
+      "hard": "'the permit' is an excavation permit, named nowhere in the question"
+    },
+    {
+      "id": "followup-hot-work-fire-watch",
+      "type": "followup",
+      "question": "How long does the fire watch stay after it?",
+      "turns": [
+        {
+          "role": "user",
+          "content": "What needs a hot work permit?"
+        },
+        {
+          "role": "assistant",
+          "content": "Welding, grinding and cutting require a hot work permit."
+        }
+      ],
+      "document": "contractor-safety-manual",
+      "page": 5,
+      "answerable": true,
+      "answerMustContain": ["60 minutes"],
+      "hard": "'it' is hot work, named only in the previous turn"
+    },
+    {
+      "id": "followup-no-answer-confined-space-training",
+      "type": "followup",
+      "question": "What training do they need?",
+      "turns": [
+        {
+          "role": "user",
+          "content": "Who signs off a confined space permit?"
+        },
+        {
+          "role": "assistant",
+          "content": "Confined space permits are signed off by the entry supervisor."
+        }
+      ],
+      "answerable": false,
+      "hard": "the manual names the entry supervisor but says nothing about their training"
+    },
+    {
+      "id": "followup-no-answer-induction-cost",
+      "type": "followup",
+      "question": "Who pays for it?",
+      "turns": [
+        {
+          "role": "user",
+          "content": "How long does the site induction take?"
+        },
+        {
+          "role": "assistant",
+          "content": "The induction takes 90 minutes and is valid for twelve months."
+        }
+      ],
+      "answerable": false,
+      "hard": "no cost or payer for the induction anywhere; the insurance section mentions dollars"
+    },
+    {
+      "id": "refusal-manual-drones",
+      "type": "refusal",
+      "question": "What does the contractor safety manual say about flying drones on site?",
+      "answerable": false,
+      "hard": "names a real document; the planner could ask for that document instead of searching (#98)"
+    },
+    {
+      "id": "refusal-handbook-dress-code",
+      "type": "refusal",
+      "question": "What is the dress code in the staff handbook?",
+      "answerable": false,
+      "hard": "names a real document"
+    },
+    {
+      "id": "refusal-facilities-bicycles",
+      "type": "refusal",
+      "question": "Where can I store my bicycle according to the facilities guide?",
+      "answerable": false,
+      "hard": "names a real document whose parking section is close in meaning"
+    },
+    {
+      "id": "refusal-records-email",
+      "type": "refusal",
+      "question": "What does the records policy say about archiving email?",
+      "answerable": false,
+      "hard": "names a real document that covers electronic records"
+    },
+    {
+      "id": "refusal-guest-wifi",
+      "type": "refusal",
+      "question": "What is the guest Wi-Fi password?",
+      "answerable": false,
+      "hard": "shares 'password' with the IT section"
+    },
+    {
+      "id": "refusal-sick-leave",
+      "type": "refusal",
+      "question": "How many days of sick leave do I get?",
+      "answerable": false,
+      "hard": "shares 'days' and 'leave' with the annual leave section"
+    },
+    {
+      "id": "refusal-hot-work-cost",
+      "type": "refusal",
+      "question": "How much does a hot work permit cost?",
+      "answerable": false,
+      "hard": "the hot work section is a close match that never mentions cost"
+    },
+    {
+      "id": "refusal-ceo",
+      "type": "refusal",
+      "question": "Who is the chief executive officer?",
+      "answerable": false,
+      "hard": "nothing in the corpus names an executive"
+    },
+    {
+      "id": "multi-hop-permit-validity",
+      "type": "multi-hop",
+      "question": "Which lasts longer, a hot work permit or a confined space permit?",
+      "answerDocuments": [
+        {
+          "document": "contractor-safety-manual",
+          "page": 5
+        },
+        {
+          "document": "contractor-safety-manual",
+          "page": 6
+        }
+      ],
+      "answerable": true,
+      "hard": "a comparison; both permits must be found"
+    },
+    {
+      "id": "multi-hop-inspection-intervals",
+      "type": "multi-hop",
+      "question": "How often are harnesses inspected, and how often are scaffolds inspected?",
+      "answerDocuments": [
+        {
+          "document": "contractor-safety-manual",
+          "page": 7
+        },
+        {
+          "document": "contractor-safety-manual",
+          "page": 8
+        }
+      ],
+      "answerable": true,
+      "hard": "two questions in one"
+    },
+    {
+      "id": "multi-hop-induction-and-leave",
+      "type": "multi-hop",
+      "question": "How long does the contractor site induction take, and how far in advance must staff book annual leave?",
+      "answerDocuments": [
+        {
+          "document": "contractor-safety-manual",
+          "page": 2
+        },
+        {
+          "document": "staff-handbook",
+          "page": 1
+        }
+      ],
+      "answerable": true,
+      "hard": "two questions across two knowledge bases"
+    },
+    {
+      "id": "multi-hop-breach-and-audit",
+      "type": "multi-hop",
+      "question": "What happens after a second breach, and how quickly must high audit findings be closed?",
+      "answerDocuments": [
+        {
+          "document": "contractor-safety-manual",
+          "page": 28
+        },
+        {
+          "document": "contractor-safety-manual",
+          "page": 27
+        }
+      ],
+      "answerable": true,
+      "hard": "two late sections of a long document"
+    },
+    {
+      "id": "multi-hop-no-answer-induction-fee",
+      "type": "multi-hop",
+      "question": "Compare the contractor induction fee with the staff onboarding cost.",
+      "answerable": false,
+      "hard": "neither figure exists"
+    },
+    {
+      "id": "layout-figure-lowest-quarter",
+      "type": "layout",
+      "question": "In Figure 3.2, which quarter had the lowest unplanned downtime?",
+      "document": "site-operations-report",
+      "page": 3,
+      "answerable": true,
+      "answerMustContain": ["Q5"],
+      "hard": "only the bar heights show it; the caption names the Q3 spike, not the lowest quarter"
+    },
+    {
+      "id": "layout-figure-q1-vs-q4",
+      "type": "layout",
+      "question": "In the unplanned downtime chart, which was higher: Q1 or Q4?",
+      "document": "site-operations-report",
+      "page": 3,
+      "answerable": true,
+      "answerMustContain": ["Q1"],
+      "answerMustNotMatch": "Q4 (?:was|is|had) higher",
+      "hard": "a relationship between two bars, readable only from the figure"
     }
   ]
 }

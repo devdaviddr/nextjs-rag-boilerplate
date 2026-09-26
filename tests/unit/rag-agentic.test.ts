@@ -34,6 +34,14 @@ function deps(over: Partial<LoopDeps> = {}): LoopDeps {
 
 const signal = new AbortController().signal
 
+/** A planner that asks for a NEW search every time (#94: a repeat stops). */
+function searchingPlanner(tokens: number) {
+  return vi.fn().mockImplementation(async (steps: readonly unknown[]) => ({
+    decision: { action: 'search', query: `query ${steps.length + 1}` },
+    tokens,
+  }))
+}
+
 describe('accumulate', () => {
   it('deduplicates by chunk id, keeping the best score', () => {
     const merged = accumulate(
@@ -132,18 +140,17 @@ describe('runAgenticLoop — termination', () => {
     expect(d.search).not.toHaveBeenCalled()
   })
 
-  it('stops when the planner chooses to refuse', async () => {
-    const out = await runAgenticLoop(
-      BUDGET,
-      deps({
-        plan: vi.fn().mockResolvedValue({
-          decision: { action: 'refuse' },
-          tokens: 5,
-        }),
-      }),
-      signal,
-    )
-    expect(out.termination).toBe('planner-refused')
+  it('stops when the planner asks only for a search it already ran (#94)', async () => {
+    const plan = vi.fn().mockResolvedValue({
+      decision: { action: 'search', query: 'Annual leave?' },
+      tokens: 5,
+    })
+    const search = vi.fn().mockResolvedValue([chunk('a', 0.5)])
+    const out = await runAgenticLoop(BUDGET, deps({ plan, search }), signal)
+    // The repeat differs only in case and punctuation: the same search.
+    expect(out.termination).toBe('repeated-query')
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(out.chunks.map((c) => c.chunkId)).toEqual(['a'])
   })
 
   it('searches, then answers on the second decision', async () => {
@@ -173,10 +180,7 @@ describe('runAgenticLoop — termination', () => {
 describe('runAgenticLoop — budgets', () => {
   /** Each bound must independently terminate the loop (spec 0029 acceptance). */
   it('stops at the search budget when the planner keeps searching', async () => {
-    const plan = vi.fn().mockResolvedValue({
-      decision: { action: 'search', query: 'again' },
-      tokens: 10,
-    })
+    const plan = searchingPlanner(10)
     const search = vi.fn().mockResolvedValue([chunk('a', 0.5)])
 
     const out = await runAgenticLoop(BUDGET, deps({ plan, search }), signal)
@@ -208,10 +212,7 @@ describe('runAgenticLoop — budgets', () => {
     const out = await runAgenticLoop(
       { ...BUDGET, maxTokens: 50 },
       deps({
-        plan: vi.fn().mockResolvedValue({
-          decision: { action: 'search', query: 'again' },
-          tokens: 40,
-        }),
+        plan: searchingPlanner(40),
         search: vi.fn().mockResolvedValue([chunk('a', 0.5)]),
       }),
       signal,
@@ -243,10 +244,7 @@ describe('runAgenticLoop — budgets', () => {
     const out = await runAgenticLoop(
       { ...BUDGET, maxSearches: 2 },
       deps({
-        plan: vi.fn().mockResolvedValue({
-          decision: { action: 'search', query: 'q' },
-          tokens: 1,
-        }),
+        plan: searchingPlanner(1),
         search: vi
           .fn()
           .mockResolvedValueOnce([chunk('a', 0.6)])
@@ -312,7 +310,10 @@ describe('runAgenticLoop — planner failure', () => {
     )
     expect(out.termination).toBe('planner-unavailable')
     expect(search).toHaveBeenCalledTimes(1)
-    expect(search).toHaveBeenCalledWith('the original question', undefined)
+    expect(search).toHaveBeenCalledWith(
+      'the original question',
+      expect.any(AbortSignal),
+    )
     expect(out.searches).toBe(1)
     expect(out.chunks).toHaveLength(1)
     expect(out.steps[0]).toMatchObject({
@@ -336,7 +337,7 @@ describe('runAgenticLoop — planner failure', () => {
       }),
       signal,
     )
-    expect(search).toHaveBeenCalledWith('q', undefined)
+    expect(search).toHaveBeenCalledWith('q', expect.any(AbortSignal))
     expect(out.chunks).toHaveLength(1)
   })
 
@@ -356,7 +357,7 @@ describe('runAgenticLoop — planner failure', () => {
       signal,
     )
     expect(search).toHaveBeenCalledTimes(1)
-    expect(search).toHaveBeenCalledWith('leave', undefined)
+    expect(search).toHaveBeenCalledWith('leave', expect.any(AbortSignal))
     expect(out.searches).toBe(1)
   })
 
@@ -397,12 +398,12 @@ describe('runAgenticLoop — planner failure', () => {
     expect(search).toHaveBeenNthCalledWith(
       1,
       'what about sweden central?',
-      undefined,
+      expect.any(AbortSignal),
     )
     expect(search).toHaveBeenNthCalledWith(
       2,
       'can i tune a model in australia south east what about sweden central?',
-      undefined,
+      expect.any(AbortSignal),
     )
     expect(out.searches).toBe(2)
     expect(out.chunks.map((c) => c.chunkId)).toEqual(['a'])
@@ -503,7 +504,7 @@ describe('runAgenticLoop — planner failure', () => {
       signal,
     )
     expect(search).toHaveBeenCalledTimes(1)
-    expect(search).toHaveBeenCalledWith('q', undefined)
+    expect(search).toHaveBeenCalledWith('q', expect.any(AbortSignal))
   })
 
   it('stops on a search decision with an empty query', async () => {
@@ -529,6 +530,8 @@ describe('runAgenticLoop — planner failure', () => {
       'termination',
       'steps',
       'searches',
+      'textSearches',
+      'figureReadings',
       'tokensUsed',
       'elapsedMs',
     ])
@@ -592,7 +595,10 @@ describe('runAgenticLoop — the planner may not answer before searching', () =>
       }),
       signal,
     )
-    expect(search).toHaveBeenCalledWith('the original question', undefined)
+    expect(search).toHaveBeenCalledWith(
+      'the original question',
+      expect.any(AbortSignal),
+    )
     expect(out.searches).toBe(1)
     expect(out.chunks).toHaveLength(1)
     expect(onPlanFailure).toHaveBeenCalledWith(
@@ -619,21 +625,6 @@ describe('runAgenticLoop — the planner may not answer before searching', () =>
     )
     expect(out.termination).toBe('planner-answered')
     expect(out.searches).toBe(1)
-  })
-
-  it('still honours an explicit refusal', async () => {
-    const out = await runAgenticLoop(
-      BUDGET,
-      deps({
-        plan: vi.fn().mockResolvedValue({
-          decision: { action: 'refuse' },
-          tokens: 5,
-        }),
-        fallbackQuery: 'q',
-      }),
-      signal,
-    )
-    expect(out.termination).toBe('planner-refused')
   })
 })
 
@@ -850,9 +841,188 @@ describe('runAgenticLoop — plan only when it pays (spec 0043)', () => {
       await vi.advanceTimersByTimeAsync(4_100)
       const out = await outcome
       expect(out.termination).toBe('planner-unavailable')
-      expect(search).toHaveBeenCalledWith('leave', undefined)
+      expect(search).toHaveBeenCalledWith('leave', expect.any(AbortSignal))
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('runAgenticLoop — figure reads (spec 0031 FR14, FR15)', () => {
+  const figureChunk = {
+    ...chunk('fig', 0.37),
+    kind: 'figure',
+  } as RetrievedChunk
+  const reading = {
+    text: 'Q5 is the lowest bar.',
+    documentTitle: 'report',
+    pageNumber: 3,
+    tokens: 100,
+  }
+  const figureDeps = () =>
+    deps({
+      plan: vi
+        .fn()
+        .mockResolvedValueOnce({
+          decision: { action: 'search', query: 'downtime chart' },
+          tokens: 10,
+        })
+        .mockResolvedValueOnce({
+          decision: {
+            action: 'read-figure',
+            chunkId: 'fig',
+            figureQuestion: 'Which quarter is lowest?',
+          },
+          tokens: 10,
+        })
+        .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 10 }),
+      search: vi.fn().mockResolvedValue([figureChunk]),
+      readFigure: vi.fn().mockResolvedValue(reading),
+    })
+
+  it('counts a figure read against the budget but not as a text search (#91)', async () => {
+    const out = await runAgenticLoop(BUDGET, figureDeps(), signal)
+    expect(out.termination).toBe('planner-answered')
+    expect(out.searches).toBe(2)
+    expect(out.textSearches).toBe(1)
+    // So the figure found at 0.37 is judged at the base floor, not 0.39.
+    expect(effectiveFloor(0.35, out.textSearches, 0.04)).toBeCloseTo(0.35)
+    expect(out.chunks[0]!.similarity).toBeGreaterThanOrEqual(
+      effectiveFloor(0.35, out.textSearches, 0.04),
+    )
+  })
+
+  it('keeps the reading for the answer (#90)', async () => {
+    const out = await runAgenticLoop(BUDGET, figureDeps(), signal)
+    expect(out.figureReadings).toEqual([
+      {
+        chunkId: 'fig',
+        question: 'Which quarter is lowest?',
+        text: 'Q5 is the lowest bar.',
+        documentTitle: 'report',
+        pageNumber: 3,
+      },
+    ])
+    expect(out.tokensUsed).toBe(130)
+  })
+})
+
+describe('runAgenticLoop — parallel searches (#93)', () => {
+  it('runs every search in one reply together, each counted', async () => {
+    const search = vi
+      .fn()
+      .mockImplementation(async (q: string) => [chunk(q, 0.6)])
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        decision: { action: 'search', query: 'hot work' },
+        parallel: [
+          { action: 'search', query: 'confined space' },
+          { action: 'search', query: 'Hot work!' },
+        ],
+        tokens: 10,
+      })
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 10 })
+    const out = await runAgenticLoop(BUDGET, deps({ plan, search }), signal)
+    // The repeat of 'hot work' in the same reply is not searched twice (#94).
+    expect(search).toHaveBeenCalledTimes(2)
+    expect(out.searches).toBe(2)
+    expect(out.steps.map((s) => s.query)).toEqual([
+      'hot work',
+      'confined space',
+    ])
+    expect(out.termination).toBe('planner-answered')
+  })
+
+  it('never runs more parallel searches than the budget has left', async () => {
+    const search = vi.fn().mockResolvedValue([])
+    const plan = vi.fn().mockResolvedValue({
+      decision: { action: 'search', query: 'a' },
+      parallel: ['b', 'c', 'd'].map((query) => ({ action: 'search', query })),
+      tokens: 1,
+    })
+    const out = await runAgenticLoop(
+      { ...BUDGET, maxSearches: 2 },
+      deps({ plan, search }),
+      signal,
+    )
+    expect(search).toHaveBeenCalledTimes(2)
+    expect(out.searches).toBe(2)
+    expect(out.termination).toBe('search-budget')
+  })
+
+  it('does not stop early on a strong match when it searched twice', async () => {
+    const plan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        decision: { action: 'search', query: 'a' },
+        parallel: [{ action: 'search', query: 'b' }],
+        tokens: 1,
+      })
+      .mockResolvedValueOnce({ decision: { action: 'answer' }, tokens: 1 })
+    const out = await runAgenticLoop(
+      { ...BUDGET, confidentSimilarity: 0.5 },
+      deps({ plan, search: vi.fn().mockResolvedValue([chunk('x', 0.9)]) }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-answered')
+  })
+})
+
+describe('runAgenticLoop — searches are bounded by the clock (#92)', () => {
+  it('gives each search a signal and stops at the budget when one hangs', async () => {
+    let seen: AbortSignal | undefined
+    const search = vi.fn().mockImplementation(
+      (_q: string, s: AbortSignal) =>
+        new Promise((_, reject) => {
+          seen = s
+          s.addEventListener('abort', () => reject(s.reason), { once: true })
+        }),
+    )
+    const plan = vi.fn().mockResolvedValue({
+      decision: { action: 'search', query: 'leave' },
+      tokens: 1,
+    })
+    const startedAt = Date.now()
+    const out = await runAgenticLoop(
+      { ...BUDGET, maxMs: 50 },
+      deps({ plan, search }),
+      signal,
+    )
+    expect(seen).toBeInstanceOf(AbortSignal)
+    expect(out.termination).toBe('time-budget')
+    expect(Date.now() - startedAt).toBeLessThan(1000)
+  })
+
+  it('still reports a search failure that is not the clock', async () => {
+    const search = vi.fn().mockRejectedValue(new Error('database down'))
+    const plan = vi.fn().mockResolvedValue({
+      decision: { action: 'search', query: 'leave' },
+      tokens: 1,
+    })
+    await expect(
+      runAgenticLoop(BUDGET, deps({ plan, search }), signal),
+    ).rejects.toThrow('database down')
+  })
+
+  it('stops the outage fallback at the budget too', async () => {
+    const search = vi.fn().mockImplementation(
+      (_q: string, s: AbortSignal) =>
+        new Promise((_, reject) => {
+          s.addEventListener('abort', () => reject(s.reason), { once: true })
+        }),
+    )
+    const out = await runAgenticLoop(
+      { ...BUDGET, maxMs: 50 },
+      deps({
+        plan: vi.fn().mockRejectedValue(new Error('planner down')),
+        search,
+        fallbackQuery: 'q',
+        outageQueries: ['q', 'earlier q'],
+      }),
+      signal,
+    )
+    expect(out.termination).toBe('planner-unavailable')
+    expect(search).toHaveBeenCalledTimes(1)
   })
 })

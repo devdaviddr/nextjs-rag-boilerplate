@@ -54,4 +54,23 @@ describe('buildUserMessage', () => {
     )
     expect(message).toContain('QUESTION: When is leave approved?')
   })
+
+  it("adds the planner's reading of a follow-up (#97)", () => {
+    const message = buildUserMessage(
+      'Who signs it off?',
+      [chunk()],
+      'who signs off a confined space permit',
+    )
+    expect(message).toContain(
+      'QUESTION: Who signs it off?\n(In this conversation, the question means: who signs off a confined space permit)',
+    )
+  })
+
+  it('adds nothing when there is no reading, or it is the question itself', () => {
+    for (const resolved of [undefined, '', '  ', 'When is leave approved?']) {
+      expect(
+        buildUserMessage('When is leave approved?', [chunk()], resolved),
+      ).not.toContain('In this conversation')
+    }
+  })
 })
