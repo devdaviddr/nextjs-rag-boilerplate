@@ -2,6 +2,7 @@ import 'server-only'
 
 import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
+import { planRoute } from './plan-route'
 import { span } from '@/lib/observability/runs'
 import { type LoopStep, effectiveFloor, runAgenticLoop } from './agentic'
 import { createChatCompletion } from './client'
@@ -194,11 +195,17 @@ export async function runAgenticRetrieval(input: {
   const maxTokens = figureReadingEnabled
     ? Math.max(aiSettings().RAG_MAX_LOOP_TOKENS, FIGURE_LOOP_FLOOR_TOKENS)
     : aiSettings().RAG_MAX_LOOP_TOKENS
+  // Spec 0043: cap each planner call, and let a strong first match end the
+  // loop, except for a question that asks two things at once.
+  const multiPart = planRoute(question, turns).reason === 'multi-part'
+  const confident = aiSettings().RAG_AGENTIC_CONFIDENT_SIMILARITY
   const outcome = await runAgenticLoop(
     {
       maxSearches: aiSettings().RAG_MAX_SEARCHES,
       maxMs,
       maxTokens,
+      planCallMs: aiSettings().RAG_PLANNER_CALL_MS || undefined,
+      confidentSimilarity: !multiPart && confident < 1 ? confident : undefined,
     },
     {
       // Each call of the loop is a step of the run (spec 0042 FR8).

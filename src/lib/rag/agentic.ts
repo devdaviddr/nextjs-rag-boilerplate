@@ -29,6 +29,17 @@ export interface LoopBudget {
   maxMs: number
   /** Prompt + completion tokens across every planning call. */
   maxTokens: number
+  /**
+   * Most any one planner call may take (spec 0043 FR3), within `maxMs`. A
+   * stalled call then costs this, not the whole budget.
+   */
+  planCallMs?: number
+  /**
+   * A first search whose best match reaches this similarity ends the loop
+   * without asking the planner again (spec 0043 FR2). Unset for multi-part
+   * questions, which need both halves.
+   */
+  confidentSimilarity?: number
 }
 
 /** Why the loop stopped. Every value is reported in the trace, not swallowed. */
@@ -37,6 +48,10 @@ export type LoopTermination =
   | 'planner-refused'
   | 'search-budget'
   | 'time-budget'
+  // The first search found a strong match; no second decision (spec 0043).
+  | 'confident'
+  // A planner call hit its own cap after a search had found evidence.
+  | 'planner-slow'
   | 'token-budget'
   | 'planner-unavailable'
 
@@ -255,6 +270,8 @@ export function accumulate(
 
 /** Why the loop's clock aborts a call it started (see `callSignal`). */
 const BUDGET_EXHAUSTED = 'Loop time budget exhausted'
+/** Why a single planner call is aborted at its own cap (spec 0043 FR3). */
+const PLAN_CALL_CAPPED = 'Planner call took too long'
 
 export async function runAgenticLoop(
   budget: LoopBudget,
@@ -282,12 +299,20 @@ export async function runAgenticLoop(
    * flight. Composing the remaining time into the call's own signal is what
    * turns the number into a promise.
    */
-  const callSignal = (): { signal: AbortSignal; clear: () => void } => {
+  const callSignal = (
+    capMs?: number,
+  ): { signal: AbortSignal; clear: () => void } => {
     const remaining = Math.max(0, budget.maxMs - elapsed())
+    // The per-call cap only binds when it is the tighter of the two, and the
+    // reason says which one fired.
+    const capped = capMs !== undefined && capMs > 0 && capMs < remaining
     const controller = new AbortController()
     const timer = setTimeout(
-      () => controller.abort(new Error(BUDGET_EXHAUSTED)),
-      remaining,
+      () =>
+        controller.abort(
+          new Error(capped ? PLAN_CALL_CAPPED : BUDGET_EXHAUSTED),
+        ),
+      capped ? capMs : remaining,
     )
     return {
       signal: AbortSignal.any([signal, controller.signal]),
@@ -375,7 +400,7 @@ export async function runAgenticLoop(
 
     let result: PlanResult
     try {
-      const call = callSignal()
+      const call = callSignal(budget.planCallMs)
       try {
         result = await deps.plan(steps, call.signal)
       } finally {
@@ -390,6 +415,11 @@ export async function runAgenticLoop(
         (error instanceof Error && error.message === BUDGET_EXHAUSTED) ||
         (!signal.aborted && elapsed() >= budget.maxMs)
       if (outOfTime && searches > 0) return finish('time-budget')
+      // A planner call that hit its own cap: with evidence in hand, stop
+      // there; before any, it is an outage like any other (spec 0043 FR3).
+      const capped =
+        error instanceof Error && error.message === PLAN_CALL_CAPPED
+      if (capped && searches > 0) return finish('planner-slow')
       // The planner failing is not the request failing. Whatever was gathered
       // so far still stands, and the caller decides whether it is enough.
       deps.onPlanFailure?.('planner call threw', error)
@@ -500,5 +530,18 @@ export async function runAgenticLoop(
         .join('\n'),
       elapsedMs: elapsed(),
     })
+
+    // A strong first match needs no second decision (spec 0043 FR2). That
+    // decision reads the passages and is the slow one; the score already says
+    // what it would.
+    const best = steps.at(-1)?.bestSimilarity ?? null
+    if (
+      searches === 1 &&
+      budget.confidentSimilarity !== undefined &&
+      best !== null &&
+      best >= budget.confidentSimilarity
+    ) {
+      return finish('confident')
+    }
   }
 }

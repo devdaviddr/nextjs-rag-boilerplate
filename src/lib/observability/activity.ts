@@ -52,6 +52,16 @@ export function plainLine(
   meta: Record<string, unknown>,
 ): string {
   const query = str(meta.query)
+  if (message === 'Skipping the planner') {
+    return 'A standalone question: searching directly, without the planner'
+  }
+  if (message === 'Planning this question') {
+    return meta.route === 'multi-part'
+      ? 'This question asks more than one thing, so the planner will search for each'
+      : meta.route === 'follow-up'
+        ? 'A follow-up: the planner will work out what it refers to'
+        : 'Planning the searches for this question'
+  }
   if (message.startsWith('Planner chose to search')) {
     return query ? `Decided to search for ${quote(query)}` : 'Decided to search'
   }
@@ -88,9 +98,16 @@ export function plainLine(
     const searches = num(meta.searches) ?? 0
     const chunks = num(meta.chunkCount) ?? 0
     const kept = `${searches} search${searches === 1 ? '' : 'es'}, ${chunks} passage${chunks === 1 ? '' : 's'} kept`
-    return meta.termination === 'time-budget'
-      ? `Stopped searching at the time limit: ${kept}`
-      : `Finished searching: ${kept}`
+    switch (meta.termination) {
+      case 'time-budget':
+        return `Stopped searching at the time limit: ${kept}`
+      case 'confident':
+        return `Found a strong match first time, so no second decision: ${kept}`
+      case 'planner-slow':
+        return `The planner was slow, so it stopped with what it had: ${kept}`
+      default:
+        return `Finished searching: ${kept}`
+    }
   }
   if (message === 'Agentic planner unavailable') {
     // Logged twice when it happens: once for the failed call, once for the

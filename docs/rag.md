@@ -1344,6 +1344,29 @@ the floor rises with the number of searches (`RAG_AGENTIC_FLOOR_STEP`, 0.04 per
 extra attempt) and evidence found on the first search is judged exactly as the
 fixed pipeline judges it.
 
+### Plan only when it pays
+
+The planner helps two kinds of question: a follow-up that leans on the
+conversation ("can I carry it over?"), and a question that asks two things at
+once. For a standalone question it adds seconds and, measured, does no better
+(spec 0043). Three settings act on that:
+
+- `RAG_AGENTIC_ROUTE=adaptive` sends only follow-ups and multi-part questions
+  to the planner; everything else takes the fixed pipeline. The router is a
+  few regular expressions in `src/lib/rag/plan-route.ts`, checked against
+  every eval question, and it plans when unsure.
+- `RAG_AGENTIC_CONFIDENT_SIMILARITY` ends the loop after the first search when
+  its best match is at least this similar, skipping the planner's second
+  decision ("enough to answer?"). That decision reads the passages found and
+  is the slow one. It is never applied to multi-part questions.
+- `RAG_PLANNER_CALL_MS` caps each planner call. A stalled call before any
+  search falls back to a plain search, as an outage does; after a search the
+  loop stops with what it found (termination `planner-slow`).
+
+All three default to the behaviour before them (`always`, `1`, `0`) until
+`pnpm rag:eval --compare` has compared them; the eval routes its agentic pass
+the same way the app does.
+
 ### Measured: agentic vs the fixed pipeline
 
 `pnpm rag:eval --compare`, one uncontended run. A **multi-hop** question is one

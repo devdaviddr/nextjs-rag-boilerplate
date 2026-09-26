@@ -81,48 +81,51 @@ A variable marked **required** has no default and the app will not start
 without it. Everything else is optional and defaulted; the features they
 control stay inert until you set them.
 
-| Variable                     | Required | Notes                                                                                                                        |
-| ---------------------------- | :------: | ---------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`               |    ✅    | Postgres connection string                                                                                                   |
-| `S3_ENDPOINT`                |    ✅    | S3-compatible endpoint (MinIO by default)                                                                                    |
-| `S3_ACCESS_KEY_ID`           |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                  |
-| `S3_SECRET_ACCESS_KEY`       |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                  |
-| `S3_BUCKET`                  |    ✅    | Bucket name — auto-created by `minio-init`                                                                                   |
-| `S3_REGION`                  |    –     | Defaults to `us-east-1` (MinIO ignores region)                                                                               |
-| `UPLOAD_MAX_SIZE_MB`         |    –     | Per-file size cap. Default `10`                                                                                              |
-| `MAX_STORAGE_PER_USER_MB`    |    –     | Per-user quota. Default `500`                                                                                                |
-| `UPLOAD_ALLOWED_MIME_TYPES`  |    –     | Comma-separated allow-list. Default images + PDF                                                                             |
-| `AUTH_SECRET`                |    ✅    | `npx auth secret` — unique per environment, never reuse                                                                      |
-| `AUTH_URL`                   |    –     | Canonical auth URL; set in production                                                                                        |
-| `AUTH_TRUST_HOST`            |    –     | `true` behind a trusted proxy / in Docker                                                                                    |
-| `AUTH_GITHUB_ID` / `_SECRET` |    –     | Enables GitHub sign-in when both set — see [OAuth](oauth.md)                                                                 |
-| `AUTH_GOOGLE_ID` / `_SECRET` |    –     | Enables Google sign-in when both set — see [OAuth](oauth.md)                                                                 |
-| `APP_URL`                    |    –     | Public origin for OG/`metadataBase`, `robots`/`sitemap`, and OAuth callback URLs. Default `http://localhost:3000`            |
-| `NODE_ENV`                   |    –     | `development` \| `test` \| `production`                                                                                      |
-| `LOG_LEVEL`                  |    –     | `debug` \| `info` \| `warn` \| `error`                                                                                       |
-| `LOG_PERSIST`                |    –     | `false` stops keeping log lines in Postgres for Observability → Logs (stdout is unaffected). Default on                      |
-| `LOG_RETENTION_DAYS`         |    –     | Days of log lines kept for Observability → Logs. Default `7`                                                                 |
-| `TELEMETRY_RETENTION_DAYS`   |    –     | Days of runs (questions and ingestions, step by step) kept for Observability. Default `30`                                   |
-| `RATE_LIMIT_DISABLED`        |    –     | `true` to disable the in-memory auth rate limiter                                                                            |
-| `EMAIL_ENABLED`              |    –     | `true` to turn on email; requires the SMTP vars below                                                                        |
-| `EMAIL_FROM`                 |    †     | From address (required when `EMAIL_ENABLED=true`)                                                                            |
-| `SMTP_HOST`                  |    †     | SMTP host (required when `EMAIL_ENABLED=true`)                                                                               |
-| `SMTP_PORT`                  |    †     | SMTP port, e.g. `587` or `465` (required when enabled)                                                                       |
-| `SMTP_USER`                  |    –     | SMTP username (if the server requires auth)                                                                                  |
-| `SMTP_PASSWORD`              |    –     | SMTP password (if the server requires auth)                                                                                  |
-| `SMTP_SECURE`                |    –     | `true` for implicit TLS; auto-true on port `465`                                                                             |
-| `REQUIRE_EMAIL_VERIFICATION` |    –     | `true` soft-gates unverified users (only with email on) — see [Email](email.md)                                              |
-| `VAPID_PUBLIC_KEY`           |    –     | Web Push — enabled only when all three VAPID vars are set                                                                    |
-| `VAPID_PRIVATE_KEY`          |    –     | Web Push private key (server-only)                                                                                           |
-| `VAPID_SUBJECT`              |    –     | Web Push contact URL, e.g. `mailto:you@example.com`                                                                          |
-| `NVIDIA_API_KEY`             |    –     | Enables document chat. Free key from build.nvidia.com; ~40 requests/min. Unset: `/chat` reports unconfigured                 |
-| `RAG_LLM_BASE_URL`           |    –     | Any OpenAI-compatible endpoint. Default `https://integrate.api.nvidia.com/v1`; point at Ollama/llama.cpp to go fully offline |
-| `RAG_EMBED_MODEL`            |    –     | Default `nvidia/nemotron-3-embed-1b`. Must emit **2048** dimensions to match the `halfvec` column                            |
-| `RAG_CHAT_MODEL`             |    –     | Writes the prose. Default `nvidia/nemotron-3-super-120b-a12b`                                                                |
-| `RAG_PLANNER_MODEL`          |    –     | Plans and calls tools on the agentic path. Default `nvidia/nemotron-3.5-lightning-30b-a3b`                                   |
-| `RAG_PLANNER_REASONING`      |    –     | `off` skips the planner's hidden reasoning (faster decisions; Nemotron / Qwen3 on NIM or vLLM). Default `on`                 |
-| `RAG_AGENTIC_ENABLED`        |    –     | `true` for the agentic retrieval loop. Default `false` — ~10× slower, better on follow-ups; see [RAG](rag.md)                |
-| `RAG_*` (tuning)             |    –     | Chunking, retrieval floor, hybrid pool, loop budgets — all defaulted; the full table is in [RAG → Tuning](rag.md#tuning)     |
+| Variable                           | Required | Notes                                                                                                                        |
+| ---------------------------------- | :------: | ---------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                     |    ✅    | Postgres connection string                                                                                                   |
+| `S3_ENDPOINT`                      |    ✅    | S3-compatible endpoint (MinIO by default)                                                                                    |
+| `S3_ACCESS_KEY_ID`                 |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                  |
+| `S3_SECRET_ACCESS_KEY`             |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                  |
+| `S3_BUCKET`                        |    ✅    | Bucket name — auto-created by `minio-init`                                                                                   |
+| `S3_REGION`                        |    –     | Defaults to `us-east-1` (MinIO ignores region)                                                                               |
+| `UPLOAD_MAX_SIZE_MB`               |    –     | Per-file size cap. Default `10`                                                                                              |
+| `MAX_STORAGE_PER_USER_MB`          |    –     | Per-user quota. Default `500`                                                                                                |
+| `UPLOAD_ALLOWED_MIME_TYPES`        |    –     | Comma-separated allow-list. Default images + PDF                                                                             |
+| `AUTH_SECRET`                      |    ✅    | `npx auth secret` — unique per environment, never reuse                                                                      |
+| `AUTH_URL`                         |    –     | Canonical auth URL; set in production                                                                                        |
+| `AUTH_TRUST_HOST`                  |    –     | `true` behind a trusted proxy / in Docker                                                                                    |
+| `AUTH_GITHUB_ID` / `_SECRET`       |    –     | Enables GitHub sign-in when both set — see [OAuth](oauth.md)                                                                 |
+| `AUTH_GOOGLE_ID` / `_SECRET`       |    –     | Enables Google sign-in when both set — see [OAuth](oauth.md)                                                                 |
+| `APP_URL`                          |    –     | Public origin for OG/`metadataBase`, `robots`/`sitemap`, and OAuth callback URLs. Default `http://localhost:3000`            |
+| `NODE_ENV`                         |    –     | `development` \| `test` \| `production`                                                                                      |
+| `LOG_LEVEL`                        |    –     | `debug` \| `info` \| `warn` \| `error`                                                                                       |
+| `LOG_PERSIST`                      |    –     | `false` stops keeping log lines in Postgres for Observability → Logs (stdout is unaffected). Default on                      |
+| `LOG_RETENTION_DAYS`               |    –     | Days of log lines kept for Observability → Logs. Default `7`                                                                 |
+| `TELEMETRY_RETENTION_DAYS`         |    –     | Days of runs (questions and ingestions, step by step) kept for Observability. Default `30`                                   |
+| `RATE_LIMIT_DISABLED`              |    –     | `true` to disable the in-memory auth rate limiter                                                                            |
+| `EMAIL_ENABLED`                    |    –     | `true` to turn on email; requires the SMTP vars below                                                                        |
+| `EMAIL_FROM`                       |    †     | From address (required when `EMAIL_ENABLED=true`)                                                                            |
+| `SMTP_HOST`                        |    †     | SMTP host (required when `EMAIL_ENABLED=true`)                                                                               |
+| `SMTP_PORT`                        |    †     | SMTP port, e.g. `587` or `465` (required when enabled)                                                                       |
+| `SMTP_USER`                        |    –     | SMTP username (if the server requires auth)                                                                                  |
+| `SMTP_PASSWORD`                    |    –     | SMTP password (if the server requires auth)                                                                                  |
+| `SMTP_SECURE`                      |    –     | `true` for implicit TLS; auto-true on port `465`                                                                             |
+| `REQUIRE_EMAIL_VERIFICATION`       |    –     | `true` soft-gates unverified users (only with email on) — see [Email](email.md)                                              |
+| `VAPID_PUBLIC_KEY`                 |    –     | Web Push — enabled only when all three VAPID vars are set                                                                    |
+| `VAPID_PRIVATE_KEY`                |    –     | Web Push private key (server-only)                                                                                           |
+| `VAPID_SUBJECT`                    |    –     | Web Push contact URL, e.g. `mailto:you@example.com`                                                                          |
+| `NVIDIA_API_KEY`                   |    –     | Enables document chat. Free key from build.nvidia.com; ~40 requests/min. Unset: `/chat` reports unconfigured                 |
+| `RAG_LLM_BASE_URL`                 |    –     | Any OpenAI-compatible endpoint. Default `https://integrate.api.nvidia.com/v1`; point at Ollama/llama.cpp to go fully offline |
+| `RAG_EMBED_MODEL`                  |    –     | Default `nvidia/nemotron-3-embed-1b`. Must emit **2048** dimensions to match the `halfvec` column                            |
+| `RAG_CHAT_MODEL`                   |    –     | Writes the prose. Default `nvidia/nemotron-3-super-120b-a12b`                                                                |
+| `RAG_PLANNER_MODEL`                |    –     | Plans and calls tools on the agentic path. Default `nvidia/nemotron-3.5-lightning-30b-a3b`                                   |
+| `RAG_PLANNER_REASONING`            |    –     | `off` skips the planner's hidden reasoning (faster decisions; Nemotron / Qwen3 on NIM or vLLM). Default `on`                 |
+| `RAG_AGENTIC_ROUTE`                |    –     | `adaptive` plans only follow-ups and multi-part questions; `always` plans every question. Default `always`                   |
+| `RAG_AGENTIC_CONFIDENT_SIMILARITY` |    –     | A first-search best match at or above this skips the planner's second decision. `1` (default) turns it off                   |
+| `RAG_PLANNER_CALL_MS`              |    –     | Most any one planner call may take, in ms; `0` (default) means only `RAG_MAX_LOOP_MS` applies                                |
+| `RAG_AGENTIC_ENABLED`              |    –     | `true` for the agentic retrieval loop. Default `false` — ~10× slower, better on follow-ups; see [RAG](rag.md)                |
+| `RAG_*` (tuning)                   |    –     | Chunking, retrieval floor, hybrid pool, loop budgets — all defaulted; the full table is in [RAG → Tuning](rag.md#tuning)     |
 
 † Required only when `EMAIL_ENABLED=true`. Setting the toggle without a provider
 fails fast at boot. SMTP is provider-agnostic — Resend, SendGrid, Mailgun, SES,

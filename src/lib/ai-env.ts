@@ -197,6 +197,30 @@ export const aiEnvShape = {
   // reject it, so it applies to planner calls only. Measured on NIM's free
   // tier: the first decision 2.4s -> 1.3s typical, 9/9 correct either way.
   RAG_PLANNER_REASONING: z.enum(['on', 'off']).optional().default('on'),
+  // Spec 0043: plan only when it pays. `adaptive` sends only follow-ups and
+  // multi-part questions to the planner (see src/lib/rag/plan-route.ts);
+  // `always` is the behaviour before it. Default decided by the eval.
+  RAG_AGENTIC_ROUTE: z
+    .enum(['adaptive', 'always'])
+    .optional()
+    .default('always'),
+  // A first search whose best match reaches this ends the loop without a
+  // second planner decision (spec 0043 FR2). 1 turns it off.
+  RAG_AGENTIC_CONFIDENT_SIMILARITY: z.coerce
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .default(1),
+  // Most any one planner call may take, in ms (spec 0043 FR3). 0 means no cap
+  // beyond RAG_MAX_LOOP_MS.
+  RAG_PLANNER_CALL_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(120_000)
+    .optional()
+    .default(0),
   // Three, not two. Measured planner latency is 2.6-4.4s medians, not the
   // ~10s previously on record — at 10s a call, three searches worst-cased at
   // 45s and would have been unusable; at the real numbers it is about 14s.

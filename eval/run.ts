@@ -28,6 +28,7 @@ import {
 } from '@/lib/rag/retrieve'
 import type { RewriteTurn } from '@/lib/rag/rewrite'
 import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
+import { planRoute } from '@/lib/rag/plan-route'
 import { resolveScope } from '@/lib/rag/scope'
 import { deleteObjectsUnderPrefix, putObject } from '@/lib/storage/client'
 
@@ -1396,7 +1397,29 @@ async function main(): Promise<void> {
   const agenticResults: QuestionResult[] = []
   if (compare) {
     console.log('\nAgentic (spec 0029 loop) — per question:')
+    const adaptive = aiSettings().RAG_AGENTIC_ROUTE === 'adaptive'
     for (const q of questions) {
+      // Spec 0043: under `adaptive` the app only plans follow-ups and
+      // multi-part questions; a standalone question gets the fixed pipeline.
+      // Score it the way the app would answer it: the baseline pass's own
+      // retrieval, no planner call.
+      if (adaptive && !planRoute(q.question, q.turns ?? []).plan) {
+        const base = baselineResults.find((r) => r.id === q.id)
+        const result = buildResult(
+          q,
+          retrievedById.get(q.id) ?? [],
+          titleById,
+          {
+            searches: 1,
+            latencyMs: base?.latencyMs ?? 0,
+            tokensUsed: 0,
+            termination: 'direct',
+          },
+        )
+        agenticResults.push(result)
+        logResult(result)
+        continue
+      }
       // Same KB-scoped list the chat route builds, so whole-document intent
       // resolves here exactly as it does in the product.
       const agenticDocs = await listReadyDocuments(EVAL_USER_ID, allKbIds)

@@ -10,6 +10,17 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Plan only when it pays**
+  ([#85](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/85),
+  [#86](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/86),
+  [#87](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/87),
+  spec 0043). Three settings to stop paying for the agentic planner where it
+  does not help: `RAG_AGENTIC_ROUTE=adaptive` plans only follow-ups and
+  multi-part questions; `RAG_AGENTIC_CONFIDENT_SIMILARITY` skips the second
+  planner decision when the first search is a strong match;
+  `RAG_PLANNER_CALL_MS` caps each planner call so a stall costs seconds, not
+  the whole loop budget. Each defaults to the old behaviour until the eval
+  sets it. The activity drawer and Overview name the new outcomes.
 - **`RAG_PLANNER_REASONING=off` lets the planner skip its hidden reasoning**
   ([#84](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/84)).
   For planner models that honour it (Nemotron and Qwen3 on NIM or vLLM), each

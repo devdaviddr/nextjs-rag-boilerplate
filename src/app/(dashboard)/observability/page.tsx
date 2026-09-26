@@ -34,6 +34,8 @@ const TERMINATION_COLOUR: Record<string, string> = {
   'token-budget': 'bg-rose-500',
   'planner-unavailable': 'bg-red-600',
   'whole-document': 'bg-teal-500',
+  confident: 'bg-emerald-400',
+  'planner-slow': 'bg-amber-600',
 }
 
 const MODE = {
