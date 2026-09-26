@@ -3,12 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Loader2 } from 'lucide-react'
 
+import { type ModelDetail, describeModel } from '@/lib/ai-settings/presets'
 import { cn } from '@/lib/utils'
 
 /** What the picker knows about a connection's model list. */
 export type ModelList =
   | { status: 'idle' | 'loading' }
-  | { status: 'ready'; models: string[] }
+  | {
+      status: 'ready'
+      models: string[]
+      /** Context length and price, where the provider lists them. */
+      details?: Record<string, ModelDetail>
+    }
   | { status: 'error'; error: string }
 
 /** Enough to scroll through; typing narrows the rest. */
@@ -227,6 +233,11 @@ export function ModelPicker({
                       )}
                     />
                     <span className="truncate">{model}</span>
+                    {list.status === 'ready' && list.details?.[model] && (
+                      <span className="text-muted-foreground ml-auto shrink-0 font-sans text-xs">
+                        {describeModel(list.details[model])}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

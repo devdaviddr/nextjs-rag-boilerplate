@@ -334,7 +334,7 @@ edit the schema, generate the migration, review it, commit it, and apply it.
 | Turn on agentic retrieval   | `RAG_AGENTIC_ENABLED=true` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus first — see [RAG](rag.md)          |
 | Go fully offline            | Point `RAG_LLM_BASE_URL` at Ollama/llama.cpp; the embedding model must emit 2048 dims, the planner must emit native tool calls |
 | Use another provider        | Settings → AI provider → Add connection, then pick it for a job under Models. Embeddings stay on the `.env` endpoint for now   |
-| Tune the agentic loop       | `RAG_MAX_SEARCHES` / `RAG_MAX_LOOP_MS` / `RAG_MAX_LOOP_TOKENS` / `RAG_AGENTIC_FLOOR_STEP` — [RAG → Tuning](rag.md#tuning)      |
+| Tune the agentic loop       | Settings → Configuration → Retrieval & answering, or the same variables in `.env` — [RAG → Tuning](rag.md#tuning)              |
 
 ## Production checklist
 

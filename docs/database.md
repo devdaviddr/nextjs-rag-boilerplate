@@ -86,13 +86,15 @@ RAG uses `knowledge_bases`, `documents`, `chunks`, `conversations`, `messages`
 and `conversation_knowledge_bases`. Retrieval queries drive the shape of these
 tables, so they are worth understanding before you read the diagram.
 
-Settings uses `ai_settings` and `ai_connections`. `ai_settings` holds AI
+Settings uses `ai_settings`, `ai_connections` and `ai_settings_audit`. `ai_settings` holds AI
 settings saved from Settings, one row per environment variable name, with the
 string you would put in `.env`: a row overrides the variable, and no row means
 the environment applies. It also records which connection each job uses
 (`connection:chat` and so on). `ai_connections` holds the endpoints added in
 Settings → AI provider, with the API key encrypted (AES-256-GCM) and its last
-four characters for display.
+four characters for display. `ai_settings_audit` records every change made
+from Settings: who, when, the setting or connection, and old → new. An API key
+appears there only as its last four characters.
 
 Observability uses `app_logs`, `rag_runs` and `rag_spans` (spec 0042).
 `app_logs` holds every log line, with its level, category, request id and

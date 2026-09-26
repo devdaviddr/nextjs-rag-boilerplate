@@ -172,10 +172,16 @@ default next to the floor, and the eval must be run after an embedding switch.
       live 2026-09-25: chat, planner (tool call) and embeddings tests pass on NIM
 - [ ] FR3: a wrong-dimension model is rejected; after a switch every document
       re-embeds and retrieval never mixes generations; eval refusal 1.000
-- [ ] FR4: every listed setting applies on the next request; out-of-range values
-      are rejected with the allowed range
-- [ ] FR5: source badges, reset, audit (secrets redacted), and
-      `AI_SETTINGS_LOCKED` enforced server-side
+- [x] FR4: every listed setting applies on the next request; out-of-range values
+      are rejected with the allowed range — `saveRetrievalSetting` saves through
+      `saveAiSetting`, which reloads at once; `ai-settings-actions.test.ts`
+      _"FR4"_ (range messages), `ai-settings-retrieval.test.ts` (every stated
+      range equals its variable's), e2e `settings-ai.spec.ts` _"tunes a
+      retrieval setting"_
+- [x] FR5: source badges, reset, audit (secrets redacted), and
+      `AI_SETTINGS_LOCKED` enforced server-side — `ai-settings-actions.test.ts`
+      _"FR5"_ (audit without the key, who saved it, every write refused when
+      locked), `ai-settings.test.ts` (save and reset audited old → new)
 - [x] FR6: no direct `env.RAG_*` reads remain outside the resolver (lint rule or
       grep check in CI) — `no-restricted-syntax` in `eslint.config.mjs`, run by
       `pnpm lint` in CI; resolver behaviour in `tests/unit/ai-settings.test.ts`
@@ -245,6 +251,29 @@ environment's exactly.
 - **The model picker** is a searchable dropdown of the connection's
   `/models`, fetched once per connection and shared by every job; any name
   can still be typed, since not every server lists all it serves.
+
+### As built: retrieval, provenance and providers (#57, #58, #67)
+
+- **Retrieval & answering** is a third block in the Configuration tab, not a
+  tab of its own. The settings it offers, their labels and ranges are listed in
+  `src/lib/ai-settings/retrieval-fields.ts`; a test holds each stated range to
+  its zod field, which still decides. Beyond the FR4 list it includes the
+  spec 0043 knobs (when to plan, planner call limit, planner reasoning, early
+  stop) and the whole-document passage limit. There is no re-ingest action yet,
+  so passage size and cracking say they affect new uploads and that a document
+  is re-indexed by uploading it again.
+- **Audit** is one table, `ai_settings_audit`: save, reset, a job's connection
+  and connection add / edit / remove, old → new as the page shows it. A
+  connection is recorded as `preset · URL · key ••••1a2b`. The latest 20 are
+  listed under Recent changes.
+- **`AI_SETTINGS_LOCKED`** lives in `env.ts`, not `ai-env.ts`, so the page can
+  never save or unlock it. Tests still run while locked; every changing action
+  refuses.
+- **Providers (FR9)**: OpenRouter requests carry `HTTP-Referer` (`APP_URL`) and
+  `X-Title` (the app name), from the app and from Settings' tests. The picker
+  shows context length and prompt price where `/models` lists them. The chat
+  test streams, and fails if the endpoint does not. An embeddings test that
+  gets a 404 or 501 suggests `--embeddings` for llama.cpp.
 
 ## Security & privacy
 

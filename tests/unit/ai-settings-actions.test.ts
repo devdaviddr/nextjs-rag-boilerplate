@@ -10,6 +10,7 @@ const { isAdmin, store, mockEnv } = vi.hoisted(() => ({
   isAdmin: { value: true },
   mockEnv: {
     AUTH_SECRET: 'auth-secret-for-tests',
+    APP_URL: 'http://localhost:3000',
     NVIDIA_API_KEY: 'nvapi-env-key-000011112222',
     RAG_LLM_BASE_URL: 'https://integrate.api.nvidia.com/v1',
     RAG_CHAT_MODEL: 'env/chat',
@@ -388,5 +389,91 @@ describe('FR4: retrieval and answering', () => {
     expect((await saveRetrievalSetting('RAG_TOP_K', '5')).ok).toBe(false)
     expect((await resetRetrievalSetting('RAG_TOP_K')).ok).toBe(false)
     expect(store.rows.size).toBe(0)
+  })
+})
+
+describe('FR9: provider behaviour', () => {
+  it('sends OpenRouter its attribution headers and reads context and price', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 'openai/gpt-4o-mini',
+              context_length: 128000,
+              pricing: { prompt: '0.00000015' },
+            },
+            {
+              id: 'meta/free-model',
+              context_length: 8192,
+              pricing: { prompt: '0' },
+            },
+          ],
+        }),
+      ),
+    )
+    const result = await testConnection({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: SECRET,
+      preset: 'openrouter',
+    })
+    const headers = fetchSpy.mock.calls[0]![1]!.headers as Record<
+      string,
+      string
+    >
+    expect(headers['X-Title']).toBeTruthy()
+    expect(headers['HTTP-Referer']).toMatch(/^https?:\/\//)
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        models: ['meta/free-model', 'openai/gpt-4o-mini'],
+        details: {
+          'openai/gpt-4o-mini': {
+            contextLength: 128000,
+            promptPerMillion: 0.15,
+          },
+          'meta/free-model': { contextLength: 8192, promptPerMillion: 0 },
+        },
+      },
+    })
+  })
+
+  it('sends no attribution headers to other providers', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: [] })))
+    await testConnection({ id: 'env' })
+    const headers = fetchSpy.mock.calls[0]![1]!.headers as Record<
+      string,
+      string
+    >
+    expect(headers).not.toHaveProperty('X-Title')
+  })
+
+  it('tests chat by streaming, and says so when the endpoint does not stream', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        'data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n',
+      ),
+    )
+    expect(await testRole('chat')).toMatchObject({
+      ok: true,
+      data: { detail: 'streamed an answer' },
+    })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: 'OK' } }] }),
+      ),
+    )
+    const result = await testRole('chat')
+    expect(!result.ok && result.error).toContain('did not stream')
+  })
+
+  it('tells an embeddings endpoint that is missing how a llama.cpp server enables it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('not found', { status: 404 }),
+    )
+    const result = await testRole('embed')
+    expect(!result.ok && result.error).toContain('--embeddings')
   })
 })

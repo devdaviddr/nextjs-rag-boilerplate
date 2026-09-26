@@ -135,6 +135,7 @@ function ConnectionDialog({
             id: form.id,
             baseUrl: form.baseUrl,
             apiKey: form.apiKey,
+            preset: form.preset,
           }),
         ),
       )

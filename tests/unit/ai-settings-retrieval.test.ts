@@ -72,3 +72,28 @@ describe('RETRIEVAL_FIELDS', () => {
     expect(describeRange(byKey('RAG_AGENTIC_ROUTE'))).toBe('adaptive or always')
   })
 })
+
+describe('provider presets (spec 0040 FR9)', () => {
+  it('adds attribution headers for OpenRouter only', async () => {
+    const { presetHeaders } = await import('@/lib/ai-settings/presets')
+    const app = { url: 'https://rag.example', name: 'Rag' }
+    expect(presetHeaders('openrouter', app)).toEqual({
+      'HTTP-Referer': 'https://rag.example',
+      'X-Title': 'Rag',
+    })
+    expect(presetHeaders('nvidia-nim', app)).toEqual({})
+    expect(presetHeaders('llama-cpp', app)).toEqual({})
+  })
+
+  it('describes a model in a few words', async () => {
+    const { describeModel } = await import('@/lib/ai-settings/presets')
+    expect(
+      describeModel({ contextLength: 128000, promptPerMillion: 0.15 }),
+    ).toBe('128k context · $0.15/M')
+    expect(describeModel({ contextLength: 8192, promptPerMillion: 0 })).toBe(
+      '8k context · free',
+    )
+    expect(describeModel({ promptPerMillion: 3 })).toBe('$3.0/M')
+    expect(describeModel(undefined)).toBe('')
+  })
+})

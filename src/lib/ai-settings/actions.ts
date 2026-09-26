@@ -34,7 +34,16 @@ import { PLANNER_SYSTEM_PROMPT } from '@/lib/rag/agentic-run'
 import { SEARCH_TOOL } from '@/lib/rag/planner'
 
 import { encryptSecret, secretHint } from './crypto'
-import { PRESETS, type PresetId, presetById } from './presets'
+import { APP_NAME } from '@/lib/brand'
+
+import {
+  type ModelDetail,
+  PRESETS,
+  type PresetId,
+  presetById,
+  presetForUrl,
+  presetHeaders,
+} from './presets'
 import {
   RETRIEVAL_FIELDS,
   describeRange,
@@ -109,6 +118,13 @@ export interface TestResult {
   latencyMs: number
   /** Model ids the endpoint lists, sorted; empty when it lists none. */
   models: string[]
+  /** Context length and price, where the endpoint lists them (OpenRouter). */
+  details: Record<string, ModelDetail>
+}
+
+export interface ModelsView {
+  models: string[]
+  details: Record<string, ModelDetail>
 }
 
 const FORBIDDEN = 'Only admins can change AI settings.'
@@ -384,8 +400,27 @@ export async function deleteConnection(id: string): Promise<ActionResult> {
 
 const TEST_TIMEOUT_MS = 15_000
 
-function authHeaders(apiKey: string | undefined): Record<string, string> {
-  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+function authHeaders(
+  apiKey: string | undefined,
+  preset: string,
+): Record<string, string> {
+  return {
+    ...presetHeaders(preset, { url: appEnv.APP_URL, name: APP_NAME }),
+    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+  }
+}
+
+/** Context length and prompt price from one `/models` entry, if listed. */
+function detailOf(entry: Record<string, unknown>): ModelDetail | null {
+  const context = Number(entry.context_length)
+  const pricing = entry.pricing as Record<string, unknown> | undefined
+  const prompt = Number(pricing?.prompt)
+  const detail: ModelDetail = {}
+  if (Number.isFinite(context) && context > 0) detail.contextLength = context
+  if (pricing && Number.isFinite(prompt) && prompt >= 0) {
+    detail.promptPerMillion = Math.round(prompt * 1_000_000 * 100) / 100
+  }
+  return Object.keys(detail).length ? detail : null
 }
 
 function explain(status: number): string {
@@ -405,12 +440,13 @@ function explain(status: number): string {
 async function listModels(
   baseUrl: string,
   apiKey: string | undefined,
+  preset: string,
 ): Promise<ActionResult<TestResult>> {
   const started = Date.now()
   let response: Response
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
-      headers: { ...authHeaders(apiKey), Accept: 'application/json' },
+      headers: { ...authHeaders(apiKey, preset), Accept: 'application/json' },
       signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
       cache: 'no-store',
     })
@@ -428,17 +464,30 @@ async function listModels(
     }
   }
   let models: string[] = []
+  const details: Record<string, ModelDetail> = {}
   try {
-    const json = (await response.json()) as { data?: { id?: unknown }[] }
-    models = (json.data ?? [])
-      .map((m) => m.id)
-      .filter((id): id is string => typeof id === 'string')
-      .sort()
+    const json = (await response.json()) as {
+      data?: Record<string, unknown>[]
+    }
+    const entries = (json.data ?? [])
+      .filter(
+        (m): m is Record<string, unknown> & { id: string } =>
+          Boolean(m) && typeof m.id === 'string',
+      )
+      .sort((a, b) => a.id.localeCompare(b.id))
       .slice(0, 2000)
+    models = entries.map((m) => m.id)
+    for (const m of entries) {
+      const detail = detailOf(m)
+      if (detail) details[m.id] = detail
+    }
   } catch {
     // A 200 that is not a model list still proves the URL and key.
   }
-  return { ok: true, data: { status: response.status, latencyMs, models } }
+  return {
+    ok: true,
+    data: { status: response.status, latencyMs, models, details },
+  }
 }
 
 /**
@@ -449,6 +498,8 @@ export async function testConnection(input: {
   id?: string
   baseUrl?: string
   apiKey?: string
+  /** The form's preset, for a connection not saved yet. */
+  preset?: string
 }): Promise<ActionResult<TestResult>> {
   return asAdmin(async () => {
     await refreshAiSettings()
@@ -464,16 +515,25 @@ export async function testConnection(input: {
     ) {
       return { ok: false, error: 'Enter the full base URL first' }
     }
-    return listModels(baseUrl, input.apiKey?.trim() || saved?.apiKey)
+    return listModels(
+      baseUrl,
+      input.apiKey?.trim() || saved?.apiKey,
+      input.preset ?? saved?.preset ?? presetForUrl(baseUrl),
+    )
   })
 }
 
-/** The models a connection lists, for the model picker. */
+/** The models a connection lists, with any details, for the model picker. */
 export async function modelsFor(
   connectionId: string,
-): Promise<ActionResult<string[]>> {
+): Promise<ActionResult<ModelsView>> {
   const result = await testConnection({ id: connectionId })
-  return result.ok ? { ok: true, data: result.data.models } : result
+  return result.ok
+    ? {
+        ok: true,
+        data: { models: result.data.models, details: result.data.details },
+      }
+    : result
 }
 
 const roleInput = z.object({
@@ -585,7 +645,8 @@ export async function testRole(
               model,
               messages: [{ role: 'user', content: 'Reply with the word OK.' }],
               max_tokens: 3,
-              stream: false,
+              // Chat answers are streamed, so its test streams too (FR9).
+              stream: role === 'chat',
             }
     const url = `${base}${role === 'embed' ? '/embeddings' : '/chat/completions'}`
     const started = Date.now()
@@ -597,7 +658,7 @@ export async function testRole(
         response = await fetch(url, {
           method: 'POST',
           headers: {
-            ...authHeaders(connection.apiKey),
+            ...authHeaders(connection.apiKey, connection.preset),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
@@ -617,13 +678,26 @@ export async function testRole(
     const latencyMs = Date.now() - started
     if (!response.ok) {
       const hint =
-        response.status === 404 || response.status === 400
-          ? `; is "${model}" available on ${connection.name}?`
-          : ''
+        role === 'embed' && [404, 501].includes(response.status)
+          ? `; for a llama.cpp server, start llama-server with --embeddings`
+          : response.status === 404 || response.status === 400
+            ? `; is "${model}" available on ${connection.name}?`
+            : ''
       return {
         ok: false,
         error: `HTTP ${response.status}: ${explain(response.status)}${hint}`,
       }
+    }
+    if (role === 'chat') {
+      const text = await response.text().catch(() => '')
+      if (!/^data:/m.test(text)) {
+        return {
+          ok: false,
+          error:
+            'The model answered but did not stream, which chat needs for answers to appear as they are written.',
+        }
+      }
+      return { ok: true, data: { latencyMs, detail: 'streamed an answer' } }
     }
     const json = (await response.json().catch(() => null)) as {
       data?: { embedding?: unknown[] }[]

@@ -76,6 +76,48 @@ export const PRESETS: readonly Preset[] = [
   },
 ]
 
+/**
+ * Headers a provider wants besides the API key (spec 0040 FR9). OpenRouter's
+ * attribution headers are optional; with them the app shows up by name in
+ * the key owner's OpenRouter activity instead of as an unnamed caller.
+ */
+export function presetHeaders(
+  preset: string,
+  app: { url: string; name: string },
+): Record<string, string> {
+  return preset === 'openrouter'
+    ? { 'HTTP-Referer': app.url, 'X-Title': app.name }
+    : {}
+}
+
+/** A model as a connection's `/models` describes it, where it says more. */
+export interface ModelDetail {
+  contextLength?: number
+  /** US dollars per million prompt tokens (OpenRouter lists a price). */
+  promptPerMillion?: number
+}
+
+/** "128k context · $0.15/M" — for the model picker. */
+export function describeModel(detail: ModelDetail | undefined): string {
+  if (!detail) return ''
+  const parts: string[] = []
+  if (detail.contextLength) {
+    parts.push(
+      detail.contextLength >= 1000
+        ? `${Math.round(detail.contextLength / 1000)}k context`
+        : `${detail.contextLength} context`,
+    )
+  }
+  if (detail.promptPerMillion !== undefined) {
+    parts.push(
+      detail.promptPerMillion === 0
+        ? 'free'
+        : `$${detail.promptPerMillion.toFixed(detail.promptPerMillion < 1 ? 2 : 1)}/M`,
+    )
+  }
+  return parts.join(' · ')
+}
+
 export function presetById(id: string): Preset {
   return PRESETS.find((p) => p.id === id) ?? PRESETS[PRESETS.length - 1]!
 }

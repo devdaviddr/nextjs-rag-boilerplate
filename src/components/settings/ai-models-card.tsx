@@ -244,7 +244,11 @@ export function AiModelsCard({
       setLists((l) => ({
         ...l,
         [connectionId]: result.ok
-          ? { status: 'ready', models: result.data }
+          ? {
+              status: 'ready',
+              models: result.data.models,
+              details: result.data.details,
+            }
           : { status: 'error', error: result.error },
       }))
     })
