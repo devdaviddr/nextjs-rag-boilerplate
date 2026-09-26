@@ -98,8 +98,8 @@ export const aiEnvShape = {
     .default(200),
 
   // --- Document cracking (spec 0031) -------------------------------------
-  // Off by default, same posture as RAG_AGENTIC_ENABLED below: with this
-  // false, ingestion runs exactly as it did, page routing included.
+  // Off by default: with this false, ingestion runs exactly as it did, page
+  // routing included.
   RAG_CRACK_ENABLED: z
     .string()
     .optional()
@@ -257,9 +257,9 @@ export const aiEnvShape = {
     .default(8000),
 
   // --- Reranking (spec 0036) ---------------------------------------------
-  // Off by default, same posture as RAG_AGENTIC_ENABLED and RAG_CRACK_ENABLED
-  // above: with this false, `retrieveForOwner` returns the fused order
-  // byte-identically and spends no extra call.
+  // Off by default, same posture as RAG_CRACK_ENABLED above: with this
+  // false, `retrieveForOwner` returns the fused order byte-identically and
+  // spends no extra call.
   //
   // Turning it on only PERMUTES the fused candidates — see rerank.ts for why
   // that means the similarity gate admits exactly the same set either way,

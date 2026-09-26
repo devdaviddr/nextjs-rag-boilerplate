@@ -537,13 +537,13 @@ calls the agentic retrieval directly so that one run scores both. Expect it to
 take a while and to use a lot of your rate limit. The agentic path costs
 several upstream calls per question, against two for the fixed path.
 
-To use it in the app, set the flag and restart the dev server:
+The app already uses it, because the flag is on unless you turn it off:
 
 ```bash
-RAG_AGENTIC_ENABLED=true        # in .env, then restart pnpm dev
+RAG_AGENTIC_ENABLED=false       # in .env, then restart pnpm dev, for the fixed path
 ```
 
-When you ask a question now, the thinking indicator shows a phase label
+When you ask a follow-up or multi-part question, the thinking indicator shows a phase label
 instead of bare dots: _"Deciding where to look…"_, _"Searching your
 documents…"_ (with a number if it searches again), _"Writing the answer…"_,
 _"Checking sources…"_. The metrics line reports `agentic search` in place of

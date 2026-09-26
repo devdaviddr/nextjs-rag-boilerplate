@@ -95,8 +95,8 @@ Mac mini running (`make autostart`). Postgres + MinIO backups are automated.
 See [Self-hosting](self-hosting.md), [Deployment](deployment.md) and
 [Backups](backups.md).
 
-> GitHub Actions CI runs format, lint, typecheck, unit tests, `specs:check`
-> and the Playwright suite on every PR. It publishes the app and migrate images
+> GitHub Actions CI runs format, lint, typecheck, unit tests and `specs:check`
+> on every PR, and the Playwright suite once per ship, on the release PR. It publishes the app and migrate images
 > to GHCR from `main`, and turns a `v*` tag into a release. See
 > [CI/CD](ci-cd.md).
 

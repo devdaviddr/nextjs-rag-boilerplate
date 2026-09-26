@@ -16,6 +16,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 - Admins now see why adding, editing, deleting or changing the roles of a user
   failed (for example "An account with this email already exists."). In
   production builds these messages were replaced by a generic error (#128).
+- The README, usage guide, tutorial and summary now say the agentic retrieval
+  loop is on by default, that the embedding model can be switched in Settings
+  up to 4000 dimensions, and that Playwright runs on the release PR (#130).
 
 ### Security
 

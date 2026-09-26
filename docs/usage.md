@@ -127,7 +127,7 @@ variables control stay inert until you set them.
 | `RAG_AGENTIC_ROUTE`                |    –     | `adaptive` plans only follow-ups and multi-part questions; `always` plans every question. Default `always`                   |
 | `RAG_AGENTIC_CONFIDENT_SIMILARITY` |    –     | A first-search best match at or above this skips the planner's second decision. `1` (default) turns it off                   |
 | `RAG_PLANNER_CALL_MS`              |    –     | Most any one planner call may take, in ms; `0` (default) means only `RAG_MAX_LOOP_MS` applies                                |
-| `RAG_AGENTIC_ENABLED`              |    –     | `true` for the agentic retrieval loop. Default `false` — ~10× slower, better on follow-ups; see [RAG](rag.md)                |
+| `RAG_AGENTIC_ENABLED`              |    –     | The agentic retrieval loop. Default `true` — ~10× slower, better on follow-ups; `false` for speed. See [RAG](rag.md)         |
 | `RAG_*` (tuning)                   |    –     | Chunking, retrieval floor, hybrid pool, loop budgets — all defaulted; the full table is in [RAG → Tuning](rag.md#tuning)     |
 
 † Required only when `EMAIL_ENABLED=true`. Setting the toggle without a provider
@@ -331,7 +331,7 @@ edit the schema, generate the migration, review it, commit it, and apply it.
 | Point storage at real S3/R2 | Set `S3_ENDPOINT`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_BUCKET` — `src/lib/storage/client.ts` is unmodified either way |
 | Add an env var              | Add it to the schema in `src/lib/env.ts` and to `.env.example`                                                                 |
 | Add an AI setting           | Add the field to `src/lib/ai-env.ts` and `.env.example`; read it with `aiSettings().RAG_X`                                     |
-| Turn on agentic retrieval   | `RAG_AGENTIC_ENABLED=true` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus first — see [RAG](rag.md)          |
+| Turn off agentic retrieval  | `RAG_AGENTIC_ENABLED=false` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus to see the trade — [RAG](rag.md)  |
 | Go fully offline            | Point `RAG_LLM_BASE_URL` at Ollama/llama.cpp, then pick its embedding model in Settings (re-indexes; up to 4000 dims)          |
 | Use another provider        | Settings → AI provider → Add connection, then pick it for a job under Models. Embeddings stay on the `.env` endpoint for now   |
 | Tune the agentic loop       | Settings → Configuration → Retrieval & answering, or the same variables in `.env` — [RAG → Tuning](rag.md#tuning)              |
