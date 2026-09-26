@@ -1,8 +1,8 @@
 ---
 id: 0033
 title: The retrieval fundamentals that were skipped
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.26.0
 created: 2026-09-10
 updated: 2026-09-26
 ---

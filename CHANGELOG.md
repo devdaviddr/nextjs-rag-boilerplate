@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-26
+
 ### Added
 
 - **Set the local reranker's CPU threads**
