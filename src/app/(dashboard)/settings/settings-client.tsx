@@ -17,6 +17,7 @@ import { NotificationsPanel } from '@/components/push/notifications-panel'
 import { AiChangesCard } from '@/components/settings/ai-changes-card'
 import { AiConnectionsCard } from '@/components/settings/ai-connections-card'
 import { AiModelsCard } from '@/components/settings/ai-models-card'
+import { AiRetrievalCard } from '@/components/settings/ai-retrieval-card'
 import { BuildInfoCard } from '@/components/settings/build-info-card'
 import type { AiSettingsView } from '@/lib/ai-settings/actions'
 import { InfoTip } from '@/components/ui/info-tip'
@@ -126,7 +127,7 @@ export function SettingsClient({
   activeModel,
 }: SettingsClientProps) {
   const formattedRoles = roles.map((r) => ({ id: r.id, name: r.name }))
-  // Spec 0040 FR8. Retrieval & answering joins with #57.
+  // Spec 0040 FR8.
   const sections: SectionDef[] = [
     {
       id: 'account',
@@ -140,7 +141,7 @@ export function SettingsClient({
             id: 'configuration',
             title: 'Configuration',
             description:
-              'Which AI providers this app can use, and which model does each job. A change applies to the next request.',
+              'Which AI providers this app can use, which model does each job, and how search and answering behave. A change applies to the next request.',
             icon: SlidersHorizontal,
           },
         ]
@@ -260,6 +261,10 @@ export function SettingsClient({
                     connections={ai.connections}
                     locked={ai.locked}
                   />
+                </div>
+                <div id="retrieval" className="space-y-4 border-t pt-6">
+                  <h3 className="font-semibold">Retrieval &amp; answering</h3>
+                  <AiRetrievalCard fields={ai.retrieval} locked={ai.locked} />
                 </div>
                 <div id="changes" className="space-y-4 border-t pt-6">
                   <h3 className="font-semibold">Recent changes</h3>

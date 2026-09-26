@@ -20,6 +20,8 @@ const { isAdmin, store, mockEnv } = vi.hoisted(() => ({
     RAG_EMBED_MODEL: 'env/embed',
     RAG_CHUNK_TOKENS: 512,
     RAG_CHUNK_OVERLAP_TOKENS: 64,
+    RAG_TOP_K: 8,
+    RAG_MIN_SIMILARITY: 0.35,
   } as Record<string, unknown>,
   store: {
     rows: new Map<string, string>(),
@@ -93,8 +95,10 @@ import { __resetAiSettingsForTests } from '@/lib/ai-settings'
 import {
   deleteConnection,
   getAiSettingsView,
+  resetRetrievalSetting,
   resetRole,
   saveConnection,
+  saveRetrievalSetting,
   saveRole,
   testConnection,
   testRole,
@@ -320,5 +324,69 @@ describe('FR5: provenance, audit and lock', () => {
 
     const view = await getAiSettingsView()
     expect(view.ok && view.data.locked).toBe(true)
+  })
+})
+
+describe('FR4: retrieval and answering', () => {
+  it('saves a setting, applies it, shows it as saved, and audits it', async () => {
+    expect(await saveRetrievalSetting('RAG_TOP_K', ' 5 ')).toEqual({
+      ok: true,
+      data: null,
+    })
+    expect(store.rows.get('RAG_TOP_K')).toBe('5')
+    const view = await getAiSettingsView()
+    const field =
+      view.ok && view.data.retrieval.find((f) => f.key === 'RAG_TOP_K')
+    expect(field).toMatchObject({ value: '5', source: 'saved' })
+    expect(store.audit).toContainEqual(
+      expect.objectContaining({
+        key: 'RAG_TOP_K',
+        oldValue: '8',
+        newValue: '5',
+      }),
+    )
+  })
+
+  it('rejects an out-of-range value with the allowed range', async () => {
+    expect(await saveRetrievalSetting('RAG_MIN_SIMILARITY', '1.5')).toEqual({
+      ok: false,
+      error: 'Relevance floor must be a number from 0 to 1.',
+    })
+    expect(await saveRetrievalSetting('RAG_TOP_K', '0')).toEqual({
+      ok: false,
+      error: 'Passages per answer must be a whole number from 1 up.',
+    })
+    expect(store.rows.size).toBe(0)
+  })
+
+  it('offers only the listed settings, never a model or a key', async () => {
+    for (const key of [
+      'RAG_CHAT_MODEL',
+      'NVIDIA_API_KEY',
+      'RAG_LLM_BASE_URL',
+    ]) {
+      const result = await saveRetrievalSetting(key, 'x')
+      expect(result.ok).toBe(false)
+    }
+    expect(store.rows.size).toBe(0)
+  })
+
+  it('resets a saved setting to .env', async () => {
+    await saveRetrievalSetting('RAG_TOP_K', '5')
+    expect(await resetRetrievalSetting('RAG_TOP_K')).toEqual({
+      ok: true,
+      data: null,
+    })
+    expect(store.rows.has('RAG_TOP_K')).toBe(false)
+  })
+
+  it('is admin only and refused when locked', async () => {
+    isAdmin.value = false
+    expect((await saveRetrievalSetting('RAG_TOP_K', '5')).ok).toBe(false)
+    isAdmin.value = true
+    mockEnv.AI_SETTINGS_LOCKED = true
+    expect((await saveRetrievalSetting('RAG_TOP_K', '5')).ok).toBe(false)
+    expect((await resetRetrievalSetting('RAG_TOP_K')).ok).toBe(false)
+    expect(store.rows.size).toBe(0)
   })
 })
