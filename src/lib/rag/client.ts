@@ -70,8 +70,13 @@ function requireKey(): string {
 
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
-/** NIM's transient "can't find the model's backend right now" 404 body (#82). */
-const NIM_ROUTING_BLIP = /Function '[^']*': Not found for account/
+/**
+ * NIM's 404 for a model it lists but does not serve to this account (#82).
+ * Measured: persistent for such a model (four attempts, all 404), unlike the
+ * empty-body 404 blip; a model name that does not exist gets a different
+ * 404, "404 page not found".
+ */
+const NIM_UNSERVED_MODEL = /Function '[^']*': Not found for account/
 const MAX_ATTEMPTS = 4
 
 /**
@@ -202,15 +207,19 @@ async function post(
     // explaining itself; this did not. Narrow on purpose: a genuine 404 (a
     // misconfigured RAG_CHAT_MODEL) still fails immediately rather than
     // retrying four times and hiding a config error behind a slow failure.
-    //
-    // NIM's "Function '…': Not found for account" is the same kind of blip with
-    // a body (#82): it names a model the account IS served — listed in
-    // /models and answering moments later — whose backend NIM briefly could
-    // not route to. Measured: a wrong model name gets `404 page not found`
-    // instead, so that one still fails at once.
-    const transientNotFound =
-      response.status === 404 &&
-      (lastDetail.length === 0 || NIM_ROUTING_BLIP.test(lastDetail))
+    const transientNotFound = response.status === 404 && lastDetail.length === 0
+
+    // NIM's "Function '…': Not found for account" is not a blip (#82): it is
+    // a model NIM lists for the account but does not serve to it. Retrying
+    // only delays the same answer, so it fails at once, and says plainly
+    // which model to change instead of passing on NIM's opaque function id.
+    if (response.status === 404 && NIM_UNSERVED_MODEL.test(lastDetail)) {
+      const model = (body as { model?: unknown }).model
+      throw new RagUpstreamError(
+        404,
+        `the model "${String(model)}" is listed by the provider but not available to this account; choose another in Settings → Configuration → Models`,
+      )
+    }
 
     if (
       (!RETRYABLE.has(response.status) && !transientNotFound) ||

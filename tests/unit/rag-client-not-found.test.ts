@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Which 404s the inference client retries (#82). NIM answers a served model
- * it briefly cannot route to with "Function '…': Not found for account", and
- * moments later answers normally; a model name that does not exist gets
- * "404 page not found". Only the first is worth another attempt.
+ * Which 404s the inference client retries (#82). An empty-body 404 is a blip
+ * worth another attempt. NIM's "Function '…': Not found for account" means a
+ * model NIM lists but does not serve to the account: persistent, so it fails
+ * at once, naming the model to change. "404 page not found" is a model name
+ * that does not exist: fails at once too.
  */
 
 vi.mock('@/lib/env', () => ({
@@ -46,20 +47,18 @@ afterEach(() => {
 })
 
 describe('404s', () => {
-  it('retries NIM’s "Function … Not found for account" and succeeds', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(respond(404, NIM_BLIP))
-      .mockResolvedValueOnce(respond(200, JSON.stringify(COMPLETION)))
+  it('fails at once on NIM’s "Function … Not found for account", naming the model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respond(404, NIM_BLIP))
     vi.stubGlobal('fetch', fetchMock)
-
     const pending = createChatCompletion([{ role: 'user', content: 'q' }], {
       role: 'planner',
     })
+    const assertion = expect(pending).rejects.toThrow(
+      /"test-planner" is listed by the provider but not available to this account/,
+    )
     await vi.runAllTimersAsync()
-    const { choice } = await pending
-    expect(choice.message?.content).toBe('ok')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await assertion
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('still retries an empty-body 404', async () => {
@@ -84,15 +83,5 @@ describe('404s', () => {
     await vi.runAllTimersAsync()
     await assertion
     expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('gives up after the usual number of attempts if the blip persists', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(respond(404, NIM_BLIP))
-    vi.stubGlobal('fetch', fetchMock)
-    const pending = createChatCompletion([{ role: 'user', content: 'q' }])
-    const assertion = expect(pending).rejects.toThrow(/HTTP 404/)
-    await vi.runAllTimersAsync()
-    await assertion
-    expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 })
