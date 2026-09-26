@@ -266,18 +266,23 @@ export async function createEmbeddings(
   inputType: EmbeddingInputType,
   /** Cuts the request off, e.g. at the agentic loop's time budget (#92). */
   signal?: AbortSignal,
+  /**
+   * A model other than the active generation's: only for building a new
+   * generation (#56). Everything else must match the index it searches.
+   */
+  model: string = modelFor('embed'),
 ): Promise<number[][]> {
   if (input.length === 0) return []
 
   const response = await post(
     '/embeddings',
-    { input, model: modelFor('embed'), input_type: inputType },
+    { input, model, input_type: inputType },
     { role: 'embed', signal },
   )
 
   const json = (await response.json()) as EmbeddingsResponse
   annotateSpan({
-    model: modelFor('embed'),
+    model,
     attributes: { inputs: input.length },
   })
   // The API is documented to preserve order, but sorting by `index` makes the

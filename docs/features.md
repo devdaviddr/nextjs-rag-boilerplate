@@ -127,8 +127,11 @@ Every setting shows where its value comes from: the default, `.env`, or saved
 here (with who saved it). `AI_SETTINGS_LOCKED=true` makes the whole section
 read-only, for deployments that keep their AI config in `.env`.
 
-Embeddings stay on the `.env` endpoint and model for now, because the index
-holds that model's vectors and changing it means re-indexing (#56). Choosing a
+A new **embedding** model re-indexes every document before it is used, because
+the index holds one model's vectors and two models' vectors cannot be compared.
+Settings asks first, shows progress, and can cancel; search stays on the
+current model until the new index is complete. Embeddings stay on the `.env`
+endpoint for now. Choosing a
 provider also chooses who sees your document text: the questions and the
 retrieved passages go to it.
 

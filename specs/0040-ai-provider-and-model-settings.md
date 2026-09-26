@@ -275,6 +275,27 @@ environment's exactly.
   test streams, and fails if the endpoint does not. An embeddings test that
   gets a 404 or 501 suggests `--embeddings` for llama.cpp.
 
+### As built: switching the embedding model (#56)
+
+- Decision 3's design, as recorded there. The migration copies the existing
+  vectors into generation `initial` (model null, meaning `RAG_EMBED_MODEL`)
+  with its own index; `chunks.embedding` becomes nullable and unused, and is
+  dropped a release later.
+- `activeEmbedding()` in the resolver gives the active generation's id, model
+  and size, loaded with the settings. Queries are embedded with its model and
+  searched at its size, both read once per search; ingestion writes into it.
+- Saving a new embedding model in Models starts the build instead of saving a
+  setting (`src/lib/rag/generations.ts`), after the page confirms. The build
+  runs after the response and on the ingestion recovery sweep, with a two-minute
+  lease renewed every 64 chunks. Settings shows progress, the last error, and
+  Cancel, and polls while it runs. The switch and a cancel are audited.
+- The retired generation is deleted by the sweep once the new one has been
+  active for four settings TTLs, so instances that have not reloaded keep
+  searching a complete index.
+- Not done: moving embeddings to another connection (they stay on `.env`),
+  and thresholds calibrated per generation. The confirmation says the
+  relevance floor was tuned for the current model.
+
 ## Security & privacy
 
 - API keys: encrypted at rest, write-only in the UI, redacted in logs and audit.

@@ -107,6 +107,8 @@ vi.mock('@/lib/rag/embed', () => ({ embedPassages }))
 
 const chunksFromPdf = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/rag/crack', () => ({ chunksFromPdf }))
+// The re-index sweep shares the timer (#56); these tests are about documents.
+vi.mock('@/lib/rag/generations', () => ({ sweepGenerations: async () => {} }))
 
 import type { ParsedPageCache } from '@/lib/rag/crack'
 import {
@@ -213,6 +215,7 @@ function defaultReply(sql: string): Record<string, unknown>[] {
   if (sql.includes('from "files"')) return [{ bucket_key: 'bucket/key.pdf' }]
   if (sql.startsWith('update "documents"')) return [documentRow()]
   if (sql.startsWith('select "attempts"')) return [{ attempts: 1 }]
+  if (sql.startsWith('insert into "chunks"')) return [{ id: 'chunk-1' }]
   return []
 }
 
@@ -368,9 +371,12 @@ describe('the chunk write', () => {
     const commit = state.queries.findIndex((q) => q.sql === 'COMMIT')
     expect(begin).toBeGreaterThan(-1)
     const inside = state.queries.slice(begin + 1, commit).map((q) => q.sql)
-    expect(inside).toHaveLength(2)
+    expect(inside).toHaveLength(3)
     expect(inside[0]).toContain('delete from "chunks"')
     expect(inside[1]).toContain('insert into "chunks"')
+    // The vectors go to the active generation in the same transaction (#56);
+    // the delete above cascades to the old ones.
+    expect(inside[2]).toContain('insert into "chunk_embeddings"')
     // Exactly one transaction per run: two workers that both finish therefore
     // each replace the whole set, and neither can leave a partial one.
     expect(state.queries.filter((q) => q.sql === 'BEGIN')).toHaveLength(1)

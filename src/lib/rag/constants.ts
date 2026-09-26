@@ -5,16 +5,6 @@
  */
 
 /**
- * Output dimensionality of `nvidia/nemotron-3-embed-1b`.
- *
- * Measured against the live endpoint on 2026-09-07: the model rejects any
- * other value (`dimensions must be one of 2048`), so this is fixed, not a
- * default. It must match `chunks.embedding halfvec(2048)` in the schema —
- * swapping the embedding model means writing a migration.
- */
-export const EMBEDDING_DIMENSIONS = 2048
-
-/**
  * The embeddings are ASYMMETRIC: the same sentence embedded as a passage and
  * as a query is only ~0.785 cosine-similar (measured 2026-09-07). Documents
  * must be embedded as `passage` and questions as `query`; mixing them

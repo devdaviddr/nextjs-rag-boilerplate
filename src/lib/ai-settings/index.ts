@@ -120,6 +120,12 @@ interface Loaded {
   connections: Map<string, ResolvedConnection>
   /** Which saved connection each job uses; absent means `.env`. */
   roleConnection: Partial<Record<ConnectableRole, string>>
+  /** The embedding generation search uses (#56); null before the table exists. */
+  generation: {
+    id: string
+    model: string | null
+    dimensions: number
+  } | null
   /**
    * `saved` over `env`, built once per load since reads sit on hot paths.
    * Null when nothing is saved: then reads go straight to `env`.
@@ -293,8 +299,39 @@ export function connectionFor(role: AiRole): ResolvedConnection {
     : (state?.connections.get(id) ?? envConnection())
 }
 
-/** The model a job uses. */
+/** The generation the migration made from the vectors that already existed. */
+export const INITIAL_GENERATION_ID = 'initial'
+
+/** The size of every vector before generations existed. */
+export const INITIAL_DIMENSIONS = 2048
+
+/** An embedding generation as search uses it (#56). */
+export interface ActiveEmbedding {
+  generationId: string
+  model: string
+  dimensions: number
+}
+
+/**
+ * The embedding generation search reads, and the model a query must be
+ * embedded with to be comparable with it. A generation made by the
+ * migration has no model of its own: it is `RAG_EMBED_MODEL`.
+ */
+export function activeEmbedding(): ActiveEmbedding {
+  const g = state?.generation
+  return {
+    generationId: g?.id ?? INITIAL_GENERATION_ID,
+    model: g?.model ?? aiSettings().RAG_EMBED_MODEL,
+    dimensions: g?.dimensions ?? INITIAL_DIMENSIONS,
+  }
+}
+
+/**
+ * The model a job uses. Embeddings use the active generation's, because a
+ * query embedded by any other model is not comparable with the index.
+ */
 export function modelFor(role: AiRole): string {
+  if (role === 'embed') return activeEmbedding().model
   return aiSettings()[ROLE_MODEL_KEY[role]]
 }
 
@@ -331,10 +368,12 @@ export function refreshAiSettings({
   if (inflight) return inflight
   inflight = (async () => {
     try {
-      const { readSavedRows, readConnectionRows } = await import('./store')
-      const [rows, connectionRows] = await Promise.all([
+      const { readSavedRows, readConnectionRows, readActiveGeneration } =
+        await import('./store')
+      const [rows, connectionRows, generation] = await Promise.all([
         readSavedRows(),
         readConnectionRows(),
+        readActiveGeneration(),
       ])
       const { saved, savedMeta, roleConnection } = parseRows(rows)
       state = {
@@ -342,6 +381,7 @@ export function refreshAiSettings({
         savedMeta,
         connections: resolveRows(connectionRows),
         roleConnection,
+        generation,
         merged: mergedOrNull(saved),
         loadedAt: Date.now(),
       }
@@ -353,6 +393,7 @@ export function refreshAiSettings({
         savedMeta: state?.savedMeta ?? new Map(),
         connections: state?.connections ?? new Map(),
         roleConnection: state?.roleConnection ?? {},
+        generation: state?.generation ?? null,
         merged: mergedOrNull(saved),
         loadedAt: Date.now(),
       }

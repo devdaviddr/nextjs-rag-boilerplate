@@ -169,6 +169,13 @@
       "when": 1790398810545,
       "tag": "0023_ai_settings_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790399922545,
+      "tag": "0024_embedding_generations",
+      "breakpoints": true
     }
   ]
 }

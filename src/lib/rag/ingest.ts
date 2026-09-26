@@ -4,13 +4,14 @@ import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 
 import { db } from '@/db'
 import {
+  chunkEmbeddings,
   chunks as chunksTable,
   documents,
   files,
   parsedPages,
 } from '@/db/schema'
 import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
-import { aiSettings } from '@/lib/ai-settings'
+import { activeEmbedding, aiSettings } from '@/lib/ai-settings'
 import {
   currentContext,
   newRequestId,
@@ -465,11 +466,18 @@ async function ingestOne(
       }),
     )
 
+    // Into the generation search reads (#56), read once so a swap mid-run
+    // cannot leave this document's vectors split between two models. A
+    // generation being built catches up on this document by itself.
+    const generation = activeEmbedding()
     const vectors: number[][] = []
     await span('embed', async (step) => {
       for (let i = 0; i < texts.length; i += EMBED_HEARTBEAT_CHUNKS) {
         vectors.push(
-          ...(await embedPassages(texts.slice(i, i + EMBED_HEARTBEAT_CHUNKS))),
+          ...(await embedPassages(
+            texts.slice(i, i + EMBED_HEARTBEAT_CHUNKS),
+            generation,
+          )),
         )
         token = await renewClaim(documentId, token)
       }
@@ -487,31 +495,44 @@ async function ingestOne(
         await tx
           .delete(chunksTable)
           .where(eq(chunksTable.documentId, documentId))
-        await tx.insert(chunksTable).values(
-          pieces.map((piece, i) => ({
-            documentId,
+        const inserted = await tx
+          .insert(chunksTable)
+          .values(
+            pieces.map((piece) => ({
+              documentId,
+              ownerId: doc.ownerId,
+              // Denormalised from the document, never from the session: a chunk's
+              // KB must always be its document's KB, or retrieval filters on a
+              // value the document itself disagrees with. Recovery runs as the
+              // system with no session at all, so this is the only correct source.
+              knowledgeBaseId: doc.knowledgeBaseId,
+              content: piece.content,
+              heading: piece.heading,
+              // Spec 0038 FR1. The same string `buildEmbeddingText` just used, so
+              // the stored search key and the embedded one cannot disagree.
+              caption: piece.caption ?? null,
+              headingBbox: piece.headingBox ?? null,
+              captionBbox: piece.captionBox ?? null,
+              pageNumber: piece.pageNumber,
+              chunkIndex: piece.chunkIndex,
+              tokenCount: piece.tokenCount,
+              // 'text' when the text-layer path produced this chunk, which is
+              // also the column default — so nothing about an uncracked document
+              // changes shape.
+              kind: piece.kind ?? 'text',
+              bbox: piece.bbox ?? null,
+              boxes: piece.boxes?.length ? piece.boxes : null,
+            })),
+          )
+          .returning({ id: chunksTable.id })
+        // The delete above cascades to every generation's vectors for this
+        // document, so a retry never leaves stale ones behind.
+        await tx.insert(chunkEmbeddings).values(
+          inserted.map((row, i) => ({
+            chunkId: row.id,
+            generationId: generation.generationId,
             ownerId: doc.ownerId,
-            // Denormalised from the document, never from the session: a chunk's
-            // KB must always be its document's KB, or retrieval filters on a
-            // value the document itself disagrees with. Recovery runs as the
-            // system with no session at all, so this is the only correct source.
             knowledgeBaseId: doc.knowledgeBaseId,
-            content: piece.content,
-            heading: piece.heading,
-            // Spec 0038 FR1. The same string `buildEmbeddingText` just used, so
-            // the stored search key and the embedded one cannot disagree.
-            caption: piece.caption ?? null,
-            headingBbox: piece.headingBox ?? null,
-            captionBbox: piece.captionBox ?? null,
-            pageNumber: piece.pageNumber,
-            chunkIndex: piece.chunkIndex,
-            tokenCount: piece.tokenCount,
-            // 'text' when the text-layer path produced this chunk, which is
-            // also the column default — so nothing about an uncracked document
-            // changes shape.
-            kind: piece.kind ?? 'text',
-            bbox: piece.bbox ?? null,
-            boxes: piece.boxes?.length ? piece.boxes : null,
             embedding: vectors[i] as number[],
           })),
         )
@@ -745,6 +766,16 @@ export function startIngestionRecovery(
       // A sweep that throws must not kill the timer, or one transient database
       // blip permanently disables recovery for the life of the container.
       logger.error('Ingestion recovery sweep failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    // Embedding re-indexes resume on the same timer (#56): a build whose
+    // worker went away, and retired generations due for deletion.
+    try {
+      const { sweepGenerations } = await import('./generations')
+      await sweepGenerations()
+    } catch (error) {
+      logger.error('Embedding re-index sweep failed', {
         error: error instanceof Error ? error.message : String(error),
       })
     } finally {

@@ -3,7 +3,13 @@ import 'server-only'
 import { desc, eq, like } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { aiConnections, aiSettings, aiSettingsAudit, users } from '@/db/schema'
+import {
+  aiConnections,
+  aiSettings,
+  aiSettingsAudit,
+  embeddingGenerations,
+  users,
+} from '@/db/schema'
 
 /**
  * The `ai_settings` table, and nothing else. Kept apart from the resolver so
@@ -54,6 +60,24 @@ export async function writeSavedRow(
 
 export async function deleteSavedRow(key: string): Promise<void> {
   await db.delete(aiSettings).where(eq(aiSettings.key, key))
+}
+
+/** The active embedding generation, if the table has one (#56). */
+export async function readActiveGeneration(): Promise<{
+  id: string
+  model: string | null
+  dimensions: number
+} | null> {
+  const [row] = await db
+    .select({
+      id: embeddingGenerations.id,
+      model: embeddingGenerations.model,
+      dimensions: embeddingGenerations.dimensions,
+    })
+    .from(embeddingGenerations)
+    .where(eq(embeddingGenerations.status, 'active'))
+    .limit(1)
+  return row ?? null
 }
 
 export async function readConnectionRows() {

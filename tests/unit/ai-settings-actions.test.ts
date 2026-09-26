@@ -36,6 +36,17 @@ vi.mock('@/lib/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('next/server', () => ({ after: vi.fn() }))
+vi.mock('@/lib/rag/generations', () => ({
+  reindexView: async () => ({
+    activeModel: 'env/embed',
+    activeDimensions: 2048,
+    building: null,
+  }),
+  startGeneration: vi.fn(),
+  buildGeneration: vi.fn(),
+  cancelGeneration: vi.fn(),
+}))
 vi.mock('@/lib/rag/agentic-run', () => ({ PLANNER_SYSTEM_PROMPT: 'plan' }))
 vi.mock('@/lib/rag/planner', () => ({ SEARCH_TOOL: {} }))
 vi.mock('@/lib/auth/session', () => ({
@@ -63,6 +74,7 @@ vi.mock('@/lib/ai-settings/store', () => ({
     store.rows.delete(key)
   }),
   readConnectionRows: vi.fn(async () => store.connections),
+  readActiveGeneration: vi.fn(async () => null),
   insertConnection: vi.fn(async (values: Record<string, unknown>) => {
     const key = values.apiKey as { ciphertext: string; hint: string } | null
     store.connections.push({
@@ -222,11 +234,45 @@ describe('FR2: jobs', () => {
     expect(store.rows.has('RAG_CHAT_MODEL')).toBe(false)
   })
 
-  it('will not change the embedding model without a re-index', async () => {
+  it('changes the embedding model only by starting a re-index (FR3)', async () => {
+    const generations = await import('@/lib/rag/generations')
+    const { after } = await import('next/server')
+    vi.mocked(generations.startGeneration).mockResolvedValueOnce({
+      ok: true,
+      generationId: 'gen-2',
+      dimensions: 3072,
+      totalChunks: 40,
+    })
     expect(
       await saveRole({ role: 'embed', connectionId: 'env', model: 'other' }),
-    ).toMatchObject({ ok: false })
+    ).toEqual({ ok: true, data: null })
+    // Not saved as a setting: the new model applies when its index is ready.
     expect(store.rows.size).toBe(0)
+    expect(generations.startGeneration).toHaveBeenCalledWith('other', 'admin-1')
+    expect(after).toHaveBeenCalled()
+    expect(store.audit).toContainEqual(
+      expect.objectContaining({
+        key: 'RAG_EMBED_MODEL',
+        newValue: 'other (re-indexing 40 passages, 3072 dimensions)',
+      }),
+    )
+  })
+
+  it('passes on why a re-index could not start', async () => {
+    const generations = await import('@/lib/rag/generations')
+    vi.mocked(generations.startGeneration).mockResolvedValueOnce({
+      ok: false,
+      error:
+        'huge returns 4096-dimensional vectors; the index takes 1 to 4000.',
+    })
+    expect(
+      await saveRole({ role: 'embed', connectionId: 'env', model: 'huge' }),
+    ).toEqual({
+      ok: false,
+      error:
+        'huge returns 4096-dimensional vectors; the index takes 1 to 4000.',
+    })
+    expect(store.audit).toHaveLength(0)
   })
 
   it('tells a llama.cpp planner without tool calls how to fix it', async () => {

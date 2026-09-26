@@ -1,8 +1,7 @@
 import 'server-only'
 
-import { aiSettings } from '@/lib/ai-settings'
+import { activeEmbedding, aiSettings } from '@/lib/ai-settings'
 import { createEmbeddings } from './client'
-import { EMBEDDING_DIMENSIONS } from './constants'
 
 /**
  * Embedding with the passage/query distinction made structural.
@@ -14,14 +13,14 @@ import { EMBEDDING_DIMENSIONS } from './constants'
  * functions make the choice impossible to omit.
  */
 
-function assertDimensions(vectors: number[][]): void {
+function assertDimensions(vectors: number[][], expected: number): void {
   for (const vector of vectors) {
-    if (vector.length !== EMBEDDING_DIMENSIONS) {
-      // The schema column is halfvec(2048); a mismatch would fail at INSERT
-      // with an opaque driver error, so fail here with a useful one.
+    if (vector.length !== expected) {
+      // Vectors of another size are not comparable with the generation's
+      // index, and would fail its cast; say so here instead (#56).
       throw new Error(
-        `Embedding model returned ${vector.length} dimensions, expected ${EMBEDDING_DIMENSIONS}. ` +
-          'RAG_EMBED_MODEL does not match the chunks.embedding column — a migration is required.',
+        `Embedding model returned ${vector.length} dimensions, expected ${expected}. ` +
+          'Change the embedding model from Settings, which re-indexes every document.',
       )
     }
   }
@@ -65,18 +64,22 @@ function batched<T>(items: T[], size: number): T[][] {
  * hundreds of calls against a rate-limited free tier — the client retries a
  * 429, but staying under it is cheaper than backing off.
  */
-export async function embedPassages(texts: string[]): Promise<number[][]> {
+export async function embedPassages(
+  texts: string[],
+  /** Another generation's model and size; the active one's by default (#56). */
+  target: { model: string; dimensions: number } = activeEmbedding(),
+): Promise<number[][]> {
   if (texts.length === 0) return []
 
   const batches = batched(texts, aiSettings().RAG_EMBED_BATCH)
   const results = await pooled(
     batches,
     aiSettings().RAG_EMBED_CONCURRENCY,
-    (batch) => createEmbeddings(batch, 'passage'),
+    (batch) => createEmbeddings(batch, 'passage', undefined, target.model),
   )
 
   const vectors = results.flat()
-  assertDimensions(vectors)
+  assertDimensions(vectors, target.dimensions)
   return vectors
 }
 
@@ -84,9 +87,11 @@ export async function embedPassages(texts: string[]): Promise<number[][]> {
 export async function embedQuery(
   text: string,
   signal?: AbortSignal,
+  /** The generation the caller will search, read once by the caller (#56). */
+  active: { model: string; dimensions: number } = activeEmbedding(),
 ): Promise<number[]> {
-  const [vector] = await createEmbeddings([text], 'query', signal)
+  const [vector] = await createEmbeddings([text], 'query', signal, active.model)
   if (!vector) throw new Error('Embedding model returned no vector for query.')
-  assertDimensions([vector])
+  assertDimensions([vector], active.dimensions)
   return vector
 }

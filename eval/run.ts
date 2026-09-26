@@ -12,8 +12,19 @@ import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { chunks, documents, files, knowledgeBases, users } from '@/db/schema'
-import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
+import {
+  chunkEmbeddings,
+  chunks,
+  documents,
+  files,
+  knowledgeBases,
+  users,
+} from '@/db/schema'
+import {
+  activeEmbedding,
+  aiSettings,
+  refreshAiSettings,
+} from '@/lib/ai-settings'
 import { runAgenticRetrieval } from '@/lib/rag/agentic-run'
 import { buildEmbeddingText } from '@/lib/rag/chunk'
 import { createChatCompletion } from '@/lib/rag/client'
@@ -455,6 +466,8 @@ async function ingestCorpus(): Promise<void> {
       })
       .returning()
 
+    // As ingest.ts does: into the generation search reads (#56).
+    const generation = activeEmbedding()
     const vectors = await embedPassages(
       pieces.map((piece) =>
         buildEmbeddingText({
@@ -464,24 +477,36 @@ async function ingestCorpus(): Promise<void> {
           content: piece.content,
         }),
       ),
+      generation,
     )
-    await db.insert(chunks).values(
-      pieces.map((piece, i) => ({
-        documentId: doc!.id,
+    const inserted = await db
+      .insert(chunks)
+      .values(
+        pieces.map((piece) => ({
+          documentId: doc!.id,
+          ownerId: EVAL_USER_ID,
+          knowledgeBaseId,
+          content: piece.content,
+          heading: piece.heading,
+          // As ingest.ts writes it. Part of the section key parent assembly
+          // groups by (spec 0033 1c); without it two same-named headings on one
+          // page would group as one section here and not in production.
+          headingBbox: piece.headingBox ?? null,
+          pageNumber: piece.pageNumber,
+          chunkIndex: piece.chunkIndex,
+          tokenCount: piece.tokenCount,
+          kind: piece.kind ?? 'text',
+          bbox: piece.bbox ?? null,
+          boxes: piece.boxes?.length ? piece.boxes : null,
+        })),
+      )
+      .returning({ id: chunks.id })
+    await db.insert(chunkEmbeddings).values(
+      inserted.map((row, i) => ({
+        chunkId: row.id,
+        generationId: generation.generationId,
         ownerId: EVAL_USER_ID,
         knowledgeBaseId,
-        content: piece.content,
-        heading: piece.heading,
-        // As ingest.ts writes it. Part of the section key parent assembly
-        // groups by (spec 0033 1c); without it two same-named headings on one
-        // page would group as one section here and not in production.
-        headingBbox: piece.headingBox ?? null,
-        pageNumber: piece.pageNumber,
-        chunkIndex: piece.chunkIndex,
-        tokenCount: piece.tokenCount,
-        kind: piece.kind ?? 'text',
-        bbox: piece.bbox ?? null,
-        boxes: piece.boxes?.length ? piece.boxes : null,
         embedding: vectors[i] as number[],
       })),
     )

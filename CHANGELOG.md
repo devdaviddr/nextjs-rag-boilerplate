@@ -10,6 +10,16 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Switch the embedding model from Settings**
+  ([#56](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/56),
+  [#64](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/64),
+  spec 0040 FR3). Picking a new embedding model re-indexes every document
+  with it in the background, with progress and a Cancel button, while search
+  keeps using the current model; it switches over in one step when done.
+  Models of any size up to 4000 dimensions work, not only 2048. Vectors move
+  to a new `chunk_embeddings` table, and migration `0024` copies the existing
+  ones there.
+
 - **Tune retrieval and answering from Settings**
   ([#57](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/57),
   spec 0040 FR4). Settings → Configuration → Retrieval & answering holds the

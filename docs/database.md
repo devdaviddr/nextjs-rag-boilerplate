@@ -25,10 +25,10 @@ the question the same way and find the stored lists closest to it.
 Postgres cannot do this on its own. **pgvector** is the extension that adds the
 missing pieces:
 
-- A column type that holds an embedding. Here it is `halfvec(2048)`: 2048
-  numbers, each stored at half precision. The size is fixed by the model. The
-  embedding model this repo uses emits exactly 2048 numbers, so the column and
-  the model must agree exactly or nothing can be inserted.
+- A column type that holds an embedding: `halfvec`, numbers stored at half
+  precision. `chunk_embeddings.embedding` is untyped, so models of any size fit
+  (2048 for the default model), and each model's vectors are indexed at their
+  own size.
 - A distance operator, `<=>`, which measures how far apart two embeddings
   point. `1 - (a <=> b)` is the cosine similarity, a 0-to-1 score where 1 means
   near-identical meaning.
@@ -49,11 +49,12 @@ With those in place, the dense half of retrieval is an ordinary SQL query. This
 is its shape, simplified from `src/lib/rag/retrieve.ts`:
 
 ```sql
-SELECT c.id, 1 - (c.embedding <=> $1::halfvec) AS similarity
-FROM chunks c
-WHERE c.owner_id = $2
-  AND c.knowledge_base_id = ANY($3)
-ORDER BY c.embedding <=> $1::halfvec
+SELECT e.chunk_id, 1 - (e.embedding::halfvec(2048) <=> $1::halfvec(2048)) AS similarity
+FROM chunk_embeddings e
+WHERE e.generation_id = 'initial'
+  AND e.owner_id = $2
+  AND e.knowledge_base_id = ANY($3)
+ORDER BY e.embedding::halfvec(2048) <=> $1::halfvec(2048)
 LIMIT 8;
 ```
 
@@ -105,7 +106,11 @@ row per question answered or document ingested, keyed by the request id, and
 A knowledge base is a named collection of documents owned by one user. A
 document is one uploaded PDF, and it lives in exactly one knowledge base. A
 chunk is a short passage of that PDF, a few paragraphs long, stored as its own
-searchable row with its embedding. A conversation is pinned to a set of
+searchable row. Its embedding is in `chunk_embeddings`, one row per embedding
+generation: `embedding_generations` records each model's set of vectors, and
+exactly one is active (see
+[RAG → Switching the embedding model](rag.md#switching-the-embedding-model)).
+A conversation is pinned to a set of
 knowledge bases when it is created. That set is recorded in
 `conversation_knowledge_bases`, and retrieval can never see outside it.
 

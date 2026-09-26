@@ -31,6 +31,7 @@ const { mockEnv, rows, connectionRows, audit, store } = vi.hoisted(() => {
         rows.delete(key)
       }),
       readConnectionRows: vi.fn(async () => connectionRows),
+      readActiveGeneration: vi.fn(async () => null),
     },
   }
 })

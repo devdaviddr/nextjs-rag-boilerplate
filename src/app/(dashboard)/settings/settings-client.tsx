@@ -259,6 +259,7 @@ export function SettingsClient({
                   <AiModelsCard
                     roles={ai.roles}
                     connections={ai.connections}
+                    reindex={ai.reindex}
                     locked={ai.locked}
                   />
                 </div>

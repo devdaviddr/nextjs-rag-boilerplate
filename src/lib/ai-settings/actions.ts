@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { z } from 'zod'
 
 import { ForbiddenError, requireRole } from '@/lib/auth/rbac'
@@ -13,6 +14,7 @@ import {
   type AiRole,
   CONNECTABLE_ROLES,
   ENV_CONNECTION_ID,
+  activeEmbedding,
   ROLE_MODEL_KEY,
   type ResolvedConnection,
   type SavedMeta,
@@ -31,6 +33,7 @@ import {
   displayValue,
 } from './index'
 import { PLANNER_SYSTEM_PROMPT } from '@/lib/rag/agentic-run'
+import type { ReindexView } from '@/lib/rag/generations'
 import { SEARCH_TOOL } from '@/lib/rag/planner'
 
 import { encryptSecret, secretHint } from './crypto'
@@ -108,6 +111,8 @@ export interface AiSettingsView {
   connections: ConnectionView[]
   roles: RoleView[]
   retrieval: FieldView[]
+  /** The embedding index: its model, and a re-index in progress (#56). */
+  reindex: ReindexView
   /** `AI_SETTINGS_LOCKED`: shown, never changed (FR5). */
   locked: boolean
   recentChanges: ChangeView[]
@@ -226,9 +231,22 @@ function view(): AiSettingsView {
     connections,
     roles,
     retrieval,
+    reindex,
     locked: Boolean(appEnv.AI_SETTINGS_LOCKED),
     recentChanges: changes,
   }
+}
+
+/** The embedding index's state, refreshed with the view. */
+let reindex: ReindexView = {
+  activeModel: '',
+  activeDimensions: 0,
+  building: null,
+}
+
+async function loadReindex(): Promise<void> {
+  const { reindexView } = await import('@/lib/rag/generations')
+  reindex = await reindexView()
 }
 
 /** The audit log's latest lines, refreshed with the view. */
@@ -258,6 +276,7 @@ export async function getAiSettingsView(): Promise<
     await refreshAiSettings({ force: true })
     await loadHints()
     await loadChanges()
+    await loadReindex()
     return { ok: true, data: view() }
   })
 }
@@ -556,12 +575,8 @@ export async function saveRole(
     }
     const { role, connectionId, model } = parsed.data
     if (role === 'embed') {
-      // The index holds this model's vectors; changing it is a re-index (#56).
-      return {
-        ok: false,
-        error:
-          'The embedding model is changed with a re-index, which is not available yet.',
-      }
+      // The index holds this model's vectors: a new one is a re-index (#56).
+      return startReindex(model, userId)
     }
     if (connectionId !== connectionIdFor(role)) {
       const moved = await saveRoleConnection(role, connectionId, userId)
@@ -597,9 +612,6 @@ export interface RoleTestResult {
 
 /** Free-tier reasoning models can take over a minute to plan. */
 const ROLE_TEST_TIMEOUT_MS = 90_000
-
-/** The embedding size the index is built for (`halfvec(2048)`). */
-const EMBED_DIMENSIONS = 2048
 
 /**
  * Try a job as it is configured now (FR2, FR9): a three-token completion,
@@ -704,11 +716,13 @@ export async function testRole(
       choices?: { message?: { tool_calls?: unknown[] } }[]
     } | null
     if (role === 'embed') {
+      // The size of the index search reads now (#56).
+      const expected = activeEmbedding().dimensions
       const size = json?.data?.[0]?.embedding?.length ?? 0
-      if (size !== EMBED_DIMENSIONS) {
+      if (size !== expected) {
         return {
           ok: false,
-          error: `The model returned ${size}-dimensional vectors; the index needs ${EMBED_DIMENSIONS}.`,
+          error: `The model returned ${size}-dimensional vectors; the index needs ${expected}.`,
         }
       }
       return { ok: true, data: { latencyMs, detail: `${size} dimensions` } }
@@ -774,6 +788,57 @@ export async function resetRetrievalSetting(
     if (!field) return { ok: false, error: `${key} is not set here` }
     const reset = await resetAiSetting(field.key, userId)
     if (!reset.ok) return reset
+    revalidatePath('/settings')
+    return { ok: true, data: null }
+  })
+}
+
+/**
+ * Start re-embedding every passage with `model` (spec 0040 FR3, #56). Search
+ * stays on the current model until the new index is complete; the build
+ * runs after the response, and the recovery sweep resumes it if the process
+ * goes away.
+ */
+async function startReindex(
+  model: string,
+  userId: string | null,
+): Promise<ActionResult> {
+  const { startGeneration, buildGeneration } =
+    await import('@/lib/rag/generations')
+  const before = modelFor('embed')
+  const started = await startGeneration(model, userId)
+  if (!started.ok) return started
+  await auditChange(
+    {
+      action: 'save',
+      key: ROLE_MODEL_KEY.embed,
+      oldValue: before,
+      newValue: `${model.trim()} (re-indexing ${started.totalChunks} passages, ${started.dimensions} dimensions)`,
+    },
+    userId,
+  )
+  after(() => buildGeneration(started.generationId))
+  revalidatePath('/settings')
+  return { ok: true, data: null }
+}
+
+/** Stop a re-index and throw away what it built; search is unaffected. */
+export async function cancelReindex(): Promise<ActionResult> {
+  return asAdminWrite(async (userId) => {
+    const { cancelGeneration, reindexView } =
+      await import('@/lib/rag/generations')
+    const current = await reindexView()
+    if (!current.building) return { ok: false, error: 'No re-index is running' }
+    await cancelGeneration(current.building.id)
+    await auditChange(
+      {
+        action: 'reset',
+        key: ROLE_MODEL_KEY.embed,
+        oldValue: `${current.building.model} (re-index cancelled)`,
+        newValue: current.activeModel,
+      },
+      userId,
+    )
     revalidatePath('/settings')
     return { ok: true, data: null }
   })

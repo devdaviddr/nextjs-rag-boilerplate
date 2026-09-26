@@ -126,14 +126,27 @@ describe('retrieveForOwner — tenant isolation (spec 0025 NFR1)', () => {
     await retrieveForOwner('user-a', 'a question', KB_A)
     // embedQuery is the only exported path for questions; embedPassages is a
     // separate function, so using the wrong input_type is not reachable here.
-    expect(embedQuery).toHaveBeenCalledWith('a question', undefined)
+    expect(embedQuery).toHaveBeenCalledWith(
+      'a question',
+      undefined,
+      expect.objectContaining({ generationId: 'initial', dimensions: 2048 }),
+    )
   })
 
   it('orders by raw distance so the HNSW index can be used', async () => {
     await retrieveForOwner('user-a', 'anything', KB_A)
     const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
-    expect(text).toMatch(/ORDER BY\s+c\.embedding\s*<=>/)
-    expect(text).toContain('::halfvec')
+    expect(text).toMatch(/ORDER BY\s+e\.embedding::halfvec\(2048\)\s*<=>/)
+  })
+
+  it('reads the active generation, with its id and size as literals (#56)', async () => {
+    await retrieveForOwner('user-a', 'anything', KB_A)
+    const { text, params } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
+    const vecCte = text.slice(text.indexOf('vec AS'), text.indexOf('lex AS'))
+    // A literal, so the generation's partial index matches under any plan.
+    expect(vecCte).toContain("e.generation_id = 'initial'")
+    expect(vecCte).toMatch(/e\.owner_id\s*=/)
+    expect(params).not.toContain('initial')
   })
 })
 
@@ -143,7 +156,7 @@ describe('retrieveForOwner — knowledge-base isolation (spec 0028 FR6, NFR1)', 
     const { text } = inspect(execute.mock.calls[0]?.[0] as SqlChunk)
 
     const vecCte = text.slice(text.indexOf('vec AS'), text.indexOf('lex AS'))
-    expect(vecCte).toMatch(/c\.knowledge_base_id\s*=\s*ANY/)
+    expect(vecCte).toMatch(/e\.knowledge_base_id\s*=\s*ANY/)
   })
 
   it('scopes the lexical CTE to the permitted knowledge bases', async () => {
