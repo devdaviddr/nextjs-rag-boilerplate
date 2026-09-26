@@ -28,12 +28,18 @@ import {
   savedConnections,
   savedKeys,
   savedMetaFor,
+  displayValue,
 } from './index'
 import { PLANNER_SYSTEM_PROMPT } from '@/lib/rag/agentic-run'
 import { SEARCH_TOOL } from '@/lib/rag/planner'
 
 import { encryptSecret, secretHint } from './crypto'
 import { PRESETS, type PresetId, presetById } from './presets'
+import {
+  RETRIEVAL_FIELDS,
+  describeRange,
+  retrievalField,
+} from './retrieval-fields'
 
 /**
  * Settings → AI provider and Models (spec 0040 FR1, FR2, FR7). Every action
@@ -80,9 +86,19 @@ export interface ChangeView {
   newValue: string | null
 }
 
+/** One Retrieval & answering setting as the page shows it (FR4, FR5). */
+export interface FieldView {
+  key: string
+  /** The value in force, as it would be written in `.env`. */
+  value: string
+  source: Source
+  saved: SavedMeta | null
+}
+
 export interface AiSettingsView {
   connections: ConnectionView[]
   roles: RoleView[]
+  retrieval: FieldView[]
   /** `AI_SETTINGS_LOCKED`: shown, never changed (FR5). */
   locked: boolean
   recentChanges: ChangeView[]
@@ -96,7 +112,7 @@ export interface TestResult {
 }
 
 const FORBIDDEN = 'Only admins can change AI settings.'
-export const LOCKED =
+const LOCKED =
   'AI settings are locked on this deployment (AI_SETTINGS_LOCKED). Change them in .env.'
 
 /** How many audit lines the page shows. */
@@ -184,9 +200,16 @@ function view(): AiSettingsView {
       savedMetaFor(`connection:${role}`),
     ),
   }))
+  const retrieval = RETRIEVAL_FIELDS.map((f) => ({
+    key: f.key,
+    value: displayValue(f.key),
+    source: sourceOf(f.key),
+    saved: savedMetaFor(f.key),
+  }))
   return {
     connections,
     roles,
+    retrieval,
     locked: Boolean(appEnv.AI_SETTINGS_LOCKED),
     recentChanges: changes,
   }
@@ -635,5 +658,49 @@ export async function testRole(
         detail: role === 'planner' ? 'called a tool' : 'answered',
       },
     }
+  })
+}
+
+/**
+ * Save one Retrieval & answering setting (FR4). Parsed by the same zod field
+ * as its environment variable; a value it rejects comes back with the range.
+ * Applies to the next request.
+ */
+export async function saveRetrievalSetting(
+  key: string,
+  raw: string,
+): Promise<ActionResult> {
+  return asAdminWrite(async (userId) => {
+    const field = retrievalField(key)
+    if (!field) return { ok: false, error: `${key} is not set here` }
+    const value = raw.trim()
+    const saved = await saveAiSetting(field.key, value, userId)
+    if (!saved.ok) {
+      // The cross-setting rule has its own clear message; anything else
+      // failed the field's own bounds.
+      return {
+        ok: false,
+        error: saved.error.includes('must be smaller than')
+          ? 'The overlap must be smaller than the passage size.'
+          : `${field.label} must be ${describeRange(field)}.`,
+      }
+    }
+    logger.info('ai-settings: setting saved', { key, value })
+    revalidatePath('/settings')
+    return { ok: true, data: null }
+  })
+}
+
+/** Back to `.env` or the default for one Retrieval & answering setting. */
+export async function resetRetrievalSetting(
+  key: string,
+): Promise<ActionResult> {
+  return asAdminWrite(async (userId) => {
+    const field = retrievalField(key)
+    if (!field) return { ok: false, error: `${key} is not set here` }
+    const reset = await resetAiSetting(field.key, userId)
+    if (!reset.ok) return reset
+    revalidatePath('/settings')
+    return { ok: true, data: null }
   })
 }
