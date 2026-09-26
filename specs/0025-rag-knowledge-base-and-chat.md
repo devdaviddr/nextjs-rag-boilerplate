@@ -95,6 +95,16 @@ Those are the parts worth getting right once. This spec builds them on top of
   similarity, because such a request has no semantic anchor in the content and
   scores near zero. Ambiguous requests fall back to similarity search rather
   than guessing a document.
+
+  > **Amended 2026-09-26 (#99).** "In reading order" read the first
+  > `RAG_DOC_SCOPE_MAX_CHUNKS` (24) chunks, so a long document was summarised
+  > from its opening alone, with nothing to say so. A document longer than
+  > that is now read across its sections: each section's first chunk (a run
+  > under one heading, or a page where none was found), then each section's
+  > next, in reading order; with more sections than slots, sections are
+  > spread evenly from first to last. When the sources are only part of the
+  > document, the writer is told how much, and says the summary is partial.
+
 - **FR10** — `POST /api/chat`: streams a grounded answer from
   `nvidia/nemotron-3-super-120b-a12b`, given only the retrieved chunks as
   context. If retrieval returns nothing above threshold, it returns a fixed

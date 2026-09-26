@@ -30,6 +30,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   streams, and an embeddings test on a llama.cpp server without `--embeddings`
   says so.
 
+### Changed
+
+- **Summaries cover the whole of a long document**
+  ([#99](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/99),
+  spec 0025 FR9a). "Summarise the handbook" read the document's first 24
+  passages, so a long document was summarised from its opening alone. It now
+  reads each section's opening across the whole document, and when that is
+  still only part of it, the answer says so.
+
 ### Fixed
 
 - **"Afterwards" follow-ups reach the planner**

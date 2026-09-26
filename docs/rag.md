@@ -365,6 +365,13 @@ floor low enough to admit it would admit junk on every other question. So
 `src/lib/rag/scope.ts` routes whole-document requests to retrieval by document
 instead, in reading order, capped at `RAG_DOC_SCOPE_MAX_CHUNKS` (24).
 
+A whole-document request reads at most `RAG_DOC_SCOPE_MAX_CHUNKS` (24)
+passages. A longer document is read across its sections, not from the start:
+each section's first passage (a run under one heading, or a page where none
+was found), then each section's next, back in reading order. With more
+sections than that, they are spread evenly from the first to the last. The
+writer is told when it has only part of the document, and says so (#99).
+
 Scoping is deliberately conservative. An ambiguous "summarise this" across
 several documents falls back to similarity search instead of guessing which
 document you meant.

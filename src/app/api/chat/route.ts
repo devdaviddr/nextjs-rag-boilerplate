@@ -40,7 +40,7 @@ import { stripUnsupported } from '@/lib/rag/verify'
 import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
 import {
   listReadyDocuments,
-  retrieveDocumentChunks,
+  retrieveWholeDocument,
   retrieveForOwner,
 } from '@/lib/rag/retrieve'
 import {
@@ -316,14 +316,23 @@ async function answer(request: Request, requestId: string) {
       await listReadyDocuments(userId, permittedKbIds),
     )
     retrievalMode = scope.mode
-    return scope.mode === 'document'
-      ? retrieveDocumentChunks(userId, scope.documentId, permittedKbIds)
-      : retrieveForOwner(userId, question, permittedKbIds)
+    if (scope.mode !== 'document') {
+      return retrieveForOwner(userId, question, permittedKbIds)
+    }
+    const whole = await retrieveWholeDocument(
+      userId,
+      scope.documentId,
+      permittedKbIds,
+    )
+    documentCoverage = { shown: whole.chunks.length, total: whole.totalChunks }
+    return whole.chunks
   }
 
   // Assigned once evidence has been gathered; `persistAnswer` closes over it.
   let citations: StoredCitation[] = []
   let agenticTrace: AgenticResult | null = null
+  // A whole-document request that read only part of a long document (#99).
+  let documentCoverage: { shown: number; total: number } | undefined
   let retrievalMode: 'search' | 'document' | 'agentic' = 'search'
 
   /**
@@ -567,6 +576,8 @@ async function answer(request: Request, requestId: string) {
                   question,
                   retrieved,
                   agenticTrace?.rewritten ? agenticTrace.query : undefined,
+                  // And, for a long document, that it read only part (#99).
+                  agenticTrace?.coverage ?? documentCoverage,
                 ),
               },
             ],
