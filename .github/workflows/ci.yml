@@ -7,9 +7,14 @@ on:
   pull_request:
     branches: [main]
 
+# PRs cancel a superseded run; main never does. Every main commit must publish
+# its own `sha-` image, because the `release` job re-tags it (#110).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 env:
   NEXT_TELEMETRY_DISABLED: '1'
@@ -23,6 +28,7 @@ jobs:
   # commit, so every main commit needs one.
   changes:
     name: Detect docs-only change
+    timeout-minutes: 5
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     outputs:
@@ -51,6 +57,7 @@ jobs:
 
   quality:
     name: Lint · Typecheck · Unit
+    timeout-minutes: 15
     # A release tag re-uses the image already built + tested on the `main` push
     # for the same commit (see the `release` job), so it does NOT re-run these.
     needs: [changes]
@@ -63,7 +70,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
@@ -75,13 +82,20 @@ jobs:
         if: env.CODE == 'true'
       - run: pnpm specs:check
       - run: pnpm docs:check
+      # Blocks on critical advisories only; Renovate raises the rest as PRs.
       - name: Audit dependencies
         if: env.CODE == 'true'
-        run: pnpm audit --audit-level=high
-        continue-on-error: true
+        run: pnpm audit --audit-level=critical
+      # A release PR must pass the same check the tag will, before it merges.
+      - name: Release is consistent (release:check)
+        if: startsWith(github.head_ref, 'release/')
+        run: |
+          git fetch --tags --quiet origin
+          pnpm release:check
 
   e2e:
     name: E2E (Playwright)
+    timeout-minutes: 20
     needs: [changes]
     if: github.ref_type != 'tag' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -124,7 +138,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # MinIO can't be a `services:` container — that block only supports
@@ -152,7 +166,7 @@ jobs:
           "
       - name: Start Mailpit (email catcher for E2E)
         run: |
-          docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+          docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:latest@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
           for i in $(seq 1 30); do
             curl -sf http://localhost:8025/readyz && break
             sleep 1
@@ -192,6 +206,7 @@ jobs:
   # the `release` job).
   docker:
     name: Build image (${{ matrix.platform }})
+    timeout-minutes: 20
     needs: [changes, quality]
     if: github.ref_type != 'tag' && needs.changes.outputs.code == 'true'
     permissions:
@@ -284,9 +299,11 @@ jobs:
           if-no-files-found: error
 
   # Assemble the per-arch digests into one multi-arch manifest per image, tagged
-  # by metadata-action (sha / branch / semver on tags / latest on main).
+  # by metadata-action (sha / branch / latest on main). Semver tags come from
+  # the `release` job.
   docker-merge:
     name: Publish multi-arch manifest
+    timeout-minutes: 10
     # `needs` e2e as well as docker, so the tag/publish only happens once BOTH the
     # build and the full test suite are green (the build itself only needed
     # `quality`). Skipped for PRs (build-only) and for tags (the `release` job
@@ -324,7 +341,6 @@ jobs:
           tags: |
             type=sha
             type=ref,event=branch
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
       - name: Create & push app manifest
         working-directory: ${{ runner.temp }}/app
@@ -349,7 +365,6 @@ jobs:
           tags: |
             type=sha
             type=ref,event=branch
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
       - name: Create & push migrate manifest
         working-directory: ${{ runner.temp }}/migrate
@@ -372,6 +387,7 @@ jobs:
   # the source image only exists if `main`'s quality+e2e+build all passed.
   release:
     name: Tag release image (no rebuild)
+    timeout-minutes: 25
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
@@ -402,8 +418,8 @@ jobs:
 
       - name: Resolve version + source tags
         run: |
-          # `type=semver,pattern={{version}}` publishes the unprefixed semver, so
-          # strip the leading `v` to match (v0.16.3 → 0.16.3). The source is the
+          # Release images use the unprefixed semver (v0.16.3 → 0.16.3), so
+          # strip the leading `v`. The source is the
           # immutable per-commit tag `main` published: `sha-` + short (7) SHA.
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "SHA_TAG=sha-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"

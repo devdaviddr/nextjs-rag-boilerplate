@@ -20,7 +20,7 @@ release tags.
 ├─────────────────────────────────────────────────────────────┤
 │ On push to main / PR (NOT tags):                             │
 │   quality : format:check · lint · typecheck · test:coverage  │
-│             · specs:check · pnpm audit (non-blocking)        │
+│             · specs:check · pnpm audit (critical)            │
 │   e2e     : Postgres service + MinIO + Mailpit → migrate/seed │
 │             → build → Playwright (uploads report artifact)   │
 │   docker  : needs quality; builds in PARALLEL with e2e;      │
@@ -72,15 +72,23 @@ image `main` built for the tagged commit, so every `main` commit needs one.
 
 ### Shared setup
 
-All jobs run on `ubuntu-latest` with Node 22 (no version matrix) and pnpm via
+All jobs run on `ubuntu-latest` with the Node version in `.nvmrc`
+(`node-version-file`, no version matrix) and pnpm via
 `pnpm/action-setup`. The pnpm version comes from `package.json`'s
 `packageManager` field and is not pinned in the workflow. Next.js telemetry
 is disabled with `NEXT_TELEMETRY_DISABLED` for reproducible builds.
 
 `ci.yml` sets `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress:
-true }`. Pushing again to the same branch or PR cancels whatever run is already
-in flight. If a run vanishes from the Actions tab after a follow-up push, this
-setting cancelled it; the run did not fail.
+${{ github.event_name == 'pull_request' }} }`. Pushing again to a PR cancels
+the run already in flight; if a PR run vanishes from the Actions tab after a
+follow-up push, this setting cancelled it. Pushes to `main` queue instead of
+cancelling: every `main` commit must publish its own `sha-` image, because the
+`release` job re-tags that image, and a cancelled run would leave a release on
+that commit waiting for an image that never comes.
+
+Every job sets `timeout-minutes`, so a hung step fails in minutes rather than
+the 6-hour default. The workflows declare `permissions: contents: read` at the
+top; only the image and release jobs ask for more.
 
 ### `quality` job
 
@@ -92,7 +100,8 @@ pnpm typecheck
 pnpm test:coverage
 pnpm specs:check
 pnpm docs:check                 # every docs/*.md indexed, every link and anchor resolves
-pnpm audit --audit-level=high   # continue-on-error: advisory, non-blocking
+pnpm audit --audit-level=critical   # blocks on critical advisories only
+pnpm release:check              # release/* PRs only: the check the tag will run
 ```
 
 ### `e2e` job
@@ -193,7 +202,9 @@ in `tests/unit/process-rules.test.ts`.
 ### Required checks
 
 A repository ruleset on `main` requires a pull request and these checks to
-pass before merge: Lint · Typecheck · Unit, E2E (Playwright) and PR checks. Nothing reaches `main` without them, including release commits.
+pass before merge: Lint · Typecheck · Unit, E2E (Playwright), both Build image
+legs (linux/amd64, linux/arm64) and PR checks. The image builds are required so
+a PR that breaks the Dockerfile cannot merge and leave `main` unable to publish. Nothing reaches `main` without them, including release commits.
 
 ### Dependency updates and security scanning
 
@@ -352,8 +363,8 @@ see [Backups & restore](backups.md).
 1. Put it in the `quality` job, the fast, blocking one, next to
    `format:check` / `lint` / `typecheck` / `test:coverage` / `specs:check`.
 2. If a check is exploratory or has a high false-positive rate, as
-   `pnpm audit` does, mark the step `continue-on-error: true` so it reports
-   without blocking merges. Don't leave it out entirely.
+   `pnpm audit` would at `high`, mark the step `continue-on-error: true` so it
+   reports without blocking merges. Don't leave it out entirely.
 3. Expose it as a `pnpm` script in `package.json` so a contributor can run it
    locally before pushing.
 4. If the check belongs in the standard gate, update the pre-push command
