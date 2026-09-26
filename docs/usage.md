@@ -120,6 +120,7 @@ control stay inert until you set them.
 | `RAG_EMBED_MODEL`            |    –     | Default `nvidia/nemotron-3-embed-1b`. Must emit **2048** dimensions to match the `halfvec` column                            |
 | `RAG_CHAT_MODEL`             |    –     | Writes the prose. Default `nvidia/nemotron-3-super-120b-a12b`                                                                |
 | `RAG_PLANNER_MODEL`          |    –     | Plans and calls tools on the agentic path. Default `nvidia/nemotron-3.5-lightning-30b-a3b`                                   |
+| `RAG_PLANNER_REASONING`      |    –     | `off` skips the planner's hidden reasoning (faster decisions; Nemotron / Qwen3 on NIM or vLLM). Default `on`                 |
 | `RAG_AGENTIC_ENABLED`        |    –     | `true` for the agentic retrieval loop. Default `false` — ~10× slower, better on follow-ups; see [RAG](rag.md)                |
 | `RAG_*` (tuning)             |    –     | Chunking, retrieval floor, hybrid pool, loop budgets — all defaulted; the full table is in [RAG → Tuning](rag.md#tuning)     |
 
