@@ -389,7 +389,10 @@ export async function runAgenticLoop(
     try {
       return await deps.search(query, call.signal)
     } catch (error) {
-      if (!signal.aborted && elapsed() >= budget.maxMs) return null
+      // Our own clock fired, not the request: judged by the signal, never by
+      // re-reading the clock, since a timer can fire a millisecond before
+      // `elapsed()` reaches the budget.
+      if (!signal.aborted && call.signal.aborted) return null
       throw error
     } finally {
       call.clear()
