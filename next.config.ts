@@ -1,5 +1,11 @@
 import type { NextConfig } from 'next'
 
+// The onnxruntime-node binary directory for the arch being built (see
+// outputFileTracingIncludes). Anything but arm64 is treated as x64, the only
+// other Linux build the package ships.
+const LINUX_ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
+const OTHER_ARCH = LINUX_ARCH === 'arm64' ? 'x64' : 'arm64'
+
 const nextConfig: NextConfig = {
   // No dev-tools button. It is a dark circle with an "N", which reads as a
   // user avatar: bottom-left it covered the account menu's avatar, and
@@ -22,18 +28,28 @@ const nextConfig: NextConfig = {
   // placeable asset ... doesn't have a module id" — because the binding is not
   // JavaScript and cannot be placed in an ESM chunk. It fails at BUILD time,
   // not at run time, so it cannot slip through unnoticed.
-  // onnxruntime-web: the local reranker (spec 0036), which loads a WASM
-  // runtime at run time and must not be bundled.
+  // onnxruntime-node: the local reranker (spec 0036, #113), a native addon
+  // like the other two.
   serverExternalPackages: [
     '@node-rs/argon2',
     '@napi-rs/canvas',
-    'onnxruntime-web',
+    'onnxruntime-node',
   ],
-  // onnxruntime-web locates its .wasm and loader at run time, which the
-  // standalone tracer cannot follow — without this the Docker image ships no
-  // runtime and the local reranker fails open on every query: reranking "on",
-  // nothing reranked. Only the three files Node uses are included (the package
-  // carries ~140 MB of browser and WebGPU variants).
+  // onnxruntime-node loads its binding with a template-string require
+  // (`bin/napi-v6/${platform}/${arch}/…`), which the standalone tracer cannot
+  // follow: without an include the image ships no runtime and the local
+  // reranker fails open on every query — reranking "on", nothing reranked.
+  // The package carries every platform (~290 MB), so only the build machine's
+  // arch of the Linux binary is included, 24 MB (arm64) or 44 MB (x64), and
+  // the rest is excluded in case a future tracer does follow the require
+  // (#114). The Docker build runs on the target arch, so `process.arch` is the
+  // image's.
+  outputFileTracingExcludes: {
+    '*': [
+      './node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*/{darwin,win32}/**',
+      `./node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*/linux/${OTHER_ARCH}/**`,
+    ],
+  },
   outputFileTracingIncludes: {
     // The in-app Docs section reads docs/*.md and serves docs/images at run
     // time (spec 0041); the tracer cannot see those paths, so they are listed.
@@ -42,8 +58,10 @@ const nextConfig: NextConfig = {
     '/docs': ['./docs/*.md'],
     '/docs/*': ['./docs/*.md'],
     '/docs-assets/*': ['./docs/images/*'],
-    '/api/chat': [
-      './node_modules/.pnpm/onnxruntime-web@*/node_modules/onnxruntime-web/dist/{ort.node.min.mjs,ort-wasm-simd-threaded.mjs,ort-wasm-simd-threaded.wasm}',
+    // Every route that can reach retrieval (chat, server actions); standalone
+    // copies each file once however many routes list it.
+    '*': [
+      `./node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*/linux/${LINUX_ARCH}/**`,
     ],
   },
   // File uploads go through a Server Action (src/lib/storage/actions.ts) as a

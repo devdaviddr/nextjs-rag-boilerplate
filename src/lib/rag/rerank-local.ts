@@ -16,16 +16,17 @@ import type { RerankerBackend } from './rerank'
  * is what FR2 asks for: the `llm` backend scores through the same NIM account
  * the answer uses, and was down along with the planner on 2026-09-25.
  *
- * **Why the WebAssembly runtime, not the native one.** The production image is
- * `node:22-alpine`. `onnxruntime-node`'s Linux binaries are built against glibc
- * and fail to load on musl (`ld-linux-aarch64.so.1: No such file`), and
- * Alpine's `gcompat` shim is not enough (`__sprintf_chk: symbol not found`) —
- * both checked 2026-09-25. `onnxruntime-web` runs the same model as WASM with
- * no native code, so it behaves identically on Alpine, Debian and macOS. It
- * scored the boardroom passage 9.42 against -10.66 on Alpine arm64 — the same
- * scores as the native runtime — and 20 passages in ~450ms single-threaded.
- * That is also why `@huggingface/transformers` is not used: its Node build
- * loads the native runtime on import, whichever device is asked for.
+ * **Why the native runtime.** Until #38 the image was `node:22-alpine`, where
+ * `onnxruntime-node`'s glibc binaries do not load, so this ran on
+ * `onnxruntime-web` (WebAssembly) at ~5.3s per 20-passage window. The image is
+ * now Debian slim (glibc), and the native runtime scores the same pairs with
+ * the same logits (within ~0.05) in ~0.65s at two threads on 2 vCPU — the
+ * spike's measurements. `@huggingface/transformers` is still not used: it
+ * pulls in far more than a tokenizer and one session need.
+ *
+ * Threads are `RAG_RERANK_THREADS` (intra-op). More threads than cores is
+ * slower, not faster (4 threads took 0.97s on 2 vCPU), and every thread is
+ * one the request handlers cannot use, hence a small default.
  *
  * The model is `RAG_RERANK_LOCAL_MODEL` — by default
  * `Xenova/ms-marco-MiniLM-L-6-v2`, a 23 MB int8 export; `Xenova/bge-reranker-
@@ -47,6 +48,7 @@ export interface LoadedModel {
 export type ModelLoader = (
   modelId: string,
   cacheDir: string,
+  threads: number,
 ) => Promise<LoadedModel>
 
 /** The files a Hugging Face ONNX cross-encoder export needs. */
@@ -140,9 +142,15 @@ export async function cachedModelFile(
   return bytes
 }
 
-const loadFromHub: ModelLoader = async (modelId, cacheDir) => {
+const loadFromHub: ModelLoader = async (modelId, cacheDir, threads) => {
+  // The native runtime reports device telemetry (device class, core count,
+  // memory) to Microsoft unless this is set, read when the library loads, so
+  // it is set before the import. The WASM runtime never did, and this
+  // backend's point is that nothing leaves the deployment. An explicit value
+  // from the environment is left alone.
+  process.env.ORT_DISABLE_TELEMETRY ??= '1'
   const [ort, { Tokenizer }] = await Promise.all([
-    import('onnxruntime-web'),
+    import('onnxruntime-node'),
     import('@huggingface/tokenizers'),
   ])
   const [tokenizerJson, configJson, modelBytes] = await Promise.all(
@@ -154,11 +162,10 @@ const loadFromHub: ModelLoader = async (modelId, cacheDir) => {
   const tokenizer = new Tokenizer(decode(tokenizerJson!), config)
   const maxLength = Math.min(Number(config.model_max_length) || 512, 512)
 
-  // Threads need worker files the image does not trace; one thread scores a
-  // 20-passage window in well under a second, which is inside the budget.
-  ort.env.wasm.numThreads = 1
   const session = await ort.InferenceSession.create(modelBytes!, {
-    executionProviders: ['wasm'],
+    executionProviders: ['cpu'],
+    intraOpNumThreads: threads,
+    interOpNumThreads: 1,
   })
 
   return {
@@ -207,22 +214,34 @@ export function createLocalReranker(
   now: () => number = Date.now,
 ): RerankerBackend {
   let loading: Promise<LoadedModel> | null = null
+  let loadedFor: string | null = null
   let failedAt: number | null = null
 
   const load = (): Promise<LoadedModel> | null => {
+    const modelId = aiSettings().RAG_RERANK_LOCAL_MODEL
+    const threads = aiSettings().RAG_RERANK_THREADS
+    // A model or thread count changed in Settings loads a new session on the
+    // next query rather than waiting for a restart (spec 0040 FR4).
+    const key = `${modelId}|${threads}`
+    if (key !== loadedFor) {
+      loading = null
+      failedAt = null
+    }
     if (loading) return loading
     if (failedAt !== null && now() - failedAt < RETRY_AFTER_MS) return null
 
-    const modelId = aiSettings().RAG_RERANK_LOCAL_MODEL
     const started = now()
+    loadedFor = key
     loading = loader(
       modelId,
       modelCacheDir(aiSettings().RAG_RERANK_MODEL_DIR),
+      threads,
     ).then(
       (loaded) => {
         failedAt = null
         logger.info('local reranker loaded', {
           model: modelId,
+          threads,
           elapsedMs: now() - started,
         })
         return loaded

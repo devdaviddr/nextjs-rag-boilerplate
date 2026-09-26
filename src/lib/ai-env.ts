@@ -288,9 +288,9 @@ export const aiEnvShape = {
     .default(20),
   // Which backend scores the candidates (spec 0036 FR2).
   //
-  // `local` runs a cross-encoder in-process as WebAssembly — no account, no
-  // rate limit, no document text leaving the deployment — and is the
-  // default. It costs ~1.5s of retrieval per question (spec 0036).
+  // `local` runs a cross-encoder in-process on the native ONNX runtime — no
+  // account, no rate limit, no document text leaving the deployment — and is
+  // the default. About 0.65s for 20 passages at two threads on 2 vCPU (#38).
   // `llm` scores with RAG_PLANNER_MODEL in one completion, over the same NIM
   // account the answer uses; kept as the comparison baseline.
   RAG_RERANK_BACKEND: z.enum(['local', 'llm']).optional().default('local'),
@@ -310,6 +310,16 @@ export const aiEnvShape = {
     .min(1)
     .optional()
     .default('.cache/rerank-models'),
+  // Intra-op threads for the local reranker. Measured on 2 vCPU (#38): 1
+  // thread 1.3s, 2 threads 0.65s, 4 threads 0.97s for 20 passages — more
+  // threads than cores is slower, and each one is taken from request handling.
+  RAG_RERANK_THREADS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(16)
+    .optional()
+    .default(2),
 
   // --- Parent–child assembly (spec 0033, 1c) ------------------------------
   // After the similarity gate, two or more admitted chunks of one section

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * The local cross-encoder backend (spec 0036 FR2). The model loader is
  * injected, so these tests never load the ONNX runtime or touch the network.
- * That the real model loads and ranks sensibly — on Alpine as well as macOS —
+ * That the real model loads and ranks sensibly — on Debian slim as well as macOS —
  * is checked by the eval run recorded in the spec, not here.
  */
 
@@ -15,6 +15,7 @@ const { mockEnv } = vi.hoisted(() => ({
   mockEnv: {
     RAG_RERANK_LOCAL_MODEL: 'test/cross-encoder',
     RAG_RERANK_MODEL_DIR: '/models',
+    RAG_RERANK_THREADS: 2,
   } as Record<string, unknown>,
 }))
 
@@ -55,7 +56,19 @@ describe('createLocalReranker', () => {
     await reranker.score('q', ['a'])
     await reranker.score('q', ['b'])
     expect(loader).toHaveBeenCalledTimes(1)
-    expect(loader).toHaveBeenCalledWith('test/cross-encoder', '/models')
+    expect(loader).toHaveBeenCalledWith('test/cross-encoder', '/models', 2)
+  })
+
+  it('loads a new session when the model or thread count changes', async () => {
+    const { loader } = lengthLoader()
+    const reranker = createLocalReranker(loader)
+    await reranker.score('q', ['a'])
+    mockEnv.RAG_RERANK_THREADS = 1
+    await reranker.score('q', ['a'])
+    await reranker.score('q', ['a'])
+    expect(loader).toHaveBeenCalledTimes(2)
+    expect(loader).toHaveBeenLastCalledWith('test/cross-encoder', '/models', 1)
+    mockEnv.RAG_RERANK_THREADS = 2
   })
 
   it('spends nothing on an empty list or an aborted request', async () => {

@@ -8,6 +8,28 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Set the local reranker's CPU threads**
+  ([#115](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/115)).
+  `RAG_RERANK_THREADS` (default 2), also in Settings → Retrieval & answering.
+  Changing it, or the local model, takes effect on the next question without a
+  restart.
+
+### Changed
+
+- **The local reranker runs natively, on a Debian slim image**
+  ([#38](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/38),
+  [#112](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/112),
+  [#113](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/113),
+  [#114](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/114)).
+  The Docker image moves from `node:22-alpine` to `node:22-bookworm-slim` so
+  the local reranker can use the native ONNX runtime instead of WebAssembly:
+  about 0.65s instead of 5.3s to score 20 passages on 2 vCPU, with the same
+  scores. The image is about 100 MB larger uncompressed. Reranking stays off
+  by default. The native runtime's telemetry to Microsoft is switched off
+  (`ORT_DISABLE_TELEMETRY`), so the reranker still sends nothing anywhere.
+
 ### Removed
 
 - **HyDE (search with a drafted answer)**
