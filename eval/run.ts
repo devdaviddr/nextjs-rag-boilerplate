@@ -28,6 +28,8 @@ import {
 } from '@/lib/ai-settings'
 import { runAgenticRetrieval, verifyMessages } from '@/lib/rag/agentic-run'
 import { readVerdict } from '@/lib/rag/verify'
+import { judgeAnswer, judgeModel, judgeModelWarning } from './judge-run'
+import { type JudgeScore, formatJudge, judgeBySlice } from './judge'
 import {
   type Verification,
   formatPrecision,
@@ -377,6 +379,8 @@ interface AnswerCheck {
   }>
   /** The verifier's reading of the answer (#118). */
   verification?: Verification
+  /** The model judge's scores, under --judge (#120). */
+  judge?: JudgeScore
 }
 
 interface ComplementFailure {
@@ -982,6 +986,20 @@ async function runAnswerChecks(
         content: c.content,
       })),
       verification: await verifyStrictly(answer, chunks),
+      ...(hasFlag('judge') && answer
+        ? {
+            judge: await judgeAnswer({
+              question: q.question,
+              answer,
+              sources: chunks.map((c) => ({
+                id: c.chunkId,
+                document: c.documentTitle,
+                page: c.pageNumber,
+                content: c.content,
+              })),
+            }),
+          }
+        : {}),
     })
 
     // Spaced out, same as the agentic pass: a free tier rate-limits rather
@@ -1056,6 +1074,12 @@ function reportAnswers(checks: readonly AnswerCheck[]): void {
   console.log('\nCitation precision (#118): verifier on every answer')
   for (const line of formatPrecision(precisionBySlice(checks))) {
     console.log(line)
+  }
+  if (hasFlag('judge')) {
+    console.log(
+      `\nModel judge (#120, ${judgeModel()}; trust only once pnpm rag:judge agrees):`,
+    )
+    for (const line of formatJudge(judgeBySlice(checks))) console.log(line)
   }
 }
 
@@ -1803,6 +1827,14 @@ async function main(): Promise<void> {
   // --- Answer-level checks (spec 0031). Opt-in: they cost a chat call per
   // checked question, and they measure generation rather than retrieval.
   let answerChecks: AnswerCheck[] = []
+  if (hasFlag('judge') && !hasFlag('answers')) {
+    console.error('--judge grades the answers --answers writes; add --answers.')
+    process.exit(1)
+  }
+  if (hasFlag('judge')) {
+    const warning = judgeModelWarning()
+    if (warning) console.warn(`\n${warning}`)
+  }
   if (hasFlag('answers')) {
     console.log('\nAnswer checks — generating from the retrieved context:')
     answerChecks = await runAnswerChecks(questions, retrievedById)
@@ -1855,6 +1887,7 @@ async function main(): Promise<void> {
     answerPrecision: hasFlag('answers')
       ? precisionBySlice(answerChecks)
       : undefined,
+    answerJudge: hasFlag('judge') ? judgeBySlice(answerChecks) : undefined,
     results: baselineResults,
   }
 
@@ -2070,6 +2103,9 @@ async function main(): Promise<void> {
       answerChecks: agenticAnswerChecks,
       answerPrecision: hasFlag('answers')
         ? precisionBySlice(agenticAnswerChecks)
+        : undefined,
+      answerJudge: hasFlag('judge')
+        ? judgeBySlice(agenticAnswerChecks)
         : undefined,
       results: agenticResults,
     }

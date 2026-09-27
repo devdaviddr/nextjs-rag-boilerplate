@@ -43,7 +43,8 @@
     "rag:eval": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/run.ts",
     "rag:corpus": "node eval/make-corpus.mjs",
     "rag:gate": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/run.ts --gate",
-    "rag:sample": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/sample.ts"
+    "rag:sample": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/sample.ts",
+    "rag:judge": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/judge-agreement.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.3",

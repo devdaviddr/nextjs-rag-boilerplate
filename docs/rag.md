@@ -1267,6 +1267,31 @@ records who gave it and whether a person has reviewed it (`reviewed`).
 The first sample, 29 answers across every slice, was drafted by Claude; only
 grades a person has reviewed count as the reference.
 
+### A model judge
+
+`--judge` (with `--answers`) asks a second model to grade every answer
+against its sources with the same rubric (#120). It runs on the planner's
+connection with its own model, `EVAL_JUDGE_MODEL` (default
+`openai/gpt-oss-20b`), which should not be the model that writes the
+answers. Each answer is judged three times at temperature 0 and the median
+kept; the report prints faithfulness and completeness per slice, and how
+many answers the three samples disagreed on by a whole grade (`unsure`).
+Scores are saved per answer and as `answerJudge`.
+
+Its numbers are not to be trusted until the judge agrees with people:
+
+```bash
+pnpm rag:judge                    # judge the reviewed answers in eval/graded/
+pnpm rag:judge --include-drafts   # a first look, drafts included
+```
+
+It prints each answer's human and judge grades side by side and exact
+agreement on faithfulness (rounded to a grade) and completeness, against a
+target of **0.8** for each. Cost: three judge calls per answer, about 80
+answers a pass, so roughly 240 calls, about 7 seconds each on NIM's free tier
+with the three samples in parallel: some 10 extra minutes per pass.
+`EVAL_JUDGE_MODEL` is read by the eval only; the app never uses it.
+
 Two more question types sit outside the headline pool (#102). A **summary**
 question (`type: "summary"`) is a whole-document request that passes only when
 every page in `summaryPages` came back. Its questions run against
