@@ -689,22 +689,23 @@ sends over the wire, and what a free-tier rate limit costs you per question.
 
 ### Module map
 
-| Concern                                     | File                        |
-| ------------------------------------------- | --------------------------- |
-| PDF → per-page text, image-only detection   | `src/lib/rag/extract.ts`    |
-| Token-aware, page-bounded chunking (pure)   | `src/lib/rag/chunk.ts`      |
-| `embedPassages()` / `embedQuery()`          | `src/lib/rag/embed.ts`      |
-| NIM client: retries, backoff, usage frame   | `src/lib/rag/client.ts`     |
-| Ingestion state machine                     | `src/lib/rag/ingest.ts`     |
-| Content question vs whole-document request  | `src/lib/rag/scope.ts`      |
-| Owner- and KB-scoped retrieval              | `src/lib/rag/retrieve.ts`   |
-| Section runs and parent assembly (pure)     | `src/lib/rag/parents.ts`    |
-| Prompt construction and fencing             | `src/lib/rag/prompt.ts`     |
-| Upload / list / delete / retry actions      | `src/lib/rag/actions.ts`    |
-| Knowledge base CRUD and `moveDocument`      | `src/lib/rag/kb-actions.ts` |
-| Permitted-KB resolution (`server-only`)     | `src/lib/rag/kb-scope.ts`   |
-| Answering: evidence, refusal, draft, verify | `src/lib/rag/answer.ts`     |
-| Auth, conversation, the NDJSON stream       | `src/app/api/chat/route.ts` |
+| Concern                                     | File                             |
+| ------------------------------------------- | -------------------------------- |
+| PDF → per-page text, image-only detection   | `src/lib/rag/extract.ts`         |
+| Token-aware, page-bounded chunking (pure)   | `src/lib/rag/chunk.ts`           |
+| `embedPassages()` / `embedQuery()`          | `src/lib/rag/embed.ts`           |
+| NIM client: retries, backoff, usage frame   | `src/lib/rag/client.ts`          |
+| Ingestion state machine                     | `src/lib/rag/ingest.ts`          |
+| Content question vs whole-document request  | `src/lib/rag/scope.ts`           |
+| Owner- and KB-scoped retrieval              | `src/lib/rag/retrieve.ts`        |
+| All retrieval SQL (swap for another store)  | `src/lib/rag/retrieval-store.ts` |
+| Section runs and parent assembly (pure)     | `src/lib/rag/parents.ts`         |
+| Prompt construction and fencing             | `src/lib/rag/prompt.ts`          |
+| Upload / list / delete / retry actions      | `src/lib/rag/actions.ts`         |
+| Knowledge base CRUD and `moveDocument`      | `src/lib/rag/kb-actions.ts`      |
+| Permitted-KB resolution (`server-only`)     | `src/lib/rag/kb-scope.ts`        |
+| Answering: evidence, refusal, draft, verify | `src/lib/rag/answer.ts`          |
+| Auth, conversation, the NDJSON stream       | `src/app/api/chat/route.ts`      |
 
 The agentic path (spec 0029) adds:
 
