@@ -108,6 +108,7 @@ other — one isn't a substitute for the other.
 | [0043](0043-adaptive-planning.md)                     | Plan only when it pays                                                               | Proposed | —       |
 | [0044](0044-tool-registry.md)                         | Give the agent tools a developer can add                                             | Proposed | —       |
 | [0045](0045-provider-adapters.md)                     | Talk to model providers through adapters, Anthropic included                         | Proposed | —       |
+| [0046](0046-document-loaders.md)                      | Index Markdown, HTML and Word documents, through loaders                             | Proposed | —       |
 
 <!-- specs:index:end -->
 
