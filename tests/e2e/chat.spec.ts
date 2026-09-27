@@ -62,7 +62,9 @@ test('an empty chat is a centred greeting and composer', async ({ page }) => {
   await register(page, 'greeting')
 
   // FR11: greeting + composer, no surrounding card.
-  await expect(page.getByText('Ready when you are.')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Ready when you are.' }),
+  ).toBeVisible()
   await expect(page.getByLabel('Question')).toBeVisible()
 })
 

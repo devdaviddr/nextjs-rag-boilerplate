@@ -280,6 +280,11 @@ test('a document can be inspected page by page, and a partial one says so', asyn
       budgetExhausted: false,
     })} WHERE id = ${documentId}
         AND owner_id = (SELECT id FROM users WHERE email = ${email})`
+    // A failed page counts as unsearchable only when nothing was indexed from
+    // it (inspect.ts); the fixture's page 3 has real text, so clear its chunks
+    // to make the failure what the banner is about.
+    await sql`DELETE FROM chunks
+      WHERE document_id = ${documentId} AND page_number = 3`
 
     await page.reload()
     await expect(
