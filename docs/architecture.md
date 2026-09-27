@@ -340,6 +340,7 @@ corpus, the questions and the runner behind `pnpm rag:eval`.
 | `src/db/migrate.ts`         | Migration runner                        |
 | `src/db/seed.ts`            | Seed script (roles + demo admin user)   |
 | `src/app/api/chat/route.ts` | The streaming question endpoint         |
+| `src/lib/rag/answer.ts`     | Answering a question, end to end        |
 | `src/lib/rag/retrieve.ts`   | Owner-scoped hybrid retrieval           |
 
 **Next:** [Features](features.md) for the full inventory of what ships, then

@@ -8,10 +8,7 @@ import {
   conversations,
   messages,
 } from '@/db/schema'
-import type { StoredCitation } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
-import { toStoredCitations } from '@/lib/chat/citations'
-import { computeMetrics, type MessageMetrics } from '@/lib/chat/metrics'
 import { deriveTitle } from '@/lib/chat/title'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
 import {
@@ -20,50 +17,42 @@ import {
   worthShowing,
 } from '@/lib/observability/activity'
 import { subscribe } from '@/lib/observability/bus'
-import { beginSpan, span, startRun } from '@/lib/observability/runs'
+import { startRun } from '@/lib/observability/runs'
 import {
   annotateContext,
   newRequestId,
   withRequestContext,
 } from '@/lib/observability/context'
-import { logger } from '@/lib/logger'
-import { planRoute } from '@/lib/rag/plan-route'
 import { RAG_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
+import {
+  type AnswerDeps,
+  type AnswerState,
+  type Question,
+  answerQuestion,
+  answerStore,
+} from '@/lib/rag/answer'
 import {
   chatModelName,
   createChatStream,
   isRagConfigured,
 } from '@/lib/rag/client'
-import { NO_CONTEXT_ANSWER } from '@/lib/rag/constants'
-import { stripUnsupported } from '@/lib/rag/verify'
-import { SYSTEM_PROMPT, buildUserMessage } from '@/lib/rag/prompt'
 import {
   listReadyDocuments,
   retrieveWholeDocument,
   retrieveForOwner,
 } from '@/lib/rag/retrieve'
-import {
-  type AgenticResult,
-  runAgenticRetrieval,
-  verifyAnswer,
-} from '@/lib/rag/agentic-run'
-import type { RetrievedChunk } from '@/lib/rag/retrieve'
+import { runAgenticRetrieval, verifyAnswer } from '@/lib/rag/agentic-run'
 import { resolvePermittedKnowledgeBaseIds } from '@/lib/rag/kb-scope'
 import { REWRITE_CONTEXT_TURNS } from '@/lib/rag/rewrite'
-import { resolveScope } from '@/lib/rag/scope'
-import {
-  draftFailureMessage,
-  draftRetryDelayMs,
-  parseStreamFrame,
-} from '@/lib/rag/sse'
 
 /**
  * Grounded document chat (spec 0025), now persisted (spec 0026).
  *
- * The grounding guarantee is unchanged and structural: if retrieval returns
- * nothing above the similarity floor, the chat model is NEVER CALLED and a
- * fixed answer is returned.
+ * This route is the HTTP side: auth, rate limits, the request, the
+ * conversation, and the stream. Answering itself — evidence, the refusal,
+ * drafting, verification — is `answerQuestion` in `src/lib/rag/answer.ts`
+ * (#135), which holds the grounding guarantee.
  *
  * NDJSON, one JSON object per line:
  *   {"type":"conversation","conversationId":"…","title":"…"}
@@ -233,7 +222,7 @@ async function answer(request: Request, requestId: string) {
     question,
   })
 
-  // Persisted BEFORE the model is called, so a question is never lost even if
+  // Saved BEFORE the model is called, so a question is never lost even if
   // generation fails outright.
   await db.insert(messages).values({
     conversationId,
@@ -242,176 +231,70 @@ async function answer(request: Request, requestId: string) {
     content: question,
   })
 
-  /**
-   * Gather evidence.
-   *
-   * Runs INSIDE the stream (spec 0029 FR7) so phase events can reach the client
-   * while it works. The agentic path can take many seconds before any prose
-   * exists; without a heartbeat the user stares at a spinner with no idea
-   * whether anything is happening.
-   *
-   * Both paths bind `userId` and `permittedKbIds` from the session and the
-   * conversation. Neither reads scope from anything the model produced.
-   */
-  const gatherEvidence = async (
-    emit: (phase: string, iteration?: number) => void,
-  ): Promise<RetrievedChunk[]> => {
-    // An empty permitted set cannot produce a candidate row, so it
-    // short-circuits before any embedding call. Reached both for a deliberate
-    // empty selection and for a user with no knowledge bases at all; the UI
-    // prevents the latter from getting this far.
-    if (permittedKbIds.length === 0) return []
-
-    // The last few turns, oldest first, for pronoun resolution. Read before
-    // deciding whether to plan, because that decision depends on them.
-    const turns = aiSettings().RAG_AGENTIC_ENABLED
-      ? (
-          await db
-            .select({ role: messages.role, content: messages.content })
-            .from(messages)
-            .where(eq(messages.conversationId, conversationId))
-            .orderBy(desc(messages.createdAt))
-            .limit(REWRITE_CONTEXT_TURNS + 1)
-        )
-          // Drop the question just persisted above — it is the thing being
-          // rewritten, not context for the rewrite.
-          .slice(1)
-          .reverse()
-      : []
-    // Plan only when it pays (spec 0043): follow-ups and multi-part
-    // questions. A standalone question takes the fixed pipeline below.
-    const route = planRoute(question, turns)
-    const plan =
-      aiSettings().RAG_AGENTIC_ENABLED &&
-      (aiSettings().RAG_AGENTIC_ROUTE === 'always' || route.plan)
-    if (aiSettings().RAG_AGENTIC_ENABLED) {
-      logger.info(plan ? 'Planning this question' : 'Skipping the planner', {
-        category: 'agent',
-        route: route.reason,
-        mode: aiSettings().RAG_AGENTIC_ROUTE,
-      })
-    }
-
-    if (plan) {
-      const result = await runAgenticRetrieval({
-        userId,
-        permittedKbIds,
-        question,
-        // Whole-document intent ("summarise the handbook") is still resolved
-        // deterministically inside, against this KB-scoped list.
-        documents: await listReadyDocuments(userId, permittedKbIds),
-        turns,
-        onStep: emit,
-        signal: request.signal,
-      })
-      agenticTrace = result
-      retrievalMode = 'agentic'
-      return result.chunks
-    }
-
-    // Fixed pipeline (spec 0025): similarity search for content questions,
-    // whole-document retrieval for summarise/overview requests.
-    const scope = resolveScope(
-      question,
-      await listReadyDocuments(userId, permittedKbIds),
-    )
-    retrievalMode = scope.mode
-    if (scope.mode !== 'document') {
-      return retrieveForOwner(userId, question, permittedKbIds)
-    }
-    const whole = await retrieveWholeDocument(
-      userId,
-      scope.documentId,
-      permittedKbIds,
-    )
-    documentCoverage = { shown: whole.chunks.length, total: whole.totalChunks }
-    return whole.chunks
+  const q: Question = {
+    userId,
+    conversationId,
+    question,
+    permittedKbIds,
+    signal: request.signal,
   }
-
-  // Assigned once evidence has been gathered; `persistAnswer` closes over it.
-  let citations: StoredCitation[] = []
-  let agenticTrace: AgenticResult | null = null
-  // A whole-document request that read only part of a long document (#99).
-  let documentCoverage: { shown: number; total: number } | undefined
-  let retrievalMode: 'search' | 'document' | 'agentic' = 'search'
-
-  /**
-   * Commit the answer. Called on normal completion AND on a client
-   * disconnect: a conversation showing a question with no answer is a worse
-   * failure than a truncated one (spec 0026 NFR3). Guarded so it can only run
-   * once; a later citation revision updates the same row (`reviseAnswer`).
-   */
-  let persisted = false
-  let persistedId: string | null = null
-  const persistAnswer = async (
-    content: string,
-    metrics: MessageMetrics | null = null,
-  ): Promise<void> => {
-    if (persisted) return
-    // Order matters. An EMPTY answer must not burn the once-only latch: the
-    // latch exists to stop a double write, and there is no write to dedupe
-    // when there is nothing to save. Setting it first meant a cancel during
-    // retrieval — when `answer` is still '' — permanently silenced the real
-    // save that came moments later, and the answer was lost with no error
-    // anywhere. The fixed pipeline hid this behind a ~1s window; the agentic
-    // loop widens it to 10-20s, so it fired on most requests.
-    if (content.length === 0) return
-    persisted = true
-    try {
-      const [row] = await db
-        .insert(messages)
-        .values({
-          conversationId,
-          ownerId: userId,
-          role: 'assistant',
-          content,
-          citations,
-          metrics,
-          requestId,
-        })
-        .returning({ id: messages.id })
-      persistedId = row?.id ?? null
-      // Recents is ordered by activity, not creation.
-      await db
-        .update(conversations)
-        .set({ updatedAt: new Date() })
-        .where(eq(conversations.id, conversationId))
-    } catch (error) {
-      logger.error('Failed to persist the assistant message', {
-        userId,
-        conversationId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+  const deps: AnswerDeps = {
+    settings: () => aiSettings(),
+    recentTurns: async (id) =>
+      (
+        await db
+          .select({ role: messages.role, content: messages.content })
+          .from(messages)
+          .where(eq(messages.conversationId, id))
+          .orderBy(desc(messages.createdAt))
+          .limit(REWRITE_CONTEXT_TURNS + 1)
+      )
+        // Drop the question just saved above — it is the thing being
+        // rewritten, not context for the rewrite.
+        .slice(1)
+        .reverse(),
+    listReadyDocuments,
+    retrieveForOwner,
+    retrieveWholeDocument,
+    runAgenticRetrieval,
+    chatStream: createChatStream,
+    verify: verifyAnswer,
+    chatModelName,
+    finishRun: (outcome) => run.finish(outcome),
   }
-
-  /**
-   * Replace the persisted answer with its verified text (#48). The draft is
-   * saved BEFORE verification so the composer can unlock the moment drafting
-   * ends without a quick next question being stored ahead of this answer;
-   * this keeps the "persisted record is the verified text" guarantee once
-   * verification returns.
-   */
-  const reviseAnswer = async (content: string): Promise<void> => {
-    if (!persistedId) return
-    try {
-      await db
-        .update(messages)
-        .set({ content })
-        .where(and(eq(messages.id, persistedId), eq(messages.ownerId, userId)))
-    } catch (error) {
-      logger.error('Failed to persist the verified answer', {
-        userId,
-        conversationId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
+  const store = answerStore(
+    {
+      insert: async (row) => {
+        const [saved] = await db
+          .insert(messages)
+          .values({
+            conversationId,
+            ownerId: userId,
+            role: 'assistant',
+            ...row,
+            requestId,
+          })
+          .returning({ id: messages.id })
+        // Recents is ordered by activity, not creation.
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date() })
+          .where(eq(conversations.id, conversationId))
+        return saved?.id ?? null
+      },
+      revise: async (id, content) => {
+        await db
+          .update(messages)
+          .set({ content })
+          .where(and(eq(messages.id, id), eq(messages.ownerId, userId)))
+      },
+    },
+    { userId, conversationId },
+  )
+  const state: AnswerState = { answer: '', mode: 'search' }
 
   let closed = false
   let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
-  let answer = ''
-
   // Hoisted so `cancel()` and a dropped connection can stop it too.
   let stopActivity: () => void = () => {}
 
@@ -464,332 +347,29 @@ async function answer(request: Request, requestId: string) {
         void upstreamReader?.cancel().catch(() => undefined)
       })
 
-      try {
-        send({ type: 'conversation', conversationId, title: conversationTitle })
-        send({ type: 'request', requestId })
-
-        const retrieved = await span('retrieve', async (step) => {
-          const found = await gatherEvidence((phase, iteration) => {
-            send({ type: 'step', phase, iteration })
-          })
-          step.set({ mode: retrievalMode, passages: found.length })
-          return found
-        })
-        const bestSimilarity = retrieved.reduce<number | null>(
-          (best, c) =>
-            best === null || c.similarity > best ? c.similarity : best,
-          null,
-        )
-        // Section parents are flagged so the panel highlights the whole run.
-        citations = toStoredCitations(retrieved)
-        send({ type: 'citations', citations })
-
-        // The full trace (spec 0029 FR9). Logged rather than streamed: it is
-        // for debugging a bad answer after the fact, and the rewritten query in
-        // particular is the first thing to look at when retrieval went wrong.
-        if (agenticTrace) {
-          logger.info('Agentic trace', {
-            userId,
-            conversationId,
-            original: question,
-            query: agenticTrace.query,
-            rewritten: agenticTrace.rewritten,
-            skippedRetrieval: agenticTrace.skippedRetrieval,
-            termination: agenticTrace.termination,
-            searches: agenticTrace.searches,
-            tokensUsed: agenticTrace.tokensUsed,
-            steps: agenticTrace.steps,
-          })
-        }
-
-        // Nothing relevant: answer without an inference call at all. This is
-        // the guarantee made concrete — with no retrieved context there is no
-        // drafting call in which to hallucinate. It stays a code path here,
-        // around the loop, never something the model is asked to honour.
-        if (retrieved.length === 0) {
-          answer = NO_CONTEXT_ANSWER
-          send({ type: 'token', value: answer })
-          await persistAnswer(answer)
-          send({ type: 'done' })
-          finish()
-          run.finish({
-            status: 'refused',
-            mode: retrievalMode,
-            termination: agenticTrace?.termination ?? 'no-evidence',
-            sourceCount: 0,
-            bestSimilarity,
-          })
-          return
-        }
-
-        send({ type: 'step', phase: 'drafting' })
-        const startedAt = Date.now()
-        const drafting = beginSpan('draft', { sources: citations.length })
-        // Hoisted above the retry loop so a second attempt overwrites them
-        // rather than shadowing, and so the empty-answer diagnostic below can
-        // still see what the last attempt produced.
-        let firstTokenAt: number | null = null
-        let reasoningChars = 0
-        let finishReason: string | null = null
-        let rawSample = ''
-        let promptTokens: number | null = null
-        let completionTokens: number | null = null
-        // An error sent INSIDE a 200 stream (#43), from the last attempt.
-        let upstreamError: { code: number | null; message: string } | null =
-          null
-
-        // Draft, with ONE retry on an empty stream.
-        //
-        // Measured: the upstream intermittently returns a 200 SSE body that
-        // yields no frames at all — no content, no reasoning, not even a
-        // finish_reason — in ~200ms, while the identical request by hand
-        // succeeds 5 times out of 5. Retrying once converts that transient
-        // into an answer instead of an apology.
-        //
-        // Bounded at two attempts, and skipped entirely when the client has
-        // gone away: retrying into a closed connection just burns a request
-        // against a 40/min ceiling.
-        for (let draft = 0; draft < 2; draft++) {
-          if (draft > 0) {
-            if (closed || request.signal.aborted) break
-            const delayMs = draftRetryDelayMs(upstreamError !== null)
-            logger.warn('Drafting returned nothing; retrying once', {
-              userId,
-              conversationId,
-              upstreamError,
-              delayMs,
-            })
-            // Backoff: the old immediate retry hit the same overloaded
-            // upstream 230ms later (#43).
-            await new Promise((resolve) => setTimeout(resolve, delayMs))
-            if (closed || request.signal.aborted) break
-            upstreamError = null
-          }
-          const upstream = await createChatStream(
-            [
-              { role: 'system', content: SYSTEM_PROMPT },
-              {
-                role: 'user',
-                // The planner's reading of a follow-up, so the writer knows
-                // what "it" refers to (#97).
-                content: buildUserMessage(
-                  question,
-                  retrieved,
-                  agenticTrace?.rewritten ? agenticTrace.query : undefined,
-                  // And, for a long document, that it read only part (#99).
-                  agenticTrace?.coverage ?? documentCoverage,
-                ),
-              },
-            ],
-            request.signal,
-          )
-
-          const reader = upstream.getReader()
-          upstreamReader = reader
-          const decoder = new TextDecoder()
-          let buffer = ''
-
-          while (!closed) {
-            const { done, value } = await reader.read()
-            if (done) break
-            const decoded = decoder.decode(value, { stream: true })
-            if (rawSample.length < 600) rawSample += decoded
-            buffer += decoded
-
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
-
-            for (const raw of lines) {
-              const trimmed = raw.trim()
-              if (!trimmed.startsWith('data:')) continue
-              const frame = parseStreamFrame(trimmed.slice(5))
-              if (frame.kind === 'skip') continue
-              if (frame.kind === 'error') {
-                // The upstream failed after answering 200. Stop reading this
-                // attempt; the retry below backs off and tries once more.
-                upstreamError = { code: frame.code, message: frame.message }
-                logger.warn('Upstream error inside the drafting stream', {
-                  userId,
-                  conversationId,
-                  code: frame.code,
-                  message: frame.message,
-                  hadText: answer.length > 0,
-                })
-                break
-              }
-              if (frame.usage) {
-                promptTokens = frame.usage.promptTokens
-                completionTokens = frame.usage.completionTokens
-              }
-              if (frame.finishReason) finishReason = frame.finishReason
-              // Reasoning models split their chain-of-thought out of
-              // `content`. It is never rendered, but its presence says the
-              // model was working rather than silent.
-              reasoningChars += frame.reasoningChars
-              if (frame.content) {
-                firstTokenAt ??= Date.now()
-                answer += frame.content
-                send({ type: 'token', value: frame.content })
-              }
-            }
-            if (upstreamError) {
-              await reader.cancel().catch(() => {})
-              break
-            }
-          }
-          if (answer.trim()) break
-        }
-
-        // A completion that produced no prose is a failure, not an answer.
-        //
-        // These are reasoning models: they stream chain-of-thought into
-        // `reasoning_content` and the answer into `content`. Observed live —
-        // 837ms of drafting, one retrieved source, and ZERO content tokens.
-        // Persisting that wrote nothing (an empty answer is correctly skipped),
-        // so the thread showed a question, a Sources row and no answer at all.
-        //
-        // Better to say so than to render a blank bubble.
-        if (!answer.trim()) {
-          logger.error('Drafting produced no answer text', {
-            userId,
-            conversationId,
-            finishReason,
-            reasoningChars,
-            sourceCount: citations.length,
-            elapsedMs: Date.now() - startedAt,
-            rawSample: rawSample.slice(0, 600),
-            upstreamError,
-          })
-          send({ type: 'error', message: draftFailureMessage(upstreamError) })
-          send({ type: 'done' })
-          finish()
-          drafting.set({ finishReason, upstreamError })
-          drafting.end({ status: 'error', model: chatModelName() })
-          run.finish({
-            status: 'error',
-            mode: retrievalMode,
-            termination: agenticTrace?.termination ?? null,
-            sourceCount: citations.length,
-            bestSimilarity,
-            error: upstreamError?.message ?? 'Drafting produced no answer text',
-          })
-          return
-        }
-
-        // Drafting ends here. The metrics clock stops now, not after
-        // verification: tokens/sec and total time describe the answer the user
-        // watched stream in, not the post-hoc check that follows it (#42).
-        const draftedAt = Date.now()
-        drafting.set({
-          finishReason,
-          ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
-          answerChars: answer.length,
-          answer,
-        })
-        drafting.end({
-          model: chatModelName(),
-          tokens:
-            promptTokens !== null || completionTokens !== null
-              ? (promptTokens ?? 0) + (completionTokens ?? 0)
-              : null,
-        })
-
-        // The answer is complete: save it and send its metrics now. `metrics`
-        // is the client's signal that the composer may unlock (#48) — it no
-        // longer waits for verification, which continues below and revises
-        // this same row if it strips anything.
-        const metrics = computeMetrics({
-          model: chatModelName(),
-          promptTokens,
-          completionTokens,
-          startedAt,
-          firstTokenAt,
-          finishedAt: draftedAt,
-          sourceCount: citations.length,
-          retrieval: retrievalMode,
-        })
-        await persistAnswer(answer, metrics)
-        send({ type: 'metrics', metrics })
-
-        // Verify the answer (spec 0029 FR6), after it is readable. Every
-        // grounded answer, fixed path included (#127): the fixed path cites
-        // sources just the same, and can blur them just the same.
-        //
-        // This runs AFTER streaming rather than before it. Verifying first
-        // would mean buffering the whole answer, which kills token streaming
-        // and makes time-to-first-token meaningless on every single answer —
-        // a permanent regression to prevent a brief exposure that the revision
-        // then removes. The PERSISTED record is always the verified text, so
-        // reopening the thread never shows an unsupported claim.
-        if (citations.length > 0 && answer.trim()) {
-          send({ type: 'step', phase: 'verifying' })
-          const unsupported = await span('verify', async (step) => {
-            const found = await verifyAnswer(answer, retrieved, request.signal)
-            step.set({ unsupported: found.length })
-            return found
-          })
-          const verified = stripUnsupported(answer, unsupported)
-          if (verified.strippedSentences > 0) {
-            logger.warn('Stripped unsupported sentences', {
-              userId,
-              conversationId,
-              sentences: verified.strippedSentences,
-              stripped: verified.strippedIndices,
-            })
-            answer = verified.empty ? NO_CONTEXT_ANSWER : verified.text
-            await reviseAnswer(answer)
-            send({
-              type: 'revision',
-              value: answer,
-              stripped: verified.strippedIndices,
-            })
-          }
-        }
-
-        send({ type: 'done' })
-        finish()
-        run.finish({
-          status: 'ok',
-          mode: retrievalMode,
-          termination: agenticTrace?.termination ?? null,
-          ttftMs: firstTokenAt ? firstTokenAt - startedAt : null,
-          promptTokens,
-          completionTokens,
-          sourceCount: citations.length,
-          bestSimilarity,
-        })
-      } catch (error) {
-        const aborted =
-          closed ||
-          request.signal.aborted ||
-          (error instanceof Error && error.name === 'AbortError')
-        if (!aborted) {
-          logger.error('Chat stream failed', {
-            userId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-        run.finish({
-          status: aborted ? 'cancelled' : 'error',
-          mode: retrievalMode,
-          termination: agenticTrace?.termination ?? null,
-          error: error instanceof Error ? error.message : String(error),
-        })
-        // Whatever was generated before the failure is still worth keeping.
-        await persistAnswer(answer)
-        send({
-          type: 'error',
-          message: 'The answer could not be generated. Please try again.',
-        })
-        finish()
-      }
+      send({ type: 'conversation', conversationId, title: conversationTitle })
+      send({ type: 'request', requestId })
+      await answerQuestion(
+        q,
+        deps,
+        {
+          send,
+          closed: () => closed,
+          finish,
+          onReader: (reader) => {
+            upstreamReader = reader
+          },
+        },
+        store,
+        state,
+      )
     },
     cancel() {
       closed = true
       stopActivity()
-      run.finish({ status: 'cancelled', mode: retrievalMode })
+      run.finish({ status: 'cancelled', mode: state.mode })
       void upstreamReader?.cancel().catch(() => undefined)
-      void persistAnswer(answer)
+      void store.save(state.answer)
     },
   })
 

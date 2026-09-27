@@ -34,10 +34,10 @@ export default defineConfig({
       // change that drops coverage fails `pnpm test:coverage` in CI. Raise it
       // when coverage rises; never lower it to make a change pass.
       thresholds: {
-        statements: 49,
-        branches: 42,
-        functions: 43,
-        lines: 49,
+        statements: 51,
+        branches: 44,
+        functions: 44,
+        lines: 51,
       },
     },
   },

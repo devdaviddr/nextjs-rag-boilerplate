@@ -442,7 +442,7 @@ Locally, Husky runs `lint-staged` (ESLint + Prettier) over staged files on every
 
 `pnpm test:coverage` fails when coverage drops below the floor in
 `vitest.config.ts` (`coverage.thresholds`), set just under the measured numbers
-(about 50% of lines). Raise the floor when coverage rises; never lower it to
+(about 52% of lines). Raise the floor when coverage rises; never lower it to
 make a change pass. Aim for unit-test coverage above 80%. Before
 you call a deployment production-ready, verify a restore as well as a backup;
 see [Backups & restore](backups.md).
