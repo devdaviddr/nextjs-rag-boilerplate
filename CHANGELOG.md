@@ -10,6 +10,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **The agent can call tools you add.** Write one module with `defineTool`
+  (name, description, a Zod schema, a `run` function) and add it to
+  `agentTools` in `src/lib/rag/tools/index.ts`. The planner is offered it, the
+  call runs with the user's scope bound on the server, and its result reaches
+  the answer. The registry ships empty, so nothing changes until you add one
+  (spec 0044, #158).
 - `make init` (`pnpm init:project`) renames a project started from this
   template in one step: name, description, repository URL and theme colour,
   with the share image and icons regenerated. It never touches the settings

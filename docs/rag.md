@@ -715,6 +715,7 @@ The agentic path (spec 0029) adds:
 | `PlannerDecision`, tool schema, both adapters   | `src/lib/rag/planner.ts`      |
 | The bounded loop, budgets, attempt-scaled floor | `src/lib/rag/agentic.ts`      |
 | Wiring: scope, planner calls, search, verify    | `src/lib/rag/agentic-run.ts`  |
+| Tools you add: `AgentTool`, the registry        | `src/lib/rag/tools/`          |
 | Citation verification: sentence stripping       | `src/lib/rag/verify.ts`       |
 | Conversation-turn type and context window size  | `src/lib/rag/rewrite.ts`      |
 

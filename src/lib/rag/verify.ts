@@ -131,6 +131,16 @@ Return ONLY a JSON object: {"unsupported": [<sentence numbers>]}
 List a sentence number only when the sources clearly do NOT support it. If a sentence is supported, or you are unsure, do not list it.`
 
 /**
+ * The verifier's system prompt: with tool results present, a sentence they
+ * support is supported (spec 0044 FR6). Otherwise `VERIFY_SYSTEM_PROMPT`.
+ */
+export function verifySystemPrompt(withTools: boolean): string {
+  if (!withTools) return VERIFY_SYSTEM_PROMPT
+  return `${VERIFY_SYSTEM_PROMPT}
+A TOOL RESULTS block may follow the sources: output of tools run for this question. A sentence the tool results support is supported, whether or not it cites a source.`
+}
+
+/**
  * Read the verifier's verdict.
  *
  * Fails **open** — an unparseable verdict yields an empty list, so the answer

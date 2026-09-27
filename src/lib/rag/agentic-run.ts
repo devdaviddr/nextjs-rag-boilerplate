@@ -3,7 +3,13 @@ import 'server-only'
 import { aiSettings } from '@/lib/ai-settings'
 import { logger } from '@/lib/logger'
 import { planRoute } from './plan-route'
-import { neutraliseFence, newFenceId } from './prompt'
+import {
+  type ToolOutput,
+  buildToolResultsBlock,
+  neutraliseFence,
+  newFenceId,
+} from './prompt'
+import { runRegisteredTool, toolDefinition, toolRegistry } from './tools'
 import { span } from '@/lib/observability/runs'
 import {
   type LoopFigureReading,
@@ -27,7 +33,7 @@ import {
 } from './retrieve'
 import { routeTurn } from './route-intent'
 import { resolveScope } from './scope'
-import { VERIFY_SYSTEM_PROMPT, numberSentences, parseVerdict } from './verify'
+import { numberSentences, parseVerdict, verifySystemPrompt } from './verify'
 
 export type AgenticPhase = 'routing' | 'searching' | 'drafting' | 'verifying'
 
@@ -45,6 +51,8 @@ export interface AgenticResult {
   tokensUsed: number
   /** A whole-document request: how much of the document was read (#99). */
   coverage?: { shown: number; total: number }
+  /** What registered tools returned (spec 0044); absent when none ran. */
+  toolResults?: { name: string; text: string }[]
 }
 
 /** Recent turns shown to the planner. Enough for a pronoun, not a summary. */
@@ -127,13 +135,18 @@ export function historyPrompt(
    * to read, so an unfenced passage could steer it.
    */
   fenceId: string = newFenceId(),
+  /**
+   * Steps spent, by the loop's own count (spec 0044 FR8). Defaults to the
+   * steps recorded, which undercounts a search the time budget cut short.
+   */
+  spent: number = steps.length,
 ): string {
   const transcript = turns
     .slice(-PLANNER_CONTEXT_TURNS)
     .map(plannerTurn)
     .join('\n')
   const preamble = transcript ? `Conversation so far:\n${transcript}\n\n` : ''
-  const left = budgetLine(maxSearches - steps.length)
+  const left = budgetLine(maxSearches - spent)
   if (steps.length === 0) return `${preamble}Question: ${question}${left}`
   const summary = steps
     .map(
@@ -252,6 +265,8 @@ export async function runAgenticRetrieval(input: {
   const multiPart = planRoute(question, turns).reason === 'multi-part'
   const confident = aiSettings().RAG_AGENTIC_CONFIDENT_SIMILARITY
   const maxSearches = aiSettings().RAG_MAX_SEARCHES
+  const registry = toolRegistry()
+  const toolNames = new Set(registry.keys())
   const outcome = await runAgenticLoop(
     {
       maxSearches,
@@ -262,7 +277,7 @@ export async function runAgenticRetrieval(input: {
     },
     {
       // Each call of the loop is a step of the run (spec 0042 FR8).
-      plan: (steps, planSignal) =>
+      plan: (steps, planSignal, spent) =>
         span('plan', async (step) => {
           onStep('searching', steps.length + 1)
           const { choice, tokens: used } = await createChatCompletion(
@@ -270,19 +285,33 @@ export async function runAgenticRetrieval(input: {
               { role: 'system', content: PLANNER_SYSTEM_PROMPT },
               {
                 role: 'user',
-                content: historyPrompt(question, turns, steps, maxSearches),
+                content: historyPrompt(
+                  question,
+                  turns,
+                  steps,
+                  maxSearches,
+                  undefined,
+                  spent,
+                ),
               },
             ],
             {
               role: 'planner',
-              tools: figureReadingEnabled
-                ? [SEARCH_TOOL, READ_FIGURE_TOOL]
-                : [SEARCH_TOOL],
+              // Registered tools after the built-ins (spec 0044 FR2); with
+              // none registered the request is exactly as before (NFR1).
+              tools: [
+                SEARCH_TOOL,
+                ...(figureReadingEnabled ? [READ_FIGURE_TOOL] : []),
+                ...[...registry.values()].map(toolDefinition),
+              ],
               maxTokens: 800,
               signal: planSignal,
             },
           )
-          const decision: PlannerDecision | null = parseToolCallDecision(choice)
+          const decision: PlannerDecision | null = parseToolCallDecision(
+            choice,
+            toolNames,
+          )
           const parallel =
             decision?.action === 'search' ? parseParallelSearches(choice) : []
           // What the agent chose, as it chose it (spec 0042 FR6).
@@ -363,6 +392,20 @@ export async function runAgenticRetrieval(input: {
           })
           return found
         }),
+      // Registered tools (spec 0044), scope bound HERE from the conversation;
+      // the model supplies a name and arguments only (FR4).
+      ...(registry.size > 0
+        ? {
+            runTool: (name: string, args: string, toolSignal: AbortSignal) =>
+              span('tool', () =>
+                runRegisteredTool(registry, name, args, {
+                  userId,
+                  permittedKbIds,
+                  signal: toolSignal,
+                }),
+              ),
+          }
+        : {}),
       // Omitted entirely when disabled, so the loop never advertises a tool it
       // cannot service.
       ...(figureReadingEnabled
@@ -437,6 +480,14 @@ export async function runAgenticRetrieval(input: {
     termination: outcome.termination,
     searches: outcome.searches,
     tokensUsed: outcome.tokensUsed,
+    ...(outcome.toolResults.length > 0
+      ? {
+          toolResults: outcome.toolResults.map(({ name, text }) => ({
+            name,
+            text,
+          })),
+        }
+      : {}),
   }
 }
 
@@ -501,6 +552,8 @@ export async function verifyAnswer(
   answer: string,
   chunks: readonly RetrievedChunk[],
   signal: AbortSignal,
+  /** Output of registered tools the planner called (spec 0044 FR6). */
+  toolResults?: readonly ToolOutput[],
 ): Promise<number[]> {
   if (!answer.trim() || chunks.length === 0) return []
 
@@ -517,10 +570,10 @@ export async function verifyAnswer(
   try {
     const { choice } = await createChatCompletion(
       [
-        { role: 'system', content: VERIFY_SYSTEM_PROMPT },
+        { role: 'system', content: verifySystemPrompt(!!toolResults?.length) },
         {
           role: 'user',
-          content: `Sources:\n<<<SOURCES-${fenceId}\n${sources}\nSOURCES-${fenceId}>>>\n\nAnswer, one sentence per line:\n${numberSentences(answer)}`,
+          content: `Sources:\n<<<SOURCES-${fenceId}\n${sources}\nSOURCES-${fenceId}>>>${toolResults?.length ? `\n\n${buildToolResultsBlock(toolResults)}` : ''}\n\nAnswer, one sentence per line:\n${numberSentences(answer)}`,
         },
       ],
       {

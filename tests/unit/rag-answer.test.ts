@@ -140,6 +140,50 @@ describe('answerQuestion', () => {
     ])
   })
 
+  // Spec 0044 FR9: a registered tool's result is evidence.
+  it('answers from a tool result when no passage cleared the floor', async () => {
+    const result = {
+      chunks: [],
+      query: 'q',
+      rewritten: false,
+      termination: 'planner-answered',
+      toolResults: [{ name: 'list_documents', text: '- handbook' }],
+    } as unknown as AgenticResult
+    const t = setup(
+      { runAgenticRetrieval: vi.fn().mockResolvedValue(result) },
+      true,
+    )
+    await t.run()
+
+    expect(t.deps.chatStream).toHaveBeenCalledOnce()
+    const [messages] = (t.deps.chatStream as ReturnType<typeof vi.fn>).mock
+      .calls[0]!
+    expect(messages[1].content).toContain('[tool list_documents]')
+    expect(t.deps.verify).toHaveBeenCalledWith(
+      expect.any(String),
+      [],
+      expect.anything(),
+      [{ name: 'list_documents', text: '- handbook' }],
+    )
+    expect(t.outcomes[0]!.status).toBe('ok')
+  })
+
+  it('still refuses with neither a passage nor a tool result', async () => {
+    const result = {
+      chunks: [],
+      query: 'q',
+      rewritten: false,
+      termination: 'planner-answered',
+    } as unknown as AgenticResult
+    const t = setup(
+      { runAgenticRetrieval: vi.fn().mockResolvedValue(result) },
+      true,
+    )
+    await t.run()
+    expect(t.deps.chatStream).not.toHaveBeenCalled()
+    expect(t.outcomes[0]!.status).toBe('refused')
+  })
+
   it('answers on the fixed path: citations, tokens, saved, verified, done', async () => {
     const t = setup()
     await t.run()
@@ -283,6 +327,48 @@ describe('gatherEvidence', () => {
     )
     expect(found.mode).toBe('document')
     expect(found.coverage).toEqual({ shown: 2, total: 10 })
+  })
+})
+
+describe('gatherEvidence with tools registered (spec 0044 FR2)', () => {
+  it('plans a standalone question under adaptive routing when tools exist', async () => {
+    const agentic = {
+      chunks: [],
+      query: 'q',
+      rewritten: false,
+      termination: 'planner-answered',
+    } as unknown as AgenticResult
+    const base = {
+      settings: () => ({
+        RAG_AGENTIC_ENABLED: true,
+        RAG_AGENTIC_ROUTE: 'adaptive' as const,
+      }),
+      recentTurns: vi.fn().mockResolvedValue([]),
+      listReadyDocuments: vi.fn().mockResolvedValue([]),
+      retrieveForOwner: vi.fn().mockResolvedValue([]),
+      retrieveWholeDocument: vi.fn(),
+      runAgenticRetrieval: vi.fn().mockResolvedValue(agentic),
+    }
+    const q = {
+      userId: 'u',
+      conversationId: 'c',
+      question: 'Which documents do I have?',
+      permittedKbIds: ['kb'],
+      signal: new AbortController().signal,
+    }
+
+    const without = await gatherEvidence(q, () => {}, {
+      ...base,
+      hasTools: () => false,
+    })
+    expect(without.mode).toBe('search')
+    expect(base.runAgenticRetrieval).not.toHaveBeenCalled()
+
+    const withTools = await gatherEvidence(q, () => {}, {
+      ...base,
+      hasTools: () => true,
+    })
+    expect(withTools.mode).toBe('agentic')
   })
 })
 

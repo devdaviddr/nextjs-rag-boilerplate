@@ -9,7 +9,7 @@ import type { AgenticResult, runAgenticRetrieval } from './agentic-run'
 import type { ChatMessage } from './client'
 import { NO_CONTEXT_ANSWER } from './constants'
 import { planRoute } from './plan-route'
-import { SYSTEM_PROMPT, buildUserMessage } from './prompt'
+import { type ToolOutput, buildUserMessage, systemPrompt } from './prompt'
 import type {
   RetrievedChunk,
   listReadyDocuments,
@@ -18,6 +18,7 @@ import type {
 } from './retrieve'
 import type { RewriteTurn } from './rewrite'
 import { resolveScope } from './scope'
+import { toolRegistry } from './tools'
 import { draftFailureMessage, draftRetryDelayMs, parseStreamFrame } from './sse'
 import { stripUnsupported } from './verify'
 
@@ -66,6 +67,12 @@ export interface EvidenceDeps {
   retrieveForOwner: typeof retrieveForOwner
   retrieveWholeDocument: typeof retrieveWholeDocument
   runAgenticRetrieval: typeof runAgenticRetrieval
+  /**
+   * Whether any tool is registered (spec 0044 FR2). Tools exist only on the
+   * agentic path, so with any registered every question is planned.
+   * Defaults to the registry.
+   */
+  hasTools?: () => boolean
 }
 
 /**
@@ -102,9 +109,10 @@ export async function gatherEvidence(
   // Plan only when it pays (spec 0043): follow-ups and multi-part
   // questions. A standalone question takes the fixed pipeline below.
   const route = planRoute(question, turns)
+  const hasTools = (deps.hasTools ?? (() => toolRegistry().size > 0))()
   const plan =
     settings.RAG_AGENTIC_ENABLED &&
-    (settings.RAG_AGENTIC_ROUTE === 'always' || route.plan)
+    (settings.RAG_AGENTIC_ROUTE === 'always' || route.plan || hasTools)
   if (settings.RAG_AGENTIC_ENABLED) {
     logger.info(plan ? 'Planning this question' : 'Skipping the planner', {
       category: 'agent',
@@ -249,6 +257,7 @@ export interface AnswerDeps extends EvidenceDeps {
     answer: string,
     chunks: readonly RetrievedChunk[],
     signal: AbortSignal,
+    toolResults?: readonly ToolOutput[],
   ): Promise<number[]>
   chatModelName(): string
   finishRun(outcome: RunOutcome): void
@@ -338,7 +347,11 @@ export async function answerQuestion(
     // guarantee made concrete — with no retrieved context there is no drafting
     // call in which to hallucinate. It stays a code path here, around the
     // loop, never something the model is asked to honour.
-    if (retrieved.length === 0) {
+    //
+    // A registered tool's result is evidence too (spec 0044 FR9). With no
+    // tools registered this is exactly the old condition.
+    const toolResults = agentic?.toolResults ?? []
+    if (retrieved.length === 0 && toolResults.length === 0) {
       state.answer = NO_CONTEXT_ANSWER
       io.send({ type: 'token', value: state.answer })
       await store.save(state.answer)
@@ -398,7 +411,7 @@ export async function answerQuestion(
       }
       const upstream = await deps.chatStream(
         [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt(!!agentic?.toolResults) },
           {
             role: 'user',
             // The planner's reading of a follow-up, so the writer knows what
@@ -409,6 +422,8 @@ export async function answerQuestion(
               agentic?.rewritten ? agentic.query : undefined,
               // And, for a long document, that it read only part (#99).
               agentic?.coverage ?? evidence.coverage,
+              // What registered tools returned (spec 0044 FR6).
+              agentic?.toolResults,
             ),
           },
         ],
@@ -552,10 +567,18 @@ export async function answerQuestion(
     // regression to prevent a brief exposure that the revision then removes.
     // The SAVED record is always the verified text, so reopening the thread
     // never shows an unsupported claim.
-    if (citations.length > 0 && state.answer.trim()) {
+    if (
+      (citations.length > 0 || toolResults.length > 0) &&
+      state.answer.trim()
+    ) {
       io.send({ type: 'step', phase: 'verifying' })
       const unsupported = await span('verify', async (step) => {
-        const found = await deps.verify(state.answer, retrieved, signal)
+        const found = await deps.verify(
+          state.answer,
+          retrieved,
+          signal,
+          agentic?.toolResults,
+        )
         step.set({ unsupported: found.length })
         return found
       })
