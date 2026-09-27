@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { parseModelPrices } from './model-prices'
+
 /**
  * The AI settings' environment fields (spec 0040): provider, models, and the
  * retrieval and answering knobs. Spread into the env schema in `./env.ts`, and
@@ -30,6 +32,15 @@ const optionalStr = z
   .transform((v) => (v === undefined || v === '' ? undefined : v))
 
 export const aiEnvShape = {
+  // Prices for Observability's cost figures (#150): model=price pairs, US
+  // dollars per million tokens. Unset: token counts only, as before.
+  RAG_MODEL_PRICES: optionalStr.refine(
+    (v) => v === undefined || parseModelPrices(v).ok,
+    {
+      message:
+        'RAG_MODEL_PRICES must be model=price pairs, e.g. "openai/gpt-4o=5, nvidia/nemotron-3-embed-1b=0"',
+    },
+  ),
   // --- RAG / NVIDIA NIM (spec 0025) --------------------------------------
   // Opt-in, same posture as OAuth/email/push: absent -> the knowledge-base
   // and chat features report themselves as unconfigured rather than the app

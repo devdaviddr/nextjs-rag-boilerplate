@@ -40,8 +40,8 @@ describe('RETRIEVAL_FIELDS', () => {
           expect(parses(key, 'not-an-option')).toBe(false)
           break
         case 'text':
-          expect(parses(key, 'some/model')).toBe(true)
-          expect(parses(key, '')).toBe(false)
+          expect(parses(key, field.example ?? 'some/model')).toBe(true)
+          expect(parses(key, '')).toBe(field.emptyAllowed === true)
           break
         default: {
           const below = field.kind === 'integer' ? 1 : 0.001

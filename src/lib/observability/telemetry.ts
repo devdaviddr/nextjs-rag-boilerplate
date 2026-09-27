@@ -3,6 +3,12 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
+import { aiSettings } from '@/lib/ai-settings'
+import {
+  type CostSummary,
+  parseModelPrices,
+  summariseCost,
+} from '@/lib/model-prices'
 
 /**
  * The numbers behind Observability → Overview (spec 0042 FR10). Every
@@ -44,6 +50,8 @@ export interface Bucket {
 
 export interface Telemetry {
   range: Range
+  /** What the window's model calls cost at RAG_MODEL_PRICES (#150). */
+  cost: CostSummary
   from: string
   to: string
   kpis: Kpis
@@ -128,6 +136,7 @@ export async function telemetry(
     stepRows,
     failureRows,
     ingestRows,
+    tokenRows,
   ] = await Promise.all([
     kpis(from, to),
     kpis(prevFrom, from),
@@ -191,6 +200,14 @@ export async function telemetry(
       FROM rag_runs
       WHERE kind = 'ingest' AND started_at >= ${from.toISOString()} AND started_at < ${to.toISOString()}
     `),
+    // Tokens by model, for the cost panel (#150).
+    db.execute<Record<string, unknown>>(sql`
+      SELECT s.model AS model, sum(s.tokens) AS tokens
+      FROM rag_spans s JOIN rag_runs r ON r.id = s.run_id
+      WHERE s.tokens IS NOT NULL
+        AND r.started_at >= ${from.toISOString()} AND r.started_at < ${to.toISOString()}
+      GROUP BY s.model
+    `),
   ])
 
   const byIndex = new Map(bucketRows.map((r) => [Number(r.i), r]))
@@ -213,7 +230,17 @@ export async function telemetry(
   )
   const ingest = ingestRows[0] ?? {}
 
+  const prices = parseModelPrices(aiSettings().RAG_MODEL_PRICES)
+  const cost = summariseCost(
+    tokenRows.map((r) => ({
+      model: (r.model as string | null) ?? null,
+      tokens: Number(r.tokens),
+    })),
+    prices.ok ? prices.prices : new Map(),
+  )
+
   return {
+    cost,
     range,
     from: from.toISOString(),
     to: to.toISOString(),

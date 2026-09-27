@@ -10,6 +10,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- Observability shows what questions and uploads cost. Set model prices in
+  Settings → Configuration → Cost (or `RAG_MODEL_PRICES`), in dollars per
+  million tokens; the overview totals the window by model and each run shows
+  its cost. Tokens from unpriced models are listed, never counted as free
+  (#150).
 - **[Extending the agent](docs/extending.md)**, a guide to building on the
   template: adding a tool (with a worked `days_between` example that is tested
   and shown verbatim), changing chunking, switching the embedding model, and
