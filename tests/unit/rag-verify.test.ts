@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   citedIndices,
+  numberSentences,
   parseVerdict,
   splitSentences,
   stripUnsupported,
@@ -37,7 +38,20 @@ describe('citedIndices', () => {
   })
 })
 
+describe('numberSentences', () => {
+  it('puts one numbered sentence on each line', () => {
+    expect(
+      numberSentences(
+        'Here is what I found. Leave is 20 days [1]. It carries over.',
+      ),
+    ).toBe(
+      'S1: Here is what I found.\nS2: Leave is 20 days [1].\nS3: It carries over.',
+    )
+  })
+})
+
 describe('stripUnsupported', () => {
+  // Verdicts are sentence numbers (#127): S1, S2, S3 here.
   const answer =
     'The entitlement is 20 working days [1]. Parking is on Wellington Street [2]. That is all.'
 
@@ -45,31 +59,44 @@ describe('stripUnsupported', () => {
     const result = stripUnsupported(answer, [])
     expect(result.text).toBe(answer)
     expect(result.strippedIndices).toEqual([])
+    expect(result.strippedSentences).toBe(0)
     expect(result.empty).toBe(false)
   })
 
-  it('removes only the sentence whose citation was unsupported', () => {
+  it('removes only the sentence judged unsupported', () => {
     const result = stripUnsupported(answer, [2])
     expect(result.text).toContain('20 working days [1]')
     expect(result.text).not.toContain('Wellington Street')
     expect(result.strippedIndices).toEqual([2])
+    expect(result.strippedSentences).toBe(1)
     expect(result.empty).toBe(false)
   })
 
-  /**
-   * Stripping a sentence that still has a supported source behind it would
-   * discard a correct claim — a worse outcome than leaving a partly-shaky one.
-   */
-  it('keeps a sentence when only some of its citations are unsupported', () => {
-    const result = stripUnsupported('Both documents agree [2][3].', [3])
-    expect(result.text).toBe('Both documents agree [2][3].')
+  // #127: an uncited claim used to be kept without being checked.
+  it('removes an unsupported sentence that cites nothing', () => {
+    const result = stripUnsupported(
+      'Leave is 20 days [1]. Unused leave carries over indefinitely.',
+      [2],
+    )
+    expect(result.text).toBe('Leave is 20 days [1].')
     expect(result.strippedIndices).toEqual([])
+    expect(result.strippedSentences).toBe(1)
+    expect(result.empty).toBe(false)
+  })
+
+  it('keeps an answer with no citations when its sentences are supported', () => {
+    const result = stripUnsupported(
+      'Leave is 20 days. Unused leave carries over indefinitely.',
+      [2],
+    )
+    expect(result.text).toBe('Leave is 20 days.')
+    expect(result.empty).toBe(false)
   })
 
   it('keeps uncited connective prose alongside a surviving claim', () => {
     const result = stripUnsupported(
       'Here is what I found. The rule is X [1]. Parking is on Wellington Street [2].',
-      [2],
+      [3],
     )
     expect(result.text).toContain('Here is what I found.')
     expect(result.text).toContain('The rule is X [1].')
@@ -81,25 +108,12 @@ describe('stripUnsupported', () => {
    * Connective prose with every claim removed is not an answer. The caller must
    * refuse rather than show it — the fourth refusal entry point.
    */
-  it('reports empty when the prose survives but every claim was stripped', () => {
+  it('reports empty when the prose survives but every cited claim was stripped', () => {
     const result = stripUnsupported(
       'Here is what I found. The rule is X [1].',
-      [1],
+      [2],
     )
     expect(result.text).toBe('Here is what I found.')
-    expect(result.empty).toBe(true)
-  })
-
-  /**
-   * A claim and its connective lead-in in ONE sentence go together — there is
-   * no supported fragment left to keep, so the whole sentence goes.
-   */
-  it('strips a whole sentence when its lead-in and only claim share it', () => {
-    const result = stripUnsupported(
-      'Here is what I found: the rule is X [1].',
-      [1],
-    )
-    expect(result.text).toBe('')
     expect(result.empty).toBe(true)
   })
 
@@ -108,6 +122,14 @@ describe('stripUnsupported', () => {
     expect(result.text).toBe('')
     expect(result.empty).toBe(true)
     expect(result.strippedIndices).toEqual([1, 2])
+    expect(result.strippedSentences).toBe(2)
+  })
+
+  it('ignores a sentence number past the end of the answer', () => {
+    const result = stripUnsupported('The rule is X [1].', [5])
+    expect(result.text).toBe('The rule is X [1].')
+    expect(result.strippedSentences).toBe(0)
+    expect(result.empty).toBe(false)
   })
 })
 

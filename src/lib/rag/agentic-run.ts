@@ -27,7 +27,7 @@ import {
 } from './retrieve'
 import { routeTurn } from './route-intent'
 import { resolveScope } from './scope'
-import { VERIFY_SYSTEM_PROMPT, parseVerdict } from './verify'
+import { VERIFY_SYSTEM_PROMPT, numberSentences, parseVerdict } from './verify'
 
 export type AgenticPhase = 'routing' | 'searching' | 'drafting' | 'verifying'
 
@@ -473,18 +473,6 @@ export function withFigureReadings(
 }
 
 /**
- * Check that each cited passage supports what the answer claims about it.
- *
- * One batched call, never a redraft loop — an unbounded verify-redraft cycle is
- * the same failure mode as an unbounded search loop, moved one step later
- * (spec 0029 FR6).
- *
- * Returns the citation indices judged unsupported. Any failure returns an empty
- * list, i.e. it fails OPEN: the gate on whether an answer may be shown at all
- * is the similarity floor, which has already run. A flaky verification call
- * must not be able to turn a correctly-grounded answer into a refusal.
- */
-/**
  * Deadline for citation verification, one attempt (#42).
  *
  * Verification runs after the answer has streamed and fails open (no verdict =
@@ -496,7 +484,20 @@ export function withFigureReadings(
  */
 export const VERIFY_TIMEOUT_MS = 12_000
 
-export async function verifyCitations(
+/**
+ * Check that each sentence of the answer is supported by the sources.
+ *
+ * One batched call, never a redraft loop — an unbounded verify-redraft cycle is
+ * the same failure mode as an unbounded search loop, moved one step later
+ * (spec 0029 FR6). The verifier sees the answer as numbered sentences, so an
+ * uncited sentence is judged against all the sources (#127).
+ *
+ * Returns the 1-based sentence numbers judged unsupported. Any failure returns
+ * an empty list, i.e. it fails OPEN: the gate on whether an answer may be shown
+ * at all is the similarity floor, which has already run. A flaky verification
+ * call must not be able to turn a correctly-grounded answer into a refusal.
+ */
+export async function verifyAnswer(
   answer: string,
   chunks: readonly RetrievedChunk[],
   signal: AbortSignal,
@@ -519,7 +520,7 @@ export async function verifyCitations(
         { role: 'system', content: VERIFY_SYSTEM_PROMPT },
         {
           role: 'user',
-          content: `Sources:\n<<<SOURCES-${fenceId}\n${sources}\nSOURCES-${fenceId}>>>\n\nAnswer:\n${answer}`,
+          content: `Sources:\n<<<SOURCES-${fenceId}\n${sources}\nSOURCES-${fenceId}>>>\n\nAnswer, one sentence per line:\n${numberSentences(answer)}`,
         },
       ],
       {

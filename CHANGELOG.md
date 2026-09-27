@@ -8,6 +8,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Every grounded answer is now checked against its sources, not only answers
+  from the agentic path, and a sentence without a citation is checked too. An
+  invented claim with no `[n]` used to reach the user unchecked (#127).
+
 ### Security
 
 - The helper that removes a deleted user's stored files is no longer

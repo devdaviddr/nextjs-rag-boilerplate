@@ -46,7 +46,7 @@ import {
 import {
   type AgenticResult,
   runAgenticRetrieval,
-  verifyCitations,
+  verifyAnswer,
 } from '@/lib/rag/agentic-run'
 import type { RetrievedChunk } from '@/lib/rag/retrieve'
 import { resolvePermittedKnowledgeBaseIds } from '@/lib/rag/kb-scope'
@@ -711,7 +711,9 @@ async function answer(request: Request, requestId: string) {
         await persistAnswer(answer, metrics)
         send({ type: 'metrics', metrics })
 
-        // Verify citations (spec 0029 FR6), after the answer is readable.
+        // Verify the answer (spec 0029 FR6), after it is readable. Every
+        // grounded answer, fixed path included (#127): the fixed path cites
+        // sources just the same, and can blur them just the same.
         //
         // This runs AFTER streaming rather than before it. Verifying first
         // would mean buffering the whole answer, which kills token streaming
@@ -719,26 +721,19 @@ async function answer(request: Request, requestId: string) {
         // a permanent regression to prevent a brief exposure that the revision
         // then removes. The PERSISTED record is always the verified text, so
         // reopening the thread never shows an unsupported claim.
-        if (
-          retrievalMode === 'agentic' &&
-          citations.length > 0 &&
-          answer.trim()
-        ) {
+        if (citations.length > 0 && answer.trim()) {
           send({ type: 'step', phase: 'verifying' })
           const unsupported = await span('verify', async (step) => {
-            const found = await verifyCitations(
-              answer,
-              retrieved,
-              request.signal,
-            )
+            const found = await verifyAnswer(answer, retrieved, request.signal)
             step.set({ unsupported: found.length })
             return found
           })
           const verified = stripUnsupported(answer, unsupported)
-          if (verified.strippedIndices.length > 0) {
-            logger.warn('Stripped unsupported citations', {
+          if (verified.strippedSentences > 0) {
+            logger.warn('Stripped unsupported sentences', {
               userId,
               conversationId,
+              sentences: verified.strippedSentences,
               stripped: verified.strippedIndices,
             })
             answer = verified.empty ? NO_CONTEXT_ANSWER : verified.text

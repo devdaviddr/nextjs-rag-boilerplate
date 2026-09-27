@@ -91,8 +91,9 @@ you can search. [RAG](rag.md) walks through each step.
 `RAG_AGENTIC_ENABLED`, on by default. The model plans its own searches via a
 tool call, resolves conversational references, and can search again when the
 first attempt is thin, inside hard caps on searches, wall-clock and tokens.
-Citation verification then strips claims their sources do not support. It is
-roughly ten times slower and markedly better on follow-ups. The measured A/B is
+Citation verification then strips claims their sources do not support; it
+checks every grounded answer, on both paths. The agentic path is roughly ten
+times slower and markedly better on follow-ups. The measured A/B is
 in [RAG → The agentic path](rag.md#the-agentic-path).
 
 ### Choosing the provider and models from Settings

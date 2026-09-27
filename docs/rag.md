@@ -731,16 +731,16 @@ under the agentic path for why that was removed.
 `POST /api/chat` answers with newline-delimited JSON, one object per line, so
 the client acts on each as it arrives.
 
-| Frame          | When                                                                                            | Payload                                   |
-| -------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `conversation` | First, always                                                                                   | `conversationId`, `title`                 |
-| `step`         | Each phase change: `drafting` on both paths; `routing` / `searching` / `verifying` agentic only | `phase`, `iteration`                      |
-| `citations`    | Once evidence is gathered                                                                       | `citations[]`, before any prose           |
-| `token`        | Per streamed delta                                                                              | `value`                                   |
-| `revision`     | If verification stripped anything                                                               | `value`, the full corrected answer        |
-| `metrics`      | As soon as drafting ends; the answer is saved and the composer unlocks                          | tokens, tok/s, time to first token, model |
-| `error`        | Instead of an answer                                                                            | `message`                                 |
-| `done`         | Last, always                                                                                    | —                                         |
+| Frame          | When                                                                                              | Payload                                   |
+| -------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `conversation` | First, always                                                                                     | `conversationId`, `title`                 |
+| `step`         | Each phase change: `drafting` and `verifying` on both paths; `routing` / `searching` agentic only | `phase`, `iteration`                      |
+| `citations`    | Once evidence is gathered                                                                         | `citations[]`, before any prose           |
+| `token`        | Per streamed delta                                                                                | `value`                                   |
+| `revision`     | If verification stripped anything                                                                 | `value`, the full corrected answer        |
+| `metrics`      | As soon as drafting ends; the answer is saved and the composer unlocks                            | tokens, tok/s, time to first token, model |
+| `error`        | Instead of an answer                                                                              | `message`                                 |
+| `done`         | Last, always                                                                                      | —                                         |
 
 Drafting is retried once if the model produces no prose. The upstream can also
 answer `200` and then send an error _as a frame_,
@@ -770,7 +770,7 @@ that into questions, because the two paths spend it very differently.
 
 | Path    | Upstream calls per question                                    | Questions per minute, roughly |
 | ------- | -------------------------------------------------------------- | ----------------------------- |
-| Fixed   | 1 embedding + 1 chat stream                                    | ~20                           |
+| Fixed   | 1 embedding + 1 chat stream + 1 verify                         | ~13                           |
 | Agentic | 1–3 planner calls + 1 embedding per search + 1 chat + 1 verify | **~5–8**                      |
 
 This has two consequences. Running the E2E suite with the agentic path on
@@ -1432,9 +1432,13 @@ tried three phrasings and surfaced a chunk at **0.358**, just above the 0.35
 floor. The fixed pipeline refuses that question outright.
 
 That is why **citation verification** exists. It is a second model pass over
-the finished answer that asks whether the cited sources actually support each
+the finished answer that asks whether the sources actually support each
 sentence, strips unsupported sentences, and sends a corrected version as a
-`revision` frame. It is also why refusal accuracy is a hard gate instead of a
+`revision` frame. It runs on every grounded answer, fixed path included, and
+sees the answer as numbered sentences: a cited sentence is judged against the
+sources it cites, and an uncited one against all of them, so a claim without a
+`[n]` cannot slip through. Connective prose and sentences saying what the
+documents don't cover are never stripped. It is also why refusal accuracy is a hard gate instead of a
 number on a report.
 
 **The gate fired.** The first A/B put agentic refusal accuracy at **0.667**
