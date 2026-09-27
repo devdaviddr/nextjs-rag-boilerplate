@@ -424,6 +424,23 @@ The other half of scoping, restricting the search to the conversation's
 knowledge bases, applies the same idea to the `WHERE` clause. The details are in
 [Scoping: which knowledge bases](#scoping-which-knowledge-bases) under the hood.
 
+### Asking which documents there are
+
+"What documents do you have?" is about the list, not about anything a
+passage says, so a search cannot answer it. Such a question is caught by a
+narrow pattern (`src/lib/rag/list-intent.ts`) and answered from the built-in
+`list_documents` tool: the ready documents in the conversation's knowledge
+bases, with their type, size and knowledge base. There is no search and no
+planner call, the answer shows "Answered with list_documents", and its
+metrics say "document list". A question that asks which documents _say_
+something ("which documents mention overtime?") searches as usual.
+
+The planner is always offered `list_documents` too, so a mixed question
+("list my documents, and which one covers leave?") can use it. Being built
+in, it does not send every question through the planner the way a
+registered tool does. Like every tool, it takes the user and the knowledge
+bases from the conversation, never from the model (#168).
+
 ### Hybrid retrieval — dense and lexical, fused
 
 A content question is searched two ways at once, because each way fails where

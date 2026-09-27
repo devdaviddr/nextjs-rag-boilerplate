@@ -8,6 +8,7 @@ import { beginSpan, span } from '@/lib/observability/runs'
 import type { AgenticResult, runAgenticRetrieval } from './agentic-run'
 import type { ChatMessage } from './client'
 import { NO_CONTEXT_ANSWER } from './constants'
+import { hasDocumentListIntent } from './list-intent'
 import { planRoute } from './plan-route'
 import { type ToolOutput, buildUserMessage, systemPrompt } from './prompt'
 import type {
@@ -35,7 +36,8 @@ import { stripUnsupported } from './verify'
  * fixed answer is returned.
  */
 
-export type RetrievalMode = 'search' | 'document' | 'agentic'
+/** `list`: answered from the document list, with no search (#168). */
+export type RetrievalMode = 'search' | 'document' | 'agentic' | 'list'
 
 /** What `gatherEvidence` found, and how. */
 export interface Evidence {
@@ -45,6 +47,8 @@ export interface Evidence {
   agentic: AgenticResult | null
   /** A whole-document request that read only part of a long document (#99). */
   coverage?: { shown: number; total: number }
+  /** What a tool returned outside the planner: the document list (#168). */
+  toolResults?: ToolOutput[]
 }
 
 export interface Question {
@@ -67,6 +71,11 @@ export interface EvidenceDeps {
   retrieveForOwner: typeof retrieveForOwner
   retrieveWholeDocument: typeof retrieveWholeDocument
   runAgenticRetrieval: typeof runAgenticRetrieval
+  /** The documents in scope, as text (#168). Defaults to `list_documents`. */
+  listDocuments?: (
+    userId: string,
+    permittedKbIds: readonly string[],
+  ) => Promise<string>
   /**
    * Whether any tool is registered (spec 0044 FR2). Tools exist only on the
    * agentic path, so with any registered every question is planned.
@@ -98,6 +107,27 @@ export async function gatherEvidence(
   // prevents the latter from getting this far.
   if (permittedKbIds.length === 0) {
     return { chunks: [], mode: 'search', agentic: null }
+  }
+
+  // "What documents do you have?" (#168): no passage is about the list, so
+  // it is answered from the built-in tool, with no search and no planner.
+  if (hasDocumentListIntent(question)) {
+    const text = await (deps.listDocuments ?? documentListText)(
+      userId,
+      permittedKbIds,
+    )
+    logger.info('Called tool list_documents', {
+      category: 'agent',
+      tool: 'list_documents',
+      arguments: {},
+      result: text.slice(0, 280),
+    })
+    return {
+      chunks: [],
+      mode: 'list',
+      agentic: null,
+      toolResults: [{ name: 'list_documents', text }],
+    }
   }
 
   const settings = deps.settings()
@@ -162,6 +192,15 @@ export async function gatherEvidence(
     agentic: null,
     coverage: { shown: whole.chunks.length, total: whole.totalChunks },
   }
+}
+
+/** The documents in scope as text, from the built-in tool (#168). */
+async function documentListText(
+  userId: string,
+  permittedKbIds: readonly string[],
+): Promise<string> {
+  const { listDocumentsText } = await import('./tools/list-documents')
+  return listDocumentsText(userId, permittedKbIds)
 }
 
 /** Where the answer is saved. */
@@ -352,7 +391,7 @@ export async function answerQuestion(
     //
     // A registered tool's result is evidence too (spec 0044 FR9). With no
     // tools registered this is exactly the old condition.
-    const toolResults = agentic?.toolResults ?? []
+    const toolResults = evidence.toolResults ?? agentic?.toolResults ?? []
     if (retrieved.length === 0 && toolResults.length === 0) {
       state.answer = NO_CONTEXT_ANSWER
       io.send({ type: 'token', value: state.answer })
@@ -413,7 +452,12 @@ export async function answerQuestion(
       }
       const upstream = await deps.chatStream(
         [
-          { role: 'system', content: systemPrompt(!!agentic?.toolResults) },
+          {
+            role: 'system',
+            content: systemPrompt(
+              !!agentic?.toolResults || toolResults.length > 0,
+            ),
+          },
           {
             role: 'user',
             // The planner's reading of a follow-up, so the writer knows what
@@ -425,7 +469,7 @@ export async function answerQuestion(
               // And, for a long document, that it read only part (#99).
               agentic?.coverage ?? evidence.coverage,
               // What registered tools returned (spec 0044 FR6).
-              agentic?.toolResults,
+              toolResults,
             ),
           },
         ],
@@ -584,7 +628,7 @@ export async function answerQuestion(
           state.answer,
           retrieved,
           signal,
-          agentic?.toolResults,
+          toolResults,
         )
         step.set({ unsupported: found.length })
         return found

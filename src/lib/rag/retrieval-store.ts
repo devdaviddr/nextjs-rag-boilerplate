@@ -295,6 +295,53 @@ export async function readyDocuments(
   return Array.from(rows).map((r) => ({ id: r.id, title: r.title }))
 }
 
+/** A ready document as the `list_documents` tool describes it (#168). */
+export interface ListedDocument {
+  title: string
+  knowledgeBase: string
+  mimeType: string | null
+  /** Pages for a PDF, sections for other formats. */
+  pageCount: number | null
+  sourceUrl: string | null
+}
+
+interface ListedDocumentRow extends Record<string, unknown> {
+  title: string
+  knowledge_base: string
+  mime_type: string | null
+  page_count: number | null
+  source_url: string | null
+}
+
+/**
+ * The ready documents a conversation can read, by knowledge base then title.
+ * Scoped like every query here: owner and the permitted knowledge bases.
+ */
+export async function listedDocuments(
+  ownerId: string,
+  knowledgeBaseIds: readonly string[],
+): Promise<ListedDocument[]> {
+  const rows = await db.execute<ListedDocumentRow>(sql`
+    SELECT d.title AS title, kb.name AS knowledge_base,
+           fl.mime_type AS mime_type, d.page_count AS page_count,
+           d.source_url AS source_url
+    FROM documents d
+    JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
+    LEFT JOIN files fl ON fl.id = d.file_id
+    WHERE d.owner_id = ${ownerId}
+      AND d.status = 'ready'
+      AND d.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
+    ORDER BY lower(kb.name), lower(d.title)
+  `)
+  return Array.from(rows).map((r) => ({
+    title: r.title,
+    knowledgeBase: r.knowledge_base,
+    mimeType: r.mime_type,
+    pageCount: r.page_count === null ? null : Number(r.page_count),
+    sourceUrl: r.source_url,
+  }))
+}
+
 /** A document's chunks as ids and positions only, without their text (#99). */
 export async function documentOutline(
   ownerId: string,

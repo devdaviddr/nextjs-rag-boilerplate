@@ -6,18 +6,18 @@ export type { AgentTool, AnyAgentTool, ToolContext, ToolResult } from './types'
 
 /**
  * The tools the agentic planner may call, besides the built-in
- * `search_documents` and `read_figure` (spec 0044).
+ * `search_documents`, `read_figure` and `list_documents` (spec 0044, #168).
  *
  * Empty by default, so the planner's behaviour is exactly as measured. Add
  * yours here; `docs/extending.md` walks through writing one, and
- * `./examples/list-documents.ts` is a complete example.
+ * `./examples/days-between.ts` is a complete example.
  */
 export const agentTools: AnyAgentTool[] = [
-  // listDocumentsTool,
+  // daysBetweenTool,
 ]
 
 /** Names the built-in tools own; a registered tool may not take them. */
-const BUILT_IN = new Set(['search_documents', 'read_figure'])
+const BUILT_IN = new Set(['search_documents', 'read_figure', 'list_documents'])
 
 /**
  * The registry by name, checked: a duplicate name, or one that shadows a

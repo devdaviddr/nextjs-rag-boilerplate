@@ -59,6 +59,8 @@ there is no answer, and you can only ever retrieve your own documents.
   under rules that stop it reaching private or internal addresses, and
   citations link back to the page. Refresh fetches it again
   ([Web pages by URL](rag.md#web-pages-by-url)).
+- Ask which documents the agent can see ("what documents do you have?") and
+  get the list, from the built-in `list_documents` tool, without a search.
 - Hold conversations scoped to a set of knowledge bases. The scope is fixed when
   the thread is created, so every message in it has one auditable scope.
 - Read streamed Markdown answers with clickable page-level citations that open

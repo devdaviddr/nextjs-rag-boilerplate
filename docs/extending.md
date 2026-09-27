@@ -83,8 +83,9 @@ a built-in fails `pnpm test`.)
   user's id, the knowledge bases this conversation may read, and a signal that
   ends when the agent's time budget does. It comes from the session, never
   from the model. A tool that reads data must scope it by `context.userId`, or
-  one user's question can reach another user's data. `list-documents.ts` in
-  the same folder shows a tool that reads the database this way.
+  one user's question can reach another user's data. The built-in
+  `list_documents` tool (`src/lib/rag/tools/list-documents.ts`) reads the
+  database this way.
 - **A tool result is evidence.** It can answer a question on its own, and the
   answer is checked against it. A question where no tool ran and no document
   passage is relevant enough is still refused without calling the model.

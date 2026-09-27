@@ -28,7 +28,7 @@ export interface MessageMetrics {
   /** How many chunks were fed to the model. */
   sourceCount: number
   /** 'search' (similarity) or 'document' (whole-document request). */
-  retrieval: 'search' | 'document' | 'agentic'
+  retrieval: 'search' | 'document' | 'agentic' | 'list'
   /** Registered tools whose results the answer was written from (#164). */
   tools?: string[]
 }
@@ -41,7 +41,7 @@ export interface MetricsInput {
   firstTokenAt: number | null
   finishedAt: number
   sourceCount: number
-  retrieval: 'search' | 'document' | 'agentic'
+  retrieval: 'search' | 'document' | 'agentic' | 'list'
 }
 
 export function computeMetrics(input: MetricsInput): MessageMetrics {
@@ -115,7 +115,9 @@ export function formatMetrics(metrics: MessageMetrics): string[] {
       ? 'whole document'
       : metrics.retrieval === 'agentic'
         ? 'agentic search'
-        : 'similarity search',
+        : metrics.retrieval === 'list'
+          ? 'document list'
+          : 'similarity search',
   )
   parts.push(shortModelName(metrics.model))
   return parts
