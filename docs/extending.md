@@ -94,7 +94,10 @@ a built-in fails `pnpm test`.)
   offered. While any tool is registered, every question goes to the planner,
   whatever `RAG_AGENTIC_ROUTE` says.
 - **A tool that throws** is logged and becomes a failed step; the answer still
-  comes. Each call shows in the chat's Agent activity drawer.
+  comes. Each call shows in the chat's Agent activity drawer, and an answer
+  that used a tool says so under it ("Answered with …").
+- **The planner may search first.** It often searches the documents before it
+  reaches for a tool, and each search costs a step too.
 - **A tool that changes things** (sends an email, writes a row) is yours to
   authorise: check `context.userId` may do it before you do it. The model
   decides when to call it, and the model can be talked into things by the

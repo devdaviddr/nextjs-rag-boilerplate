@@ -686,6 +686,8 @@ export interface StoredMetrics {
   tokensPerSecond: number | null
   sourceCount: number
   retrieval: 'search' | 'document' | 'agentic'
+  /** Registered tools the answer used (#164); absent when none. */
+  tools?: string[]
 }
 
 export const conversations = pgTable(

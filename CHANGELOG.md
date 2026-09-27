@@ -10,6 +10,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- An answer that used a registered tool says so ("Answered with …"), kept with
+  the message, and the Agent activity drawer shows each tool call and what it
+  returned (#164).
 - **Word, HTML and Markdown documents.** A knowledge base takes `.docx`,
   `.html`, `.md` and `.txt` files as well as PDFs. Each is split into sections
   at its headings and answers with a citation that shows the section's text.

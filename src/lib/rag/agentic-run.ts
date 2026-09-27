@@ -324,6 +324,7 @@ export async function runAgenticRetrieval(input: {
               iteration: steps.length + 1,
               action: decision?.action ?? null,
               query: decision?.query,
+              tool: decision?.tool?.name,
               parallel: parallel.map((d) => d.query),
               tokens: used,
               finishReason: choice.finish_reason,

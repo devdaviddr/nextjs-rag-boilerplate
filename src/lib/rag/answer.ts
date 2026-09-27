@@ -554,6 +554,11 @@ export async function answerQuestion(
       sourceCount: citations.length,
       retrieval: state.mode,
     })
+    // Which tools the answer drew on, kept with it (#164): a number from a
+    // tool must not look like it came from nowhere.
+    if (toolResults.length > 0) {
+      metrics.tools = [...new Set(toolResults.map((t) => t.name))]
+    }
     await store.save(state.answer, metrics)
     io.send({ type: 'metrics', metrics })
 

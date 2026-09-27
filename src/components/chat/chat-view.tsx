@@ -722,6 +722,21 @@ export function ChatView({
                             ))}
                           </div>
                         )}
+                        {message.metrics?.tools?.length ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-muted-foreground text-xs">
+                              Answered with
+                            </span>
+                            {message.metrics.tools.map((tool) => (
+                              <span
+                                key={tool}
+                                className="rounded-full border px-2.5 py-1 font-mono text-xs"
+                              >
+                                {tool}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         {message.metrics && (
                           <p className="text-muted-foreground mt-2 text-xs">
                             {formatMetrics(message.metrics).join(' · ')}

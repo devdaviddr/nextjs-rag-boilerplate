@@ -29,6 +29,8 @@ export interface MessageMetrics {
   sourceCount: number
   /** 'search' (similarity) or 'document' (whole-document request). */
   retrieval: 'search' | 'document' | 'agentic'
+  /** Registered tools whose results the answer was written from (#164). */
+  tools?: string[]
 }
 
 export interface MetricsInput {

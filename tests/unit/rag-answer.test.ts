@@ -166,6 +166,8 @@ describe('answerQuestion', () => {
       [{ name: 'list_documents', text: '- handbook' }],
     )
     expect(t.outcomes[0]!.status).toBe('ok')
+    // #164: the tools an answer used are kept with it.
+    expect(t.inserted[0]!.metrics).toMatchObject({ tools: ['list_documents'] })
   })
 
   it('still refuses with neither a passage nor a tool result', async () => {
