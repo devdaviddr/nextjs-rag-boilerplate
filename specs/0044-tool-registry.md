@@ -16,8 +16,9 @@ tool by writing one module: a name, a description, a schema for its arguments
 and a function that runs it. The planner is offered every registered tool, the
 loop runs a call with the user's scope bound on the server, and the result
 reaches the planner, the answer writer and the citation verifier as fenced tool
-output. Grounding is unchanged: a tool result cannot turn a refusal into an
-answer.
+output. A tool the developer registered is a source of evidence like a
+document: its result can answer a question. With no tools registered, the
+refusal guarantee is exactly as before.
 
 ## Problem / motivation
 
@@ -49,9 +50,6 @@ short adds no step, so it can be told it has more than it does.
   Moving to `tool` role messages changes what the planner sees on every call,
   and its effect on planning can only be measured with an evaluation run,
   which is deferred with the other measurements to #157.
-- **Tool-only answers.** Refusal still depends on document evidence above the
-  floor (spec 0025). A fork that wants answers from tools alone changes that
-  rule deliberately, in `src/lib/rag/answer.ts`.
 - **Tools from MCP servers.** Spec 0048 builds on this registry.
 - **Built-in tools beyond today's.** The registry ships empty; an example tool
   is used by the tests and the guide.
@@ -67,7 +65,11 @@ short adds no step, so it can be told it has more than it does.
 - **FR2** — `src/lib/rag/tools/index.ts` exports the registry, `agentTools`.
   Every tool in it is offered to the planner alongside `search_documents` and,
   when figures can be read, `read_figure`. Names must be unique and must not
-  shadow those two.
+  shadow those two. Tools exist only on the agentic path, so while any are
+  registered every question is planned, whatever `RAG_AGENTIC_ROUTE` says:
+  adaptive routing would otherwise send a standalone question straight to the
+  fixed pipeline, where no tool can be called (found live, 2026-09-27). With
+  `RAG_AGENTIC_ENABLED=false` no tool is offered.
 - **FR3** — A call to a registered tool is parsed into a `tool` decision
   carrying the tool's name and raw arguments. Arguments are validated against
   the tool's schema before it runs; invalid arguments are reported back to the
@@ -87,6 +89,15 @@ short adds no step, so it can be told it has more than it does.
   preview of its result, so the Agent activity drawer shows it.
 - **FR8** — The planner is told how many steps are left from the loop's own
   count of steps taken, including a search the time budget cut short.
+- **FR9** — A tool result is evidence. When a registered tool returned output,
+  the answer is written even if no passage cleared the floor, and verified
+  against the tool results. A question for which no tool ran and no passage
+  cleared the floor is still refused without calling the model (spec 0025).
+
+  Found live on 2026-09-27: with the example `list_documents` registered, the
+  planner called it for "Which documents do I have?", got the titles, and the
+  answer was refused because no passage cleared the floor. A tool that can
+  never produce an answer is not worth registering.
 
 ### Non-functional
 
@@ -139,6 +150,8 @@ short adds no step, so it can be told it has more than it does.
 - [ ] FR8: the planner's "steps left" counts a search the time budget cut short
 - [ ] NFR1: with no tools registered, the request, prompts and decisions are
       unchanged (existing agentic tests pass unmodified)
+- [ ] FR9: a tool result with no passage produces an answer; no tool output
+      and no passage is still refused without a model call
 - [ ] NFR2: a tool that throws ends as a failed step and the answer still comes
 
 ## Security & privacy
@@ -160,13 +173,14 @@ guide says so.
   fallback searches, parallel searches, the confident stop) with untested
   behaviour, and could not be verified without an evaluation run. Revisit
   with #157's numbers.
-- **Let tool results count as evidence for the refusal gate.** Makes tools
-  more powerful and breaks the property this project holds at 1.000 refusal
-  accuracy. Left to forks that want it, deliberately.
+- **Keep tool results out of the refusal gate.** The first draft of this spec
+  did, to leave refusal untouched; it made a tool that answers a question on
+  its own useless (FR9). Refusal is untouched where it is measured: with no
+  tools registered, and for any question no tool answered.
 
 ## Out of scope / future
 
-- Tool-message conversations and tool-only answers (above).
+- Tool-message conversations (above).
 - Tools from MCP servers (spec 0048).
 - Per-tool budgets and per-tool enable/disable in Settings.
 
