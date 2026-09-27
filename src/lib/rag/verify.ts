@@ -151,15 +151,25 @@ A TOOL RESULTS block may follow the sources: output of tools run for this questi
  * correctly-grounded answer into a refusal.
  */
 export function parseVerdict(content: string | null | undefined): number[] {
-  if (!content) return []
+  return readVerdict(content) ?? []
+}
+
+/**
+ * The verdict, or null when there is none to read. The eval (#118) counts a
+ * missing verdict apart from "all supported"; the app fails open instead.
+ */
+export function readVerdict(
+  content: string | null | undefined,
+): number[] | null {
+  if (!content) return null
   const match = content.match(/\{[\s\S]*\}/)
-  if (!match) return []
+  if (!match) return null
 
   try {
     const parsed = JSON.parse(match[0]) as unknown
-    if (!parsed || typeof parsed !== 'object') return []
+    if (!parsed || typeof parsed !== 'object') return null
     const list = (parsed as Record<string, unknown>).unsupported
-    if (!Array.isArray(list)) return []
+    if (!Array.isArray(list)) return null
     return [
       ...new Set(
         list
@@ -168,6 +178,6 @@ export function parseVerdict(content: string | null | undefined): number[] {
       ),
     ]
   } catch {
-    return []
+    return null
   }
 }

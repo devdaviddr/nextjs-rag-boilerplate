@@ -26,7 +26,14 @@ import {
   aiSettings,
   refreshAiSettings,
 } from '@/lib/ai-settings'
-import { runAgenticRetrieval } from '@/lib/rag/agentic-run'
+import { runAgenticRetrieval, verifyMessages } from '@/lib/rag/agentic-run'
+import { readVerdict } from '@/lib/rag/verify'
+import {
+  type Verification,
+  formatPrecision,
+  precisionBySlice,
+  scoreVerification,
+} from './precision'
 import { buildEmbeddingText } from '@/lib/rag/chunk'
 import { createChatCompletion } from '@/lib/rag/client'
 import { chunksFromPdf } from '@/lib/rag/crack'
@@ -348,10 +355,23 @@ interface LeakDetail {
 interface AnswerCheck {
   questionId: string
   question: string
+  /** The question's slice, for per-slice precision (#118). */
+  type: string
+  /** Whether the question carries answer expectations to pass or fail. */
+  checked: boolean
   passed: boolean
   answer: string
   /** Which expectation failed, for a report that says what broke. */
   detail: string
+  /** What the answer was written from, so it can be re-scored (#119). */
+  sources?: Array<{
+    id: string
+    document: string
+    page: number
+    content: string
+  }>
+  /** The verifier's reading of the answer (#118). */
+  verification?: Verification
 }
 
 interface ComplementFailure {
@@ -896,16 +916,22 @@ async function runAnswerChecks(
 ): Promise<AnswerCheck[]> {
   const checks: AnswerCheck[] = []
 
+  // Every question that retrieved something is answered (#118, #119), so
+  // precision and the graded sample cover every slice. Pass/fail applies only
+  // where the question carries expectations.
   for (const q of questions) {
     const wants = q.answerMustContain ?? []
     const forbids = q.answerMustNotMatch
-    if (wants.length === 0 && !forbids) continue
+    const checked = wants.length > 0 || Boolean(forbids)
 
     const chunks = retrievedById.get(q.id) ?? []
     if (chunks.length === 0) {
+      if (!checked) continue
       checks.push({
         questionId: q.id,
         question: q.question,
+        type: q.type ?? 'single-hop',
+        checked,
         passed: !q.answerable,
         answer:
           '(nothing retrieved — the system refuses without calling the model)',
@@ -934,14 +960,24 @@ async function runAnswerChecks(
     checks.push({
       questionId: q.id,
       question: q.question,
+      type: q.type ?? 'single-hop',
+      checked,
       passed: missing.length === 0 && !forbidden,
       answer,
-      detail:
-        missing.length > 0
+      detail: !checked
+        ? 'no expectations'
+        : missing.length > 0
           ? `missing ${missing.map((m) => JSON.stringify(m)).join(', ')}`
           : forbidden
             ? `stated ${JSON.stringify(forbidden[0])}, which the documents never print`
             : 'ok',
+      sources: chunks.map((c) => ({
+        id: c.chunkId,
+        document: c.documentTitle,
+        page: c.pageNumber,
+        content: c.content,
+      })),
+      verification: await verifyStrictly(answer, chunks),
     })
 
     // Spaced out, same as the agentic pass: a free tier rate-limits rather
@@ -950,6 +986,51 @@ async function runAnswerChecks(
   }
 
   return checks
+}
+
+/**
+ * The app's verifier, read strictly (#118): the same request as
+ * `verifyAnswer`, with the client's usual retries, but a failed call or an
+ * unreadable reply is "no verdict" rather than the app's fail-open "all
+ * supported".
+ */
+async function verifyStrictly(
+  answer: string,
+  chunks: readonly RetrievedChunk[],
+): Promise<Verification> {
+  if (!answer) return scoreVerification(answer, null)
+  try {
+    const { choice } = await createChatCompletion(
+      verifyMessages(answer, chunks),
+      { role: 'planner', maxTokens: 500, temperature: 0 },
+    )
+    return scoreVerification(answer, readVerdict(choice.message?.content))
+  } catch {
+    return scoreVerification(answer, null)
+  }
+}
+
+/** Pass/fail lines, then precision per slice (#118). */
+function reportAnswers(checks: readonly AnswerCheck[]): void {
+  for (const check of checks.filter((c) => c.checked)) {
+    console.log(
+      `  ${check.passed ? 'PASS' : 'FAIL'}  ${check.questionId} — ${check.detail}`,
+    )
+    if (!check.passed) {
+      console.log(
+        `        answer: ${check.answer.replace(/\s+/g, ' ').slice(0, 220)}`,
+      )
+    }
+  }
+  const checked = checks.filter((c) => c.checked)
+  const failed = checked.filter((c) => !c.passed).length
+  console.log(
+    `  ${checked.length - failed}/${checked.length} answer checks passed`,
+  )
+  console.log('\nCitation precision (#118): verifier on every answer')
+  for (const line of formatPrecision(precisionBySlice(checks))) {
+    console.log(line)
+  }
 }
 
 interface CoreMetrics {
@@ -1699,20 +1780,7 @@ async function main(): Promise<void> {
   if (hasFlag('answers')) {
     console.log('\nAnswer checks — generating from the retrieved context:')
     answerChecks = await runAnswerChecks(questions, retrievedById)
-    for (const check of answerChecks) {
-      console.log(
-        `  ${check.passed ? 'PASS' : 'FAIL'}  ${check.questionId} — ${check.detail}`,
-      )
-      if (!check.passed) {
-        console.log(
-          `        answer: ${check.answer.replace(/\s+/g, ' ').slice(0, 220)}`,
-        )
-      }
-    }
-    const failed = answerChecks.filter((c) => !c.passed).length
-    console.log(
-      `  ${answerChecks.length - failed}/${answerChecks.length} answer checks passed`,
-    )
+    reportAnswers(answerChecks)
   }
 
   const baselineSummary = {
@@ -1758,6 +1826,9 @@ async function main(): Promise<void> {
     crossKbLeaks: leaks,
     crossKbComplementDetails: complementFailures,
     answerChecks,
+    answerPrecision: hasFlag('answers')
+      ? precisionBySlice(answerChecks)
+      : undefined,
     results: baselineResults,
   }
 
@@ -1932,20 +2003,7 @@ async function main(): Promise<void> {
         agenticRetrievedById,
         agenticResolvedById,
       )
-      for (const check of agenticAnswerChecks) {
-        console.log(
-          `  ${check.passed ? 'PASS' : 'FAIL'}  ${check.questionId} — ${check.detail}`,
-        )
-        if (!check.passed) {
-          console.log(
-            `        answer: ${check.answer.replace(/\s+/g, ' ').slice(0, 220)}`,
-          )
-        }
-      }
-      const failed = agenticAnswerChecks.filter((c) => !c.passed).length
-      console.log(
-        `  ${agenticAnswerChecks.length - failed}/${agenticAnswerChecks.length} answer checks passed`,
-      )
+      reportAnswers(agenticAnswerChecks)
     }
     const agenticLabel = explicitLabel ? `${label}-agentic` : 'agentic'
     const agenticSummary = {
@@ -1984,6 +2042,9 @@ async function main(): Promise<void> {
       summary: summaryMetrics(agenticResults),
       refusal: coreMetrics(agenticResults.filter((r) => r.type === 'refusal')),
       answerChecks: agenticAnswerChecks,
+      answerPrecision: hasFlag('answers')
+        ? precisionBySlice(agenticAnswerChecks)
+        : undefined,
       results: agenticResults,
     }
 

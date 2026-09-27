@@ -1202,6 +1202,30 @@ resolve on that path. `--compare --label <name>` saves `<name>.json` and
 with different settings (cracking on, say) does not overwrite the recorded
 baseline.
 
+`--answers` writes an answer for every question that retrieved something,
+with the app's own prompt, and keeps each answer's sources in the results
+file, so it can be re-scored later. Questions that carry `answerMustContain`
+or `answerMustNotMatch` also pass or fail on those.
+
+Every answer is then read by the app's verifier (#118), the same request as
+`verifyAnswer`, and the report prints **citation precision** per slice and
+pooled. **Support** is 1 − unsupported sentences / sentences; **citation
+precision** is the same over the sentences that carry a `[n]` citation. Two
+things to know when reading them:
+
+- **No verdict is counted apart.** The app's verifier fails open: a timeout or
+  an unreadable reply leaves the answer as it is. The eval reads the verdict
+  strictly and reports those answers in a `no-verdict` column, left out of the
+  rates, rather than scoring them as fully supported.
+- **The rates are a ceiling.** The verifier lists a sentence only when a
+  source "clearly does NOT support" it, so what it flags is a floor on
+  unsupported sentences, and the rates are at most what a careful reader would
+  give.
+
+It costs a verifier call per answer on top of the answer itself, about 80 of
+each per pass. The numbers are saved as `answerPrecision` next to
+`answerChecks` in `eval/results/<label>.json`.
+
 Two more question types sit outside the headline pool (#102). A **summary**
 question (`type: "summary"`) is a whole-document request that passes only when
 every page in `summaryPages` came back. Its questions run against

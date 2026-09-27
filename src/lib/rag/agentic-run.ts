@@ -23,7 +23,7 @@ import {
   effectiveFloor,
   runAgenticLoop,
 } from './agentic'
-import { createChatCompletion } from './client'
+import { type ChatMessage, createChatCompletion } from './client'
 import { READ_FIGURE_TOOL, readFigure } from './figure'
 import {
   type PlannerDecision,
@@ -560,15 +560,15 @@ export const VERIFY_TIMEOUT_MS = 12_000
  * at all is the similarity floor, which has already run. A flaky verification
  * call must not be able to turn a correctly-grounded answer into a refusal.
  */
-export async function verifyAnswer(
+/**
+ * The verifier's request, shared with the eval's copy (#118) so both ask
+ * exactly the same question.
+ */
+export function verifyMessages(
   answer: string,
   chunks: readonly RetrievedChunk[],
-  signal: AbortSignal,
-  /** Output of registered tools the planner called (spec 0044 FR6). */
   toolResults?: readonly ToolOutput[],
-): Promise<number[]> {
-  if (!answer.trim() || chunks.length === 0) return []
-
+): ChatMessage[] {
   // Fenced like the writer's context (#126): a source that told the verifier
   // to pass everything would switch the check off.
   const fenceId = newFenceId()
@@ -578,16 +578,27 @@ export async function verifyAnswer(
         `[${i + 1}] ${neutraliseFence(c.documentTitle, fenceId)}, page ${c.pageNumber}:\n${neutraliseFence(c.content, fenceId)}`,
     )
     .join('\n\n')
+  return [
+    { role: 'system', content: verifySystemPrompt(!!toolResults?.length) },
+    {
+      role: 'user',
+      content: `Sources:\n<<<SOURCES-${fenceId}\n${sources}\nSOURCES-${fenceId}>>>${toolResults?.length ? `\n\n${buildToolResultsBlock(toolResults)}` : ''}\n\nAnswer, one sentence per line:\n${numberSentences(answer)}`,
+    },
+  ]
+}
+
+export async function verifyAnswer(
+  answer: string,
+  chunks: readonly RetrievedChunk[],
+  signal: AbortSignal,
+  /** Output of registered tools the planner called (spec 0044 FR6). */
+  toolResults?: readonly ToolOutput[],
+): Promise<number[]> {
+  if (!answer.trim() || chunks.length === 0) return []
 
   try {
     const { choice } = await createChatCompletion(
-      [
-        { role: 'system', content: verifySystemPrompt(!!toolResults?.length) },
-        {
-          role: 'user',
-          content: `Sources:\n<<<SOURCES-${fenceId}\n${sources}\nSOURCES-${fenceId}>>>${toolResults?.length ? `\n\n${buildToolResultsBlock(toolResults)}` : ''}\n\nAnswer, one sentence per line:\n${numberSentences(answer)}`,
-        },
-      ],
+      verifyMessages(answer, chunks, toolResults),
       {
         role: 'planner',
         maxTokens: 500,
