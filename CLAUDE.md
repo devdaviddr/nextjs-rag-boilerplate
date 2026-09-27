@@ -30,6 +30,7 @@ pnpm test | test:e2e                     # Vitest (tests/unit) · Playwright (te
 pnpm docker:db                           # local Postgres
 pnpm db:generate | db:migrate | db:seed | db:studio
 pnpm gen:icons                           # regenerate PWA icons
+pnpm gen:screenshots                     # README screenshots (dark), from a local prod build
 pnpm specs:index | specs:check           # regenerate · verify the spec index
 pnpm docs:check                          # in-app docs: index + every link/anchor
 pnpm release:next | release:check        # suggest the next version · check a release
