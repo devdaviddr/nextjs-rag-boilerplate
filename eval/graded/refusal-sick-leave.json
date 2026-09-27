@@ -1,0 +1,32 @@
+{
+  "questionId": "refusal-sick-leave",
+  "type": "refusal",
+  "question": "How many days of sick leave do I get?",
+  "answer": "The provided context does not contain any information about sick leave entitlement. It only describes the annual leave policy (20 working days per calendar year, no carryover, etc.). Therefore, I cannot answer how many days of sick leave you get from the given sources.",
+  "sources": [
+    {
+      "id": "06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e",
+      "document": "staff-handbook",
+      "page": 1,
+      "content": "STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE\nPolicy reference POL-HR-014.\nThe annual leave entitlement is 20 working days per calendar year.\nUnused leave does not carry over into the following year.\nLeave must be approved by your manager at least two weeks in advance.\nLeave requests during the December shutdown are not accepted."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 2,
+        "text": "It only describes the annual leave policy (20 working days per calendar year, no carryover, etc.).",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "completenessNote": "Declines sick leave correctly; S1 and S3 are not claims.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

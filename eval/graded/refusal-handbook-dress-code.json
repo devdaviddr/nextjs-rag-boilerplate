@@ -1,0 +1,45 @@
+{
+  "questionId": "refusal-handbook-dress-code",
+  "type": "refusal",
+  "question": "What is the dress code in the staff handbook?",
+  "answer": "The staff handbook does not provide a general dress‑code policy. It only notes that wardens must wear high‑visibility vests during safety duties [1]. No other clothing requirements are mentioned.",
+  "sources": [
+    {
+      "id": "a224ddbc-0b59-4266-b40d-48aedfb53477",
+      "document": "staff-handbook",
+      "page": 3,
+      "content": "STAFF HANDBOOK - SECTION 3 - WORKPLACE SAFETY\nThe fire assembly point is the grassed area on Wellington Street.\nWardens wear high visibility vests and take a roll call.\nIncidents must be reported to the safety officer within 24 hours."
+    },
+    {
+      "id": "0878b922-08a2-45f9-ba56-064bfbb79f38",
+      "document": "staff-handbook",
+      "page": 2,
+      "content": "STAFF HANDBOOK - SECTION 2 - EXPENSES\nPolicy reference POL-FIN-022.\nReimbursement for travel must be submitted within 30 days of the trip.\nOriginal receipts must be attached to every claim.\nClaims over 500 dollars require director approval before payment.\nMileage is reimbursed at 78 cents per kilometre."
+    },
+    {
+      "id": "f2b03cb7-3a87-438e-90fb-d793114417ca",
+      "document": "staff-handbook",
+      "page": 4,
+      "content": "STAFF HANDBOOK - SECTION 4 - INFORMATION TECHNOLOGY\nPasswords must be at least 14 characters and are rotated annually.\nPersonal devices may access email but not the finance system.\nReport suspected phishing to the service desk immediately."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 2,
+        "text": "It only notes that wardens must wear high‑visibility vests during safety duties [1].",
+        "faithfulness": 2,
+        "note": "'during safety duties' is a fair reading of the workplace-safety section."
+      }
+    ],
+    "completeness": 2,
+    "completenessNote": "S1 and S3 say what the handbook lacks; not claims.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "questionId": "multi-hop-breach-and-audit",
+  "type": "multi-hop",
+  "question": "What happens after a second breach, and how quickly must high audit findings be closed?",
+  "answer": "The context does not specify what occurs after a second breach. It only states that audit findings rated high must be closed within 7 days【1】.",
+  "sources": [
+    {
+      "id": "28fc62e3-9752-4815-aa71-f7021d1c0b65",
+      "document": "contractor-safety-manual",
+      "page": 27,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS\nThe Site Safety Office audits each contractor at least once a quarter.\nAudit findings rated high must be closed within 7 days."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 2,
+        "text": "It only states that audit findings rated high must be closed within 7 days【1】.",
+        "faithfulness": 2,
+        "note": "Cites with 【1】 (full-width brackets), which citedIndices does not read."
+      }
+    ],
+    "completeness": 2,
+    "completenessNote": "The breach half is not in the retrieved sources (section 28 was not retrieved), so saying so is complete against them.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "questionId": "fire-assembly",
+  "type": "single-hop",
+  "question": "Where is the fire assembly point?",
+  "answer": "The fire assembly point is the grassed area on Wellington Street. [1]",
+  "sources": [
+    {
+      "id": "a224ddbc-0b59-4266-b40d-48aedfb53477",
+      "document": "staff-handbook",
+      "page": 3,
+      "content": "STAFF HANDBOOK - SECTION 3 - WORKPLACE SAFETY\nThe fire assembly point is the grassed area on Wellington Street.\nWardens wear high visibility vests and take a roll call.\nIncidents must be reported to the safety officer within 24 hours."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The fire assembly point is the grassed area on Wellington Street. [1]",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

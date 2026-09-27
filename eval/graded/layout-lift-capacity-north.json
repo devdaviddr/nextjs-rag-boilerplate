@@ -1,0 +1,32 @@
+{
+  "questionId": "layout-lift-capacity-north",
+  "type": "layout",
+  "question": "What is the rated capacity of the north wing lift?",
+  "answer": "The north wing lift’s rated capacity is 1600 kilograms. [1]",
+  "sources": [
+    {
+      "id": "40dc1d88-3bac-49a5-ab89-5ce89ad687f9",
+      "document": "site-operations-report",
+      "page": 1,
+      "content": "The north wing lift was upgraded in The south wing lift remains on the\nFebruary by Hartley Mechanical. original controller.\nIts new rated capacity is 1600 Its rated capacity is unchanged at\nkilograms. 1000 kilograms.\nThe upgrade was funded from the A replacement is scheduled for the\ncapital reserve. next financial year.\nThe north wing lift is certified The south wing lift is certified\nuntil 2031. until 2027."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The north wing lift’s rated capacity is 1600 kilograms. [1]",
+        "faithfulness": 2,
+        "note": "Interleaved columns: the north wing's new capacity is 1600 kilograms."
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

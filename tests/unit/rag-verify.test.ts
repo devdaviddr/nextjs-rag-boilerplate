@@ -21,6 +21,42 @@ describe('splitSentences', () => {
     expect(splitSentences('')).toEqual([])
     expect(splitSentences('   ')).toEqual([])
   })
+
+  it('does not split inside a number (#172)', () => {
+    expect(
+      splitSentences("Building B's condenser approach is 2.8 degrees [1]."),
+    ).toEqual(["Building B's condenser approach is 2.8 degrees [1]."])
+    expect(splitSentences('The setpoint is 6.5. It was 9.0 before.')).toEqual([
+      'The setpoint is 6.5.',
+      ' It was 9.0 before.',
+    ])
+  })
+
+  it('keeps a citation after the stop with its sentence (#172)', () => {
+    expect(
+      splitSentences('The boardroom seats fourteen people. [1] It has video.'),
+    ).toEqual(['The boardroom seats fourteen people. [1]', ' It has video.'])
+    expect(splitSentences('Twenty days. [1][2]')).toEqual([
+      'Twenty days. [1][2]',
+    ])
+  })
+
+  it('ends a sentence at a line break and keeps paragraph breaks', () => {
+    const text = 'First line\n\nSecond. Third.'
+    const parts = splitSentences(text)
+    expect(parts).toEqual(['First line\n\n', 'Second.', ' Third.'])
+    expect(parts.join('')).toBe(text)
+  })
+})
+
+describe('stripUnsupported with numbers (#172)', () => {
+  it('removes a whole sentence, never half a number', () => {
+    const answer =
+      'The approach is 2.8 degrees [1]. The setpoint is 9.0 degrees [2].'
+    expect(stripUnsupported(answer, [2]).text).toBe(
+      'The approach is 2.8 degrees [1].',
+    )
+  })
 })
 
 describe('citedIndices', () => {

@@ -8,6 +8,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Citation checking no longer splits numbers.** The verifier cut "2.8 degrees"
+  into two sentences, so removing an unsupported half could leave "2." on
+  screen, and a citation after a full stop became a sentence of its own. A
+  sentence now ends only where a stop is followed by a space, a citation or
+  the end, and a trailing citation stays with its sentence (#172).
+
 ## [0.28.0] - 2026-09-27
 
 ### Added

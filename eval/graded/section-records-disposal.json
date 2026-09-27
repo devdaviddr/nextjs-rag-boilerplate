@@ -1,0 +1,41 @@
+{
+  "questionId": "section-records-disposal",
+  "type": "section",
+  "question": "What is the process for disposing of records?",
+  "answer": "The disposal process is: the records officer first verifies that the record is in the records register and its disposal date has passed; then the custodian listed in the register provides written sign‑off for the batch. Once approved, paper records are destroyed by cross‑cut shredding on site, while electronic records are erased from all servers and backup copies. After destruction, the records officer completes a destruction certificate and files it against the register entry. [1]",
+  "sources": [
+    {
+      "id": "80b53cac-bc8a-41db-942d-8355996d615f",
+      "document": "records-policy",
+      "page": 1,
+      "content": "Before any record is disposed of, the records officer confirms that it is\nlisted in the records register and that its disposal date has passed.\n\nDisposal needs written custodian sign-off. The custodian named in the\nregister approves each batch before it leaves the office.\n\nPaper records are destroyed by cross-cut shredding on site. Electronic\nrecords are erased from every server and every backup copy.\n\nWhen a batch has been destroyed, the records officer completes a\ndestruction certificate and files it against the register entry."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The disposal process is: the records officer first verifies that the record is in the records register and its disposal date has passed; then the custodian listed in the register provides written sign‑off for the batch.",
+        "faithfulness": 2
+      },
+      {
+        "sentence": 2,
+        "text": "Once approved, paper records are destroyed by cross‑cut shredding on site, while electronic records are erased from all servers and backup copies.",
+        "faithfulness": 2
+      },
+      {
+        "sentence": 3,
+        "text": "After destruction, the records officer completes a destruction certificate and files it against the register entry. [1]",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

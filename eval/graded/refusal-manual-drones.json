@@ -1,0 +1,68 @@
+{
+  "questionId": "refusal-manual-drones",
+  "type": "refusal",
+  "question": "What does the contractor safety manual say about flying drones on site?",
+  "answer": "The contractor safety manual does not contain any information about flying drones on site.",
+  "sources": [
+    {
+      "id": "2a2fa01d-c290-480c-82a4-b66814520362",
+      "document": "contractor-safety-manual",
+      "page": 1,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION\nThis manual applies to every contractor working on company sites.\nIt is issued by the Site Safety Office and reviewed every two years.\nContractors must read it before their first day on site."
+    },
+    {
+      "id": "a19caed4-a188-41c5-ba3b-22054abcaf63",
+      "document": "contractor-safety-manual",
+      "page": 30,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL\nThis manual was last revised in March 2026.\nFeedback on the manual goes to the Site Safety Office."
+    },
+    {
+      "id": "b511f6cd-7be5-45d2-81e9-2e5d499893a0",
+      "document": "contractor-safety-manual",
+      "page": 28,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 28 - NON-COMPLIANCE\nA first breach of this manual results in a written warning.\nA second breach within twelve months removes the contractor from site for 14 days.\nA serious breach ends the contract."
+    },
+    {
+      "id": "44453b6b-96a7-4033-aac1-56a33b830724",
+      "document": "contractor-safety-manual",
+      "page": 2,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION\nEvery contractor completes a site induction before starting work.\nThe induction takes 90 minutes and is valid for twelve months.\nInduction cards must be carried at all times on site."
+    },
+    {
+      "id": "09dd3117-1a80-4ebf-af3d-7305cef01e57",
+      "document": "contractor-safety-manual",
+      "page": 25,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS\nA contractor may engage a subcontractor only with written approval from the site supervisor.\nSubcontractors complete the same site induction."
+    },
+    {
+      "id": "68ac9866-fa78-47c1-8870-b7ac51f94515",
+      "document": "contractor-safety-manual",
+      "page": 3,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 3 - PERSONAL PROTECTIVE EQUIPMENT\nSteel capped boots, a hard hat and safety glasses are required in all work zones.\nHearing protection is required where noise exceeds 85 decibels.\nContractors supply their own protective equipment unless the work order says otherwise."
+    },
+    {
+      "id": "134f23e9-e6ce-4a71-a962-30ce8f49d83e",
+      "document": "contractor-safety-manual",
+      "page": 4,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION\nEach contractor crew nominates a leading hand before work starts.\nThe leading hand is the contact point for the site supervisor."
+    },
+    {
+      "id": "28fc62e3-9752-4815-aa71-f7021d1c0b65",
+      "document": "contractor-safety-manual",
+      "page": 27,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS\nThe Site Safety Office audits each contractor at least once a quarter.\nAudit findings rated high must be closed within 7 days."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [],
+    "completeness": 2,
+    "completenessNote": "Correctly declines.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

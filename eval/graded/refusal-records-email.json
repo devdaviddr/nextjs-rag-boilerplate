@@ -1,0 +1,26 @@
+{
+  "questionId": "refusal-records-email",
+  "type": "refusal",
+  "question": "What does the records policy say about archiving email?",
+  "answer": "The records policy excerpt provided does not mention anything about archiving email.",
+  "sources": [
+    {
+      "id": "80b53cac-bc8a-41db-942d-8355996d615f",
+      "document": "records-policy",
+      "page": 1,
+      "content": "Before any record is disposed of, the records officer confirms that it is\nlisted in the records register and that its disposal date has passed.\n\nDisposal needs written custodian sign-off. The custodian named in the\nregister approves each batch before it leaves the office.\n\nPaper records are destroyed by cross-cut shredding on site. Electronic\nrecords are erased from every server and every backup copy.\n\nWhen a batch has been destroyed, the records officer completes a\ndestruction certificate and files it against the register entry."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [],
+    "completeness": 2,
+    "completenessNote": "Correctly declines.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}
