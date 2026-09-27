@@ -145,6 +145,12 @@ const envSchema = z
     // --- Observability (spec 0042) ------------------------------------------
     // Log lines are also kept in Postgres for the Logs page. Off with
     // LOG_PERSIST=false; lines older than LOG_RETENTION_DAYS are deleted.
+    // Which header carries the client's address for rate limits (#156); see
+    // src/lib/request-ip.ts. The deploy stacks set it; `auto` suits dev.
+    TRUSTED_IP_HEADER: z
+      .enum(['auto', 'cf-connecting-ip', 'x-forwarded-for', 'x-real-ip'])
+      .optional()
+      .default('auto'),
     // Optional areas a deployment can switch off (#140). On unless 'false'.
     // PWA_ENABLED=false stops service-worker registration (and unregisters
     // one a browser already has) and makes the app not installable.

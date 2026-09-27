@@ -150,6 +150,9 @@ services:
         required: false
     environment:
       NODE_ENV: production
+      # Behind your own reverse proxy: the address it appended (#156). The
+      # tunnel overlays set cf-connecting-ip instead.
+      TRUSTED_IP_HEADER: ${TRUSTED_IP_HEADER:-x-forwarded-for}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_TRUST_HOST: 'true'

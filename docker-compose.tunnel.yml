@@ -11,6 +11,8 @@ services:
     ports: !reset []
     environment:
       AUTH_URL: ${AUTH_URL:?set AUTH_URL to your public https URL, e.g. https://app.example.com}
+      # Only Cloudflare can set this header on a tunnelled request (#156).
+      TRUSTED_IP_HEADER: cf-connecting-ip
 
   cloudflared:
     image: cloudflare/cloudflared:latest

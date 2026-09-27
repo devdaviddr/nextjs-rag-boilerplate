@@ -241,17 +241,14 @@ APP_IMAGE=ghcr.io/your-org/your-repo \
   docker compose -f docker-compose.prod.yml -f docker-compose.deploy.yml up -d
 ```
 
-Point the proxy at `localhost:3000`. It must set the client's address itself,
-because the app keys its rate limits on it:
-
-- **Overwrite `X-Forwarded-For`** with the connecting address; don't append to
-  whatever the client sent. Caddy does this by default; in nginx use
-  `proxy_set_header X-Forwarded-For $remote_addr;`.
-- **Strip `CF-Connecting-IP`.** The app trusts it first, because behind a
-  Cloudflare Tunnel only Cloudflare can set it. Behind any other proxy a client
-  can send it and choose its own address. In Caddy:
-  `header_up -CF-Connecting-IP`; in nginx:
-  `proxy_set_header CF-Connecting-IP "";`.
+Point the proxy at `localhost:3000`. The app keys its rate limits on the
+client's address, and in this stack it reads it from the address your proxy
+appends to `X-Forwarded-For` (`TRUSTED_IP_HEADER=x-forwarded-for`, set in
+`docker-compose.prod.yml`). Caddy and nginx
+(`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`) both do that.
+Headers the client sent, including a forged `CF-Connecting-IP`, are ignored. If
+your proxy sets `X-Real-IP` instead, set `TRUSTED_IP_HEADER=x-real-ip` in
+`.env`.
 
 The app listens on `127.0.0.1:3000` only, so the proxy on the same host is the
 only way in. If the proxy runs on another machine, change the `ports:` entry and

@@ -44,6 +44,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Security
 
+- `TRUSTED_IP_HEADER` says which header the client address for rate limits is
+  read from. The tunnel stacks set `cf-connecting-ip` and the plain compose
+  stack the last `X-Forwarded-For` hop, so a client can no longer choose its
+  own address with a forged header and dodge the login limit (#156).
 - The helper that removes a deleted user's stored files is no longer
   reachable as a Server Action; it now runs only from the admin-checked
   delete-user path (#125).
