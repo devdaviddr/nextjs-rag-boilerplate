@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-27
+
 ### Added
 
 - **Tools from MCP servers.** Settings → Configuration → Tools connects a

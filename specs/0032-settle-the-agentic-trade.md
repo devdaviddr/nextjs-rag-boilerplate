@@ -1,10 +1,10 @@
 ---
 id: 0032
 title: Settle whether the agentic path should be the default
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-27
 ---
 
 # 0032 — Settle whether the agentic path should be the default

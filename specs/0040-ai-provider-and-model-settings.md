@@ -1,10 +1,10 @@
 ---
 id: 0040
 title: Configure the AI provider and models from Settings
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-25
-updated: 2026-09-26
+updated: 2026-09-27
 ---
 
 # 0040 — Configure the AI provider and models from Settings

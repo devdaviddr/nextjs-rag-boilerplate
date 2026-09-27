@@ -1,8 +1,8 @@
 ---
 id: 0046
 title: Index Markdown, HTML and Word documents, through loaders
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-27
 updated: 2026-09-27
 ---
