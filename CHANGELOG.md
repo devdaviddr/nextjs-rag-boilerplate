@@ -10,6 +10,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **[Extending the agent](docs/extending.md)**, a guide to building on the
+  template: adding a tool (with a worked `days_between` example that is tested
+  and shown verbatim), changing chunking, switching the embedding model, and
+  where to replace the vector store (#149).
 - **The agent can call tools you add.** Write one module with `defineTool`
   (name, description, a Zod schema, a `run` function) and add it to
   `agentTools` in `src/lib/rag/tools/index.ts`. The planner is offered it, the

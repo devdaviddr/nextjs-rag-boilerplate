@@ -286,3 +286,31 @@ describe('what the planner, writer and verifier are shown (FR6, FR8, NFR1)', () 
     expect(verifySystemPrompt(true)).toContain('tool results support')
   })
 })
+
+describe('the example tools (docs/extending.md)', () => {
+  it('days_between counts days and rejects a malformed date', async () => {
+    const { daysBetweenTool } =
+      await import('@/lib/rag/tools/examples/days-between')
+    const registry = toolRegistry([daysBetweenTool])
+    expect(
+      (
+        await runRegisteredTool(
+          registry,
+          'days_between',
+          '{"from":"2026-01-01","to":"2026-03-01"}',
+          context,
+        )
+      )?.text,
+    ).toBe('59 days from 2026-01-01 to 2026-03-01.')
+    expect(
+      (
+        await runRegisteredTool(
+          registry,
+          'days_between',
+          '{"from":"1 Jan","to":"2026-03-01"}',
+          context,
+        )
+      )?.text,
+    ).toMatch(/Invalid arguments for days_between: from: a date as YYYY-MM-DD/)
+  })
+})

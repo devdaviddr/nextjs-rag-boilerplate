@@ -627,6 +627,7 @@ and chat, see [`0025`](../specs/0025-rag-knowledge-base-and-chat.md),
 
 ---
 
-**Next:** [Summary](summary.md) for the project on one page, then
-[Usage & Development](usage.md) for the scripts and environment variables you
-will use every day.
+**Next:** [Extending the agent](extending.md) to build your own agentic app on
+what you have just learned, [Summary](summary.md) for the project on one page,
+or [Usage & Development](usage.md) for the scripts and environment variables
+you will use every day.
