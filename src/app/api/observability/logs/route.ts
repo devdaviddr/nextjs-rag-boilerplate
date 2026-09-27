@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { hasRole } from '@/lib/auth/rbac'
+import { env } from '@/lib/env'
 import {
   countLogsByLevel,
   listLogs,
@@ -13,6 +14,9 @@ import {
  * `after=<last id>` for the live tail.
  */
 export async function GET(request: Request) {
+  if (!env.OBSERVABILITY_UI_ENABLED) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   if (!(await hasRole('admin'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

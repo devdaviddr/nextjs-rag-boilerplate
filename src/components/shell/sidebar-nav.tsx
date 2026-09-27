@@ -4,17 +4,20 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { useRole } from '@/lib/auth/client-rbac'
+import { useFeatures } from '@/lib/shell/features'
 import { navItems } from '@/lib/shell/nav'
 import { cn } from '@/lib/utils'
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const isAdmin = useRole().includes('admin')
+  const features = useFeatures()
 
   return (
     <nav className="flex flex-col gap-1">
       {navItems
         .filter((item) => !item.adminOnly || isAdmin)
+        .filter((item) => !item.feature || features[item.feature])
         .map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`)

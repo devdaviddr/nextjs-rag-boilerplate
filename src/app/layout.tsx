@@ -72,8 +72,8 @@ export default async function RootLayout({
       <body className="min-h-dvh antialiased">
         <ThemeProvider nonce={nonce}>
           {children}
-          <ServiceWorkerRegister />
-          <InstallPrompt />
+          <ServiceWorkerRegister enabled={env.PWA_ENABLED} />
+          {env.PWA_ENABLED && <InstallPrompt />}
         </ThemeProvider>
       </body>
     </html>

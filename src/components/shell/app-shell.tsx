@@ -12,6 +12,7 @@ import { RecentsList } from '@/components/chat/recents-list'
 import { SidebarNav } from '@/components/shell/sidebar-nav'
 import { Button } from '@/components/ui/button'
 import type { RecentConversation } from '@/lib/chat/recents'
+import { type Features, FeaturesProvider } from '@/lib/shell/features'
 import { cn } from '@/lib/utils'
 
 import { APP_NAME } from '@/lib/brand'
@@ -54,6 +55,7 @@ function Brand({ className }: { className?: string }) {
 export function AppShell({
   user,
   conversations,
+  features,
   children,
 }: {
   user: {
@@ -63,6 +65,8 @@ export function AppShell({
   }
   /** Recents, already ordered by activity by the server layout. */
   conversations: RecentConversation[]
+  /** Optional areas that are switched on, from the server env (#140). */
+  features: Features
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -152,93 +156,95 @@ export function AppShell({
   )
 
   return (
-    <div className="min-h-dvh">
-      <a
-        href="#main-content"
-        className="focus:bg-background sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[60] focus:rounded-md focus:px-3 focus:py-2 focus:shadow"
-      >
-        Skip to content
-      </a>
-
-      {/* Desktop sidebar */}
-      <aside className="bg-muted/30 fixed inset-y-0 left-0 z-30 hidden w-64 flex-col px-3 pt-[calc(env(safe-area-inset-top)_+_1rem)] pb-[env(safe-area-inset-bottom)] md:flex">
-        <div className="px-2 pb-3">
-          <Brand className="text-lg font-semibold tracking-tight" />
-        </div>
-        {sidebarBody}
-      </aside>
-
-      {/* Mobile drawer */}
-      <div
-        className={cn(
-          'fixed inset-0 z-50 md:hidden',
-          open ? 'pointer-events-auto' : 'pointer-events-none',
-        )}
-        aria-hidden={!open}
-      >
-        <div
-          onClick={() => setOpen(false)}
-          className={cn(
-            'absolute inset-0 bg-black/40 transition-opacity duration-200',
-            open ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-        <aside
-          ref={drawerRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Main navigation"
-          className={cn(
-            'bg-background absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col px-3 pt-[calc(env(safe-area-inset-top)_+_1rem)] pb-[env(safe-area-inset-bottom)] shadow-xl transition-transform duration-200 ease-out',
-            open ? 'translate-x-0' : '-translate-x-full',
-          )}
+    <FeaturesProvider value={features}>
+      <div className="min-h-dvh">
+        <a
+          href="#main-content"
+          className="focus:bg-background sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[60] focus:rounded-md focus:px-3 focus:py-2 focus:shadow"
         >
-          <div className="flex items-center justify-between px-2 pb-4">
+          Skip to content
+        </a>
+
+        {/* Desktop sidebar */}
+        <aside className="bg-muted/30 fixed inset-y-0 left-0 z-30 hidden w-64 flex-col px-3 pt-[calc(env(safe-area-inset-top)_+_1rem)] pb-[env(safe-area-inset-bottom)] md:flex">
+          <div className="px-2 pb-3">
             <Brand className="text-lg font-semibold tracking-tight" />
-            <button
-              ref={closeButtonRef}
-              aria-label="Close menu"
-              onClick={() => setOpen(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-5" />
-            </button>
           </div>
           {sidebarBody}
         </aside>
-      </div>
 
-      {/* Main column */}
-      <div className="flex h-dvh flex-col md:pl-64">
-        {/* Chrome only where it is needed: the drawer trigger on mobile.
+        {/* Mobile drawer */}
+        <div
+          className={cn(
+            'fixed inset-0 z-50 md:hidden',
+            open ? 'pointer-events-auto' : 'pointer-events-none',
+          )}
+          aria-hidden={!open}
+        >
+          <div
+            onClick={() => setOpen(false)}
+            className={cn(
+              'absolute inset-0 bg-black/40 transition-opacity duration-200',
+              open ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <aside
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Main navigation"
+            className={cn(
+              'bg-background absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col px-3 pt-[calc(env(safe-area-inset-top)_+_1rem)] pb-[env(safe-area-inset-bottom)] shadow-xl transition-transform duration-200 ease-out',
+              open ? 'translate-x-0' : '-translate-x-full',
+            )}
+          >
+            <div className="flex items-center justify-between px-2 pb-4">
+              <Brand className="text-lg font-semibold tracking-tight" />
+              <button
+                ref={closeButtonRef}
+                aria-label="Close menu"
+                onClick={() => setOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            {sidebarBody}
+          </aside>
+        </div>
+
+        {/* Main column */}
+        <div className="flex h-dvh flex-col md:pl-64">
+          {/* Chrome only where it is needed: the drawer trigger on mobile.
             Account controls live at the bottom of the sidebar now, so the
             desktop viewport belongs entirely to the conversation. */}
-        <header className="bg-background/80 sticky top-0 z-20 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
-          <div className="flex h-14 items-center gap-2 px-4">
-            <button
-              ref={menuButtonRef}
-              aria-label="Open menu"
-              aria-expanded={open}
-              onClick={() => setOpen(true)}
-              className="text-muted-foreground hover:text-foreground -ml-1 p-1"
-            >
-              <Menu className="size-5" />
-            </button>
-            <Brand className="font-semibold" />
-          </div>
-        </header>
+          <header className="bg-background/80 sticky top-0 z-20 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+            <div className="flex h-14 items-center gap-2 px-4">
+              <button
+                ref={menuButtonRef}
+                aria-label="Open menu"
+                aria-expanded={open}
+                onClick={() => setOpen(true)}
+                className="text-muted-foreground hover:text-foreground -ml-1 p-1"
+              >
+                <Menu className="size-5" />
+              </button>
+              <Brand className="font-semibold" />
+            </div>
+          </header>
 
-        {/* No width cap and no padding: pages own their own layout, because a
+          {/* No width cap and no padding: pages own their own layout, because a
             chat needs the full height with a pinned composer while a settings
             form wants a readable column. */}
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
-        >
-          {children}
-        </main>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
+          >
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </FeaturesProvider>
   )
 }

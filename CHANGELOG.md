@@ -8,6 +8,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- `PWA_ENABLED=false` switches the PWA off: no service worker (one a browser
+  already has is unregistered) and no install. `OBSERVABILITY_UI_ENABLED=false`
+  hides the admin Observability pages; runs and logs are still recorded (#140).
+
 ### Changed
 
 - The inference key is now `LLM_API_KEY`, whatever the provider.

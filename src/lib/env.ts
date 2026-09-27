@@ -135,6 +135,19 @@ const envSchema = z
     // --- Observability (spec 0042) ------------------------------------------
     // Log lines are also kept in Postgres for the Logs page. Off with
     // LOG_PERSIST=false; lines older than LOG_RETENTION_DAYS are deleted.
+    // Optional areas a deployment can switch off (#140). On unless 'false'.
+    // PWA_ENABLED=false stops service-worker registration (and unregisters
+    // one a browser already has) and makes the app not installable.
+    PWA_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v !== 'false'),
+    // OBSERVABILITY_UI_ENABLED=false hides the admin Observability pages;
+    // runs and logs are still recorded (see LOG_PERSIST).
+    OBSERVABILITY_UI_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v !== 'false'),
     LOG_PERSIST: z
       .string()
       .optional()
