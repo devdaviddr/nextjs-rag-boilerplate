@@ -73,7 +73,9 @@ import { daysBetweenTool } from './examples/days-between'
 export const agentTools: AnyAgentTool[] = [daysBetweenTool]
 ```
 
-That's all. The next question can use it.
+That's all. The next question can use it. (`tests/unit/rag-tools.test.ts`
+checks that every registered tool is valid, so an invalid name or a clash with
+a built-in fails `pnpm test`.)
 
 ### What the model can and can't do
 
@@ -101,9 +103,12 @@ That's all. The next question can use it.
 ### Test it
 
 `runRegisteredTool` runs a tool exactly as the agent does, so a unit test
-needs no model:
+needs no model and no database:
 
 ```ts
+import { runRegisteredTool, toolRegistry } from '@/lib/rag/tools'
+import { daysBetweenTool } from '@/lib/rag/tools/examples/days-between'
+
 const registry = toolRegistry([daysBetweenTool])
 const out = await runRegisteredTool(
   registry,

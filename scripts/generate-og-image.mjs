@@ -49,4 +49,6 @@ const out = join(root, 'public/og.png')
 await mkdir(dirname(out), { recursive: true })
 await sharp(svg).png().toFile(out)
 console.log('✓ public/og.png (1200x630)')
-console.log('Swap public/og.png (or edit this script) to rebrand a fork.')
+console.log(
+  'The title is APP_NAME from src/lib/brand.ts; to use your own image instead, replace public/og.png.',
+)

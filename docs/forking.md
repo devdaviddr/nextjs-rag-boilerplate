@@ -20,7 +20,9 @@ make init        # or: pnpm init:project
 
 It asks for the name, a short name, a one-line description, your repository's
 URL and, optionally, a theme colour; or pass them as `--name`, `--short-name`,
-`--description`, `--repo` and `--theme`. It updates the files below that it
+`--description`, `--repo` and `--theme`. Only `--name` and `--repo` are
+needed: `--short-name` defaults to the name, a missing `--description` keeps
+the current one, and `--theme` leaves the colours alone. It updates the files below that it
 can, regenerates the share image (and the icons, with a new colour), leaves the
 salt below alone, and prints what is left. Safe to run again.
 

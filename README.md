@@ -68,7 +68,8 @@ rename, what to delete and what to switch off.
 ## Getting started
 
 You need Node ≥ 20.9 (22 recommended), [pnpm](https://pnpm.io)
-(`corepack enable`), Docker, and an API key for an OpenAI-compatible endpoint.
+(`corepack enable`, or `npm install -g pnpm` where Node ships without
+corepack), Docker, and an API key for an OpenAI-compatible endpoint.
 A free [NVIDIA NIM](https://build.nvidia.com) key works; it is rate-limited,
 not token-billed.
 
@@ -134,12 +135,12 @@ proxy.
 
 ### Models and endpoint
 
-| Variable           | Default                               | Description                                                                                              |
-| ------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `LLM_API_KEY`      | —                                     | API key for the inference endpoint; unset disables chat + documents (old name `LLM_API_KEY` still works) |
-| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline                     |
-| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                                  |
-| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes             |
+| Variable           | Default                               | Description                                                                                                 |
+| ------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `LLM_API_KEY`      | —                                     | API key for the inference endpoint; unset disables chat + documents (old name `NVIDIA_API_KEY` still works) |
+| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline                        |
+| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                                     |
+| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes                |
 
 Running offline has two constraints: the embedding model must emit at most
 4000 numbers per passage, and the planner model must emit native tool calls
@@ -180,6 +181,7 @@ The scripts you will use most:
 ```bash
 pnpm dev                   # dev server (Turbopack) at localhost:3000
 pnpm build && pnpm start   # production build — required to exercise the PWA
+                           # (its "output: standalone" warning is harmless here)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # verify the setup
 pnpm rag:eval              # score retrieval against the ground-truth corpus
 pnpm rag:eval --compare    # A/B the fixed and agentic retrieval paths

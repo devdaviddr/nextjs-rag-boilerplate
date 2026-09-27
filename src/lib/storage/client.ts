@@ -44,7 +44,11 @@ function client(): S3Client {
 }
 
 function diskRoot(): string {
-  return path.resolve(env.STORAGE_DIR ?? './data/storage')
+  // A runtime path: without the comment, Turbopack cannot tell what it names
+  // and traces the whole project into the standalone build (#163).
+  return path.resolve(
+    /* turbopackIgnore: true */ env.STORAGE_DIR ?? './data/storage',
+  )
 }
 
 /**
@@ -53,7 +57,7 @@ function diskRoot(): string {
  */
 function diskPath(key: string): string {
   const root = diskRoot()
-  const file = path.resolve(root, key)
+  const file = path.resolve(/* turbopackIgnore: true */ root, key)
   if (!file.startsWith(root + path.sep)) {
     throw new Error(`Refusing a storage key outside the storage folder: ${key}`)
   }

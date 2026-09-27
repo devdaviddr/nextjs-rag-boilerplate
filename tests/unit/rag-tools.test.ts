@@ -87,8 +87,10 @@ describe('defineTool and the registry (FR1, FR2)', () => {
     expect([...toolRegistry([echo]).keys()]).toEqual(['echo'])
   })
 
-  it('ships empty, so the planner is offered only the built-ins', () => {
-    expect(toolRegistry().size).toBe(0)
+  // Whatever a project registers (upstream ships none): every tool must be
+  // valid, so a bad name or a clash fails `pnpm test`, not a question (#163).
+  it('accepts every registered tool', () => {
+    expect(() => toolRegistry()).not.toThrow()
   })
 })
 

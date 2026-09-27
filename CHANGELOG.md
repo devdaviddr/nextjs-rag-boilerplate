@@ -51,6 +51,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- The production build no longer copies the whole repository into its
+  standalone output (186 MB down to 119 MB): the local-disk storage paths are
+  marked for the bundler. Following the extending guide no longer fails
+  `pnpm test`, and doc slips found by a newcomer dry run are fixed (#163).
 - The production compose stack now reads `.env` for the model key and `RAG_*`
   settings, so document chat works in it, and listens on localhost only for a
   reverse proxy. `docs/self-hosting.md` covers running it without a tunnel.
