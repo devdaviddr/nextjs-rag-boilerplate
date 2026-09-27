@@ -151,12 +151,14 @@ test.describe('with an indexed document', () => {
     // FR4: the URL adopts the new conversation without a navigation.
     await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}/)
 
-    // FR7: it appears in Recents, titled from the question.
+    // FR7: it appears in Recents, titled from the question. Recents refresh
+    // when the answer's stream ends, which is after verification (#127): a
+    // model call, so allow for it rather than the default 5 seconds.
     await expect(
       page
         .getByRole('link', { name: /How many days of annual leave/i })
         .first(),
-    ).toBeVisible()
+    ).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Today').first()).toBeVisible()
 
     // FR12: reloading shows the same messages AND the same citations.
