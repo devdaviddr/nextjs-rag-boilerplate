@@ -27,6 +27,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- The production compose stack now reads `.env` for the model key and `RAG_*`
+  settings, so document chat works in it, and listens on localhost only for a
+  reverse proxy. `docs/self-hosting.md` covers running it without a tunnel.
+  The share image takes its title from `src/lib/brand.ts`, and leftovers of the
+  old repository name are gone (#139).
 - Every grounded answer is now checked against its sources, not only answers
   from the agentic path, and a sentence without a citation is checked too. An
   invented claim with no `[n]` used to reach the user unchecked (#127).

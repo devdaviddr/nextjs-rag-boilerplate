@@ -285,10 +285,9 @@ has no published ports in this stack, and the app is the only public gateway to
 it, which is why uploads and downloads are proxied through the app instead of
 presigned.
 
-Before you test document chat in that stack, note that the compose files set
-the database and storage variables inline on the `app` service and **do not
-pass `LLM_API_KEY` or the `RAG_*` variables through**. Add them to the `app`
-service's `environment:` block if you want the chat configured there. See
+In that stack the `app` service reads your `.env` for the model key, the
+`RAG_*` settings and the rest, while the database and storage addresses are set
+inline to the stack's own services. See
 [Backups](backups.md) for the backup sidecars and
 [Self-hosting](self-hosting.md) for the deploy stacks.
 

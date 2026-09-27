@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { APP_NAME, APP_SHORT_NAME } from '@/lib/brand'
+import { APP_DESCRIPTION, APP_NAME, APP_SHORT_NAME } from '@/lib/brand'
 import { env } from '@/lib/env'
 
 // Read per request, not at build: PWA_ENABLED is a runtime setting, and the
@@ -12,8 +12,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: APP_NAME,
     short_name: APP_SHORT_NAME,
-    description:
-      'Production-grade Next.js boilerplate with Auth.js, Drizzle, and Postgres.',
+    description: APP_DESCRIPTION,
     id: '/',
     start_url: '/',
     scope: '/',
