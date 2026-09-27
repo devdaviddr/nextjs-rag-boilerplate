@@ -37,7 +37,7 @@ export interface SpanRecord {
 
 export interface RunFields {
   status: RunStatus
-  mode?: 'search' | 'document' | 'agentic' | null
+  mode?: 'search' | 'document' | 'agentic' | 'list' | null
   termination?: string | null
   ttftMs?: number | null
   promptTokens?: number | null

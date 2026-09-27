@@ -8,6 +8,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Ask which documents the agent can see.** "What documents do you have?" or
+  "list my files" answers with the ready documents in the conversation's
+  knowledge bases, with their type, size and knowledge base, from a new
+  built-in `list_documents` tool, without searching or planning. The planner
+  can call it too, for a question that mixes the list with its content
+  (#168).
+
 ## [0.27.0] - 2026-09-27
 
 ### Added

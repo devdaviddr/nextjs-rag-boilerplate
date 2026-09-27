@@ -689,7 +689,7 @@ export interface StoredMetrics {
   totalMs: number
   tokensPerSecond: number | null
   sourceCount: number
-  retrieval: 'search' | 'document' | 'agentic'
+  retrieval: 'search' | 'document' | 'agentic' | 'list'
   /** Registered tools the answer used (#164); absent when none. */
   tools?: string[]
 }

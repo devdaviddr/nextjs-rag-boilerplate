@@ -354,7 +354,7 @@ describe('gatherEvidence with tools registered (spec 0044 FR2)', () => {
     const q = {
       userId: 'u',
       conversationId: 'c',
-      question: 'Which documents do I have?',
+      question: 'How many days of annual leave do I get?',
       permittedKbIds: ['kb'],
       signal: new AbortController().signal,
     }
@@ -371,6 +371,66 @@ describe('gatherEvidence with tools registered (spec 0044 FR2)', () => {
       hasTools: () => true,
     })
     expect(withTools.mode).toBe('agentic')
+  })
+})
+
+describe('gatherEvidence for a document-list question (#168)', () => {
+  const q = (question: string) => ({
+    userId: 'u',
+    conversationId: 'c',
+    question,
+    permittedKbIds: ['kb-1', 'kb-2'],
+    signal: new AbortController().signal,
+  })
+  const deps = () => ({
+    settings: () => ({
+      RAG_AGENTIC_ENABLED: true,
+      RAG_AGENTIC_ROUTE: 'always' as const,
+    }),
+    recentTurns: vi.fn().mockResolvedValue([]),
+    listReadyDocuments: vi.fn().mockResolvedValue([]),
+    retrieveForOwner: vi.fn().mockResolvedValue([]),
+    retrieveWholeDocument: vi.fn(),
+    runAgenticRetrieval: vi.fn(),
+    hasTools: () => false,
+    listDocuments: vi.fn().mockResolvedValue('2 documents in 1 knowledge base'),
+  })
+
+  it('answers from list_documents, with no search and no planner', async () => {
+    const d = deps()
+    const evidence = await gatherEvidence(
+      q('What documents do you have?'),
+      () => {},
+      d,
+    )
+    expect(evidence.toolResults).toEqual([
+      { name: 'list_documents', text: '2 documents in 1 knowledge base' },
+    ])
+    expect(evidence.chunks).toEqual([])
+    expect(evidence.mode).toBe('list')
+    // Scope comes from the conversation, never from the question.
+    expect(d.listDocuments).toHaveBeenCalledWith('u', ['kb-1', 'kb-2'])
+    expect(d.retrieveForOwner).not.toHaveBeenCalled()
+    expect(d.runAgenticRetrieval).not.toHaveBeenCalled()
+  })
+
+  it('leaves a question about what documents say to search', async () => {
+    const d = deps()
+    d.runAgenticRetrieval.mockResolvedValue({ chunks: [] })
+    await gatherEvidence(q('Which documents mention overtime?'), () => {}, d)
+    expect(d.listDocuments).not.toHaveBeenCalled()
+    expect(d.runAgenticRetrieval).toHaveBeenCalled()
+  })
+
+  it('lists nothing for an empty selection', async () => {
+    const d = deps()
+    const evidence = await gatherEvidence(
+      { ...q('What documents do you have?'), permittedKbIds: [] },
+      () => {},
+      d,
+    )
+    expect(evidence.toolResults).toBeUndefined()
+    expect(d.listDocuments).not.toHaveBeenCalled()
   })
 })
 

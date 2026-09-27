@@ -15,6 +15,7 @@ import {
   toolDefinition,
   toolRegistry,
 } from './tools'
+import { listDocumentsTool } from './tools/list-documents'
 import { span } from '@/lib/observability/runs'
 import {
   type LoopFigureReading,
@@ -270,7 +271,12 @@ export async function runAgenticRetrieval(input: {
   const multiPart = planRoute(question, turns).reason === 'multi-part'
   const confident = aiSettings().RAG_AGENTIC_CONFIDENT_SIMILARITY
   const maxSearches = aiSettings().RAG_MAX_SEARCHES
-  const registry = toolRegistry(await allAgentTools())
+  // The built-in list tool first (#168), then registered and MCP tools, each
+  // checked so none can take its name.
+  const registry = new Map([
+    [listDocumentsTool.name, listDocumentsTool],
+    ...toolRegistry(await allAgentTools()),
+  ])
   const toolNames = new Set(registry.keys())
   const outcome = await runAgenticLoop(
     {
@@ -302,8 +308,8 @@ export async function runAgenticRetrieval(input: {
             ],
             {
               role: 'planner',
-              // Registered tools after the built-ins (spec 0044 FR2); with
-              // none registered the request is exactly as before (NFR1).
+              // `list_documents` and any registered tools after the other
+              // built-ins (spec 0044 FR2, #168).
               tools: [
                 SEARCH_TOOL,
                 ...(figureReadingEnabled ? [READ_FIGURE_TOOL] : []),
