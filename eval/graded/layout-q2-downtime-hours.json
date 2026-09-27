@@ -1,0 +1,26 @@
+{
+  "questionId": "layout-q2-downtime-hours",
+  "type": "layout",
+  "question": "How many hours of unplanned downtime were recorded in Q2?",
+  "answer": "The context does not provide the specific number of hours of unplanned downtime recorded in Q2.",
+  "sources": [
+    {
+      "id": "5ad7eabb-097c-47ad-83a2-d080a965282c",
+      "document": "site-operations-report",
+      "page": 3,
+      "content": "Figure 3.2: Unplanned downtime by quarter across all sites."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [],
+    "completeness": 2,
+    "completenessNote": "Correctly declines; no text gives Q2 hours.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

@@ -35,7 +35,12 @@ import {
   scoreVerification,
 } from './precision'
 import { buildEmbeddingText } from '@/lib/rag/chunk'
-import { createChatCompletion } from '@/lib/rag/client'
+import {
+  type ChatMessage,
+  createChatCompletion,
+  createChatStream,
+} from '@/lib/rag/client'
+import { parseStreamFrame } from '@/lib/rag/sse'
 import { chunksFromPdf } from '@/lib/rag/crack'
 import { embedPassages } from '@/lib/rag/embed'
 import {
@@ -942,17 +947,16 @@ async function runAnswerChecks(
       continue
     }
 
-    const { choice } = await createChatCompletion(
-      [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: buildUserMessage(q.question, chunks, resolvedById.get(q.id)),
-        },
-      ],
-      { maxTokens: 400, temperature: 0.2 },
-    )
-    const answer = (choice.message?.content ?? '').trim()
+    // Written the way the app writes it (#119): streamed, with no token cap,
+    // keeping only the answer text. A non-streamed call cut long answers off
+    // and let a reasoning model's notes into the answer.
+    const answer = await streamAnswer([
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: buildUserMessage(q.question, chunks, resolvedById.get(q.id)),
+      },
+    ])
 
     const missing = wants.filter((want) => !answer.includes(want))
     const forbidden = forbids ? new RegExp(forbids, 'i').exec(answer) : null
@@ -986,6 +990,28 @@ async function runAnswerChecks(
   }
 
   return checks
+}
+
+/** The chat model's streamed answer, as the app reads it: content only. */
+async function streamAnswer(messages: ChatMessage[]): Promise<string> {
+  const reader = (await createChatStream(messages)).getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let text = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) continue
+      const frame = parseStreamFrame(trimmed.slice(5))
+      if (frame.kind === 'delta') text += frame.content
+    }
+  }
+  return text.trim()
 }
 
 /**

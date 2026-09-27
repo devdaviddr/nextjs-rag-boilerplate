@@ -1,0 +1,26 @@
+{
+  "questionId": "refusal-hot-work-cost",
+  "type": "refusal",
+  "question": "How much does a hot work permit cost?",
+  "answer": "The provided context does not contain any information about the cost of a hot work permit.",
+  "sources": [
+    {
+      "id": "ca45a9e2-ccdd-4baa-8d7a-7018b8c57739",
+      "document": "contractor-safety-manual",
+      "page": 5,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS\nWelding, grinding and cutting require a hot work permit.\nA hot work permit is valid for one shift of up to 8 hours.\nHot work permits are signed off by the duty engineer.\nA fire watch stays for 60 minutes after hot work ends."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [],
+    "completeness": 2,
+    "completenessNote": "Correctly declines.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

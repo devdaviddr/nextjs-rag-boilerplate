@@ -1,0 +1,31 @@
+{
+  "questionId": "expense-approval",
+  "type": "single-hop",
+  "question": "Who approves a claim over 500 dollars?",
+  "answer": "The claim must be approved by the director before payment. [1]",
+  "sources": [
+    {
+      "id": "0878b922-08a2-45f9-ba56-064bfbb79f38",
+      "document": "staff-handbook",
+      "page": 2,
+      "content": "STAFF HANDBOOK - SECTION 2 - EXPENSES\nPolicy reference POL-FIN-022.\nReimbursement for travel must be submitted within 30 days of the trip.\nOriginal receipts must be attached to every claim.\nClaims over 500 dollars require director approval before payment.\nMileage is reimbursed at 78 cents per kilometre."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The claim must be approved by the director before payment. [1]",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "questionId": "multi-hop-hartley-setpoint-and-lift",
+  "type": "multi-hop",
+  "question": "Hartley Mechanical recommissioned Building A — what chilled water setpoint did they leave it at, and what rated capacity did the same contractor give the north wing lift?",
+  "answer": "Hartley Mechanical left Building A with a chilled‑water setpoint of **6.5 degrees** [1] and gave the north‑wing lift a rated capacity of **1600 kilograms** [2].",
+  "sources": [
+    {
+      "id": "d0366c90-ac77-4d1e-9884-23dd435ae0ce",
+      "document": "plant-services-manual",
+      "page": 1,
+      "content": "Building A was recommissioned in Building B was recommissioned in\nMarch by Hartley Mechanical. August by Hartley Mechanical.\nIts chilled water setpoint is Its chilled water setpoint is\n6.5 degrees. 9.0 degrees.\nIts condenser approach is Its condenser approach is\n1.2 degrees. 2.8 degrees."
+    },
+    {
+      "id": "40dc1d88-3bac-49a5-ab89-5ce89ad687f9",
+      "document": "site-operations-report",
+      "page": 1,
+      "content": "The north wing lift was upgraded in The south wing lift remains on the\nFebruary by Hartley Mechanical. original controller.\nIts new rated capacity is 1600 Its rated capacity is unchanged at\nkilograms. 1000 kilograms.\nThe upgrade was funded from the A replacement is scheduled for the\ncapital reserve. next financial year.\nThe north wing lift is certified The south wing lift is certified\nuntil 2031. until 2027."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "Hartley Mechanical left Building A with a chilled‑water setpoint of **6.5 degrees** [1] and gave the north‑wing lift a rated capacity of **1600 kilograms** [2].",
+        "faithfulness": 2,
+        "note": "Both values are right once the interleaved columns are read in order (Building A 6.5; north wing 1600)."
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "questionId": "multi-hop-leave-payout-vs-carryover",
+  "type": "multi-hop",
+  "question": "My contract says untaken leave is paid out when I leave — does the handbook let me carry it into next year while I am still employed?",
+  "answer": "No. The staff handbook states that unused leave does **not** carry over into the following year [1].",
+  "sources": [
+    {
+      "id": "06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e",
+      "document": "staff-handbook",
+      "page": 1,
+      "content": "STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE\nPolicy reference POL-HR-014.\nThe annual leave entitlement is 20 working days per calendar year.\nUnused leave does not carry over into the following year.\nLeave must be approved by your manager at least two weeks in advance.\nLeave requests during the December shutdown are not accepted."
+    },
+    {
+      "id": "d9653863-abe4-4a7b-9c24-603141bc77c8",
+      "document": "employment-contract",
+      "page": 2,
+      "content": "EMPLOYMENT CONTRACT - PART B - NOTICE AND TERMINATION\nAfter probation the notice period is four weeks in writing.\nAccrued but untaken leave is paid out on termination.\nSummary dismissal applies only in cases of serious misconduct."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "No.",
+        "faithfulness": 2,
+        "note": "'No.' is the answer, supported by [1]."
+      },
+      {
+        "sentence": 2,
+        "text": "The staff handbook states that unused leave does **not** carry over into the following year [1].",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "questionId": "building-hours",
+  "type": "single-hop",
+  "question": "What time does the building open?",
+  "answer": "The building opens at 6 am on weekdays. [1]",
+  "sources": [
+    {
+      "id": "9d1f20cb-09b4-4b81-931b-071764662029",
+      "document": "facilities-guide",
+      "page": 1,
+      "content": "FACILITIES GUIDE - BUILDING ACCESS\nAccess cards are issued by reception on the ground floor.\nThe building is open from 6am to 8pm on weekdays.\nAfter hours entry requires a card and a PIN."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The building opens at 6 am on weekdays. [1]",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "completenessNote": "Gives the opening time; the closing time was not asked.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

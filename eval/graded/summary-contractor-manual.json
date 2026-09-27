@@ -1,0 +1,190 @@
+{
+  "questionId": "summary-contractor-manual",
+  "type": "summary",
+  "question": "Give me an overview of the contractor safety manual.",
+  "answer": "The contractor safety manual sets out the safety requirements that every contractor must follow when working on company sites [1]. It begins with an introduction stating that the manual applies to all contractors, is issued by the Site Safety Office and reviewed biennially, and must be read before the first day on site [1].\n\nKey procedural requirements include:\n\n* **Site induction** – a 90‑minute induction valid for 12 months; induction cards must be carried at all times [2].\n* **Supervision** – each crew nominates a leading hand who serves as the contact point for the site supervisor [3].\n* **Permit‑to‑work systems** – hot work permits (valid for one shift ≤ 8 hrs, signed by the duty engineer, with a 60‑minute fire watch) [4]; confined‑space permits (valid for 4 hrs, atmosphere tested before entry, signed by the entry supervisor) [5]; working‑at‑heights permits (harness required above 2 m without edge protection, inspected every six months, signed off by the rigging coordinator) [6]; electrical isolation (lock‑out/tag‑out, personal danger lock and tag, only the applier may remove it) [7];",
+  "sources": [
+    {
+      "id": "2a2fa01d-c290-480c-82a4-b66814520362",
+      "document": "contractor-safety-manual",
+      "page": 1,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION\nThis manual applies to every contractor working on company sites.\nIt is issued by the Site Safety Office and reviewed every two years.\nContractors must read it before their first day on site."
+    },
+    {
+      "id": "44453b6b-96a7-4033-aac1-56a33b830724",
+      "document": "contractor-safety-manual",
+      "page": 2,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION\nEvery contractor completes a site induction before starting work.\nThe induction takes 90 minutes and is valid for twelve months.\nInduction cards must be carried at all times on site."
+    },
+    {
+      "id": "134f23e9-e6ce-4a71-a962-30ce8f49d83e",
+      "document": "contractor-safety-manual",
+      "page": 4,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION\nEach contractor crew nominates a leading hand before work starts.\nThe leading hand is the contact point for the site supervisor."
+    },
+    {
+      "id": "ca45a9e2-ccdd-4baa-8d7a-7018b8c57739",
+      "document": "contractor-safety-manual",
+      "page": 5,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS\nWelding, grinding and cutting require a hot work permit.\nA hot work permit is valid for one shift of up to 8 hours.\nHot work permits are signed off by the duty engineer.\nA fire watch stays for 60 minutes after hot work ends."
+    },
+    {
+      "id": "9f3dab27-931a-485f-a804-a6758cce2669",
+      "document": "contractor-safety-manual",
+      "page": 6,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 6 - CONFINED SPACES\nEntry to a tank, pit or vault requires a confined space permit.\nThe atmosphere is tested for oxygen and gas before every entry.\nConfined space permits are signed off by the entry supervisor.\nA confined space permit is valid for 4 hours."
+    },
+    {
+      "id": "a7f24062-f56f-42ee-b435-b31250e738fd",
+      "document": "contractor-safety-manual",
+      "page": 7,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS\nA harness is required for any work above 2 metres without edge protection.\nHarnesses are inspected every six months and tagged.\nWorking at heights permits are signed off by the rigging coordinator."
+    },
+    {
+      "id": "55588e71-35e2-42e5-b02b-5526159ebc76",
+      "document": "contractor-safety-manual",
+      "page": 9,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 9 - ELECTRICAL ISOLATION\nEquipment is isolated and locked out before maintenance.\nEach worker applies a personal danger lock and tag.\nOnly the person who applied a lock may remove it."
+    },
+    {
+      "id": "8a2177eb-3944-4441-a425-43a1021f24b3",
+      "document": "contractor-safety-manual",
+      "page": 10,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 10 - PORTABLE ELECTRICAL EQUIPMENT\nPortable tools and leads are tested and tagged every three months.\nUntagged equipment is removed from site."
+    },
+    {
+      "id": "7506f428-c0b1-4390-a834-a310378931e2",
+      "document": "contractor-safety-manual",
+      "page": 11,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 11 - HAZARDOUS CHEMICALS\nA safety data sheet must be on site for every chemical brought in.\nChemicals are stored in the bunded store behind Building C."
+    },
+    {
+      "id": "0c3e7a0c-531d-4aab-b1f7-9f31ddfdea51",
+      "document": "contractor-safety-manual",
+      "page": 12,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 12 - ASBESTOS\nThe asbestos register is held by the Site Safety Office.\nCheck the register before drilling or cutting any wall or ceiling.\nSuspected asbestos stops work immediately."
+    },
+    {
+      "id": "1672f5a4-3129-4e85-bc20-07d42ec80ecc",
+      "document": "contractor-safety-manual",
+      "page": 14,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 14 - CRANE LIFTS\nEvery crane lift needs a lift plan approved the day before.\nLifts stop when wind gusts exceed 40 kilometres per hour."
+    },
+    {
+      "id": "4cad8e8f-66d4-4d99-8dd3-e9404bab176d",
+      "document": "contractor-safety-manual",
+      "page": 15,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 15 - MOBILE PLANT\nForklifts and elevated work platforms are operated only by licence holders.\nPlant is pre-start checked at the beginning of each shift.\nThe site speed limit for plant is 10 kilometres per hour."
+    },
+    {
+      "id": "d41f73ba-77e2-4832-910d-cb7892b75ef1",
+      "document": "contractor-safety-manual",
+      "page": 16,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 16 - TRAFFIC MANAGEMENT\nPedestrian walkways are marked in yellow and must be kept clear.\nReversing plant requires a spotter."
+    },
+    {
+      "id": "4292a291-35e0-46b4-91ee-1ef36b58608e",
+      "document": "contractor-safety-manual",
+      "page": 17,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 17 - NOISE AND VIBRATION\nNoisy work is limited to 7am to 5pm on weekdays.\nJackhammer use is rotated between workers every 30 minutes."
+    },
+    {
+      "id": "d6a53e5d-c69d-4720-97c3-3da2ad507a89",
+      "document": "contractor-safety-manual",
+      "page": 19,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 19 - MANUAL HANDLING\nLoads over 20 kilograms require a two person lift or a mechanical aid."
+    },
+    {
+      "id": "e177eee3-2266-4e6f-b268-e4cfd836b188",
+      "document": "contractor-safety-manual",
+      "page": 20,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 20 - HOUSEKEEPING\nWork areas are cleaned at the end of every shift.\nWaste is separated into general, metal and timber skips."
+    },
+    {
+      "id": "3eb58a72-7413-4b7e-b990-ce6f0fe24e10",
+      "document": "contractor-safety-manual",
+      "page": 21,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 21 - FIRST AID\nEach crew of five or more carries a first aid kit.\nThe site first aid room is next to the gatehouse."
+    },
+    {
+      "id": "afad5777-d58d-4511-b571-a588b7f33e4d",
+      "document": "contractor-safety-manual",
+      "page": 22,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 22 - HEAT STRESS\nWhen the temperature exceeds 35 degrees, crews take a 10 minute break every hour.\nCool drinking water is provided at the gatehouse."
+    },
+    {
+      "id": "98c146be-f097-43e4-b89f-98b93ff42b62",
+      "document": "contractor-safety-manual",
+      "page": 24,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 24 - ENVIRONMENTAL CONTROLS\nSpill kits are kept at every chemical store and refuelling point.\nStormwater drains are covered during concrete washout."
+    },
+    {
+      "id": "09dd3117-1a80-4ebf-af3d-7305cef01e57",
+      "document": "contractor-safety-manual",
+      "page": 25,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS\nA contractor may engage a subcontractor only with written approval from the site supervisor.\nSubcontractors complete the same site induction."
+    },
+    {
+      "id": "7182be90-0e60-441f-a8bc-85caf8064a86",
+      "document": "contractor-safety-manual",
+      "page": 26,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 26 - INSURANCE\nContractors hold public liability cover of at least 20 million dollars.\nCertificates of currency are provided before the first day on site."
+    },
+    {
+      "id": "28fc62e3-9752-4815-aa71-f7021d1c0b65",
+      "document": "contractor-safety-manual",
+      "page": 27,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS\nThe Site Safety Office audits each contractor at least once a quarter.\nAudit findings rated high must be closed within 7 days."
+    },
+    {
+      "id": "7d6467e2-7709-4ee9-b1aa-c67f739f884b",
+      "document": "contractor-safety-manual",
+      "page": 29,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 29 - CLOSING OUT WORK\nWhen work is finished, permits are returned and signed closed.\nThe leading hand walks the area with the site supervisor before handover."
+    },
+    {
+      "id": "a19caed4-a188-41c5-ba3b-22054abcaf63",
+      "document": "contractor-safety-manual",
+      "page": 30,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL\nThis manual was last revised in March 2026.\nFeedback on the manual goes to the Site Safety Office."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The contractor safety manual sets out the safety requirements that every contractor must follow when working on company sites [1].",
+        "faithfulness": 2
+      },
+      {
+        "sentence": 2,
+        "text": "It begins with an introduction stating that the manual applies to all contractors, is issued by the Site Safety Office and reviewed biennially, and must be read before the first day on site [1].",
+        "faithfulness": 2
+      },
+      {
+        "sentence": 4,
+        "text": "* **Site induction** – a 90‑minute induction valid for 12 months; induction cards must be carried at all times [2].",
+        "faithfulness": 2
+      },
+      {
+        "sentence": 5,
+        "text": "* **Supervision** – each crew nominates a leading hand who serves as the contact point for the site supervisor [3].",
+        "faithfulness": 2
+      },
+      {
+        "sentence": 6,
+        "text": "* **Permit‑to‑work systems** – hot work permits (valid for one shift ≤ 8 hrs, signed by the duty engineer, with a 60‑minute fire watch) [4]; confined‑space permits (valid for 4 hrs, atmosphere tested before entry, signed by the entry supervisor) [5]; working‑at‑heights permits (harness required above 2 m without edge protection, inspected every six months, signed off by the rigging coordinator) [6]; electrical isolation (lock‑out/tag‑out, personal danger lock and tag, only the applier may remove it) [7];",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 1,
+    "completenessNote": "Cut off mid-list by the eval's 400-token cap: most sections, insurance and audits are missing.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

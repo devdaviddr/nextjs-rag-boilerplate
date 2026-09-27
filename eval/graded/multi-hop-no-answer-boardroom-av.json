@@ -1,0 +1,26 @@
+{
+  "questionId": "multi-hop-no-answer-boardroom-av",
+  "type": "multi-hop",
+  "question": "Who maintains the boardroom's video conferencing, and what does that contract cost?",
+  "answer": "The provided context does not contain information about who maintains the boardroom’s video conferencing system or the cost of any related contract.",
+  "sources": [
+    {
+      "id": "f14e5dcd-3620-49c5-89c5-6a71085273c5",
+      "document": "facilities-guide",
+      "page": 3,
+      "content": "FACILITIES GUIDE - MEETING ROOMS\nRooms are booked through the calendar system.\nThe boardroom seats fourteen and has video conferencing.\nCatering must be ordered two business days in advance."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [],
+    "completeness": 2,
+    "completenessNote": "Correctly declines.",
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

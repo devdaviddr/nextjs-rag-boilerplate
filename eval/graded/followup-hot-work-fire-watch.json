@@ -1,0 +1,31 @@
+{
+  "questionId": "followup-hot-work-fire-watch",
+  "type": "followup",
+  "question": "How long does the fire watch stay afterwards?",
+  "answer": "The fire watch stays for 60 minutes after hot work ends. [1]",
+  "sources": [
+    {
+      "id": "ca45a9e2-ccdd-4baa-8d7a-7018b8c57739",
+      "document": "contractor-safety-manual",
+      "page": 5,
+      "content": "CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS\nWelding, grinding and cutting require a hot work permit.\nA hot work permit is valid for one shift of up to 8 hours.\nHot work permits are signed off by the duty engineer.\nA fire watch stays for 60 minutes after hot work ends."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The fire watch stays for 60 minutes after hot work ends. [1]",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

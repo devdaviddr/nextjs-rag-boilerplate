@@ -1,0 +1,32 @@
+{
+  "questionId": "layout-condenser-approach-building-b",
+  "type": "layout",
+  "question": "What is Building B's condenser approach?",
+  "answer": "Building B's condenser approach is 2.8 degrees [1].",
+  "sources": [
+    {
+      "id": "d0366c90-ac77-4d1e-9884-23dd435ae0ce",
+      "document": "plant-services-manual",
+      "page": 1,
+      "content": "Building A was recommissioned in Building B was recommissioned in\nMarch by Hartley Mechanical. August by Hartley Mechanical.\nIts chilled water setpoint is Its chilled water setpoint is\n6.5 degrees. 9.0 degrees.\nIts condenser approach is Its condenser approach is\n1.2 degrees. 2.8 degrees."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "Building B's condenser approach is 2.8 degrees [1].",
+        "faithfulness": 2,
+        "note": "The source's two columns are interleaved; Building B is the second value, 2.8."
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

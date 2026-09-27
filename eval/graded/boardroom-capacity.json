@@ -1,0 +1,31 @@
+{
+  "questionId": "boardroom-capacity",
+  "type": "single-hop",
+  "question": "How many people does the boardroom seat?",
+  "answer": "The boardroom seats fourteen people. [1]",
+  "sources": [
+    {
+      "id": "f14e5dcd-3620-49c5-89c5-6a71085273c5",
+      "document": "facilities-guide",
+      "page": 3,
+      "content": "FACILITIES GUIDE - MEETING ROOMS\nRooms are booked through the calendar system.\nThe boardroom seats fourteen and has video conferencing.\nCatering must be ordered two business days in advance."
+    }
+  ],
+  "drawnFrom": {
+    "label": "answers-171",
+    "at": "2026-09-27T07:35:35.181Z"
+  },
+  "grade": {
+    "claims": [
+      {
+        "sentence": 1,
+        "text": "The boardroom seats fourteen people. [1]",
+        "faithfulness": 2
+      }
+    ],
+    "completeness": 2,
+    "grader": "Claude (draft)",
+    "reviewed": false,
+    "gradedAt": "2026-09-27"
+  }
+}

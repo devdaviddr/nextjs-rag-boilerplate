@@ -1226,6 +1226,47 @@ It costs a verifier call per answer on top of the answer itself, about 80 of
 each per pass. The numbers are saved as `answerPrecision` next to
 `answerChecks` in `eval/results/<label>.json`.
 
+### Grading answers
+
+The eval's automatic checks look for strings and ask the app's own verifier.
+To know whether answers are actually right, a sample is graded by a person
+against a fixed rubric (#119), and kept in `eval/graded/`, one file per
+answer with its question, sources and answer, so it can be re-scored
+offline and a model judge calibrated against it.
+
+**Faithfulness**, for each sentence that states a fact:
+
+- **2**: the sources fully support it.
+- **1**: they support part of it, or it overstates or adds a detail they do
+  not give.
+- **0**: they do not support it, or contradict it.
+
+Introductions, connectives and sentences saying the sources do not mention
+something are not graded. An answer's faithfulness is the mean over its
+graded sentences.
+
+**Completeness**, for the answer as a whole, judged only against what its
+sources contain, not against the whole corpus:
+
+- **2**: it gives everything the sources hold that the question asks for.
+- **1**: it misses part of it.
+- **0**: it misses the main point, or declines when the sources do answer.
+
+A correct refusal ("the documents do not say") is complete when the sources
+really do not say. Sentences are numbered as the verifier numbers them
+(`splitSentences`).
+
+```bash
+pnpm rag:eval --no-ingest --answers --label answers   # write answers with their sources
+pnpm rag:sample --from answers --per-slice 6           # draw up to 6 per slice into eval/graded/
+```
+
+`rag:sample` never overwrites a file already in `eval/graded/`, so a second
+draw adds to the sample. A drawn file has `grade: null` until graded; a grade
+records who gave it and whether a person has reviewed it (`reviewed`).
+The first sample, 29 answers across every slice, was drafted by Claude; only
+grades a person has reviewed count as the reference.
+
 Two more question types sit outside the headline pool (#102). A **summary**
 question (`type: "summary"`) is a whole-document request that passes only when
 every page in `summaryPages` came back. Its questions run against
