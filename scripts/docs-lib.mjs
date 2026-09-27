@@ -18,8 +18,8 @@ export const REPO_URL = 'https://github.com/devdaviddr/nextjs-rag-boilerplate'
 export const DOC_SECTIONS = [
   {
     title: 'About',
-    description: 'What this project is and what it is for.',
-    slugs: ['summary'],
+    description: 'What this project is, and making it your own.',
+    slugs: ['summary', 'forking'],
   },
   {
     title: 'Using the app',

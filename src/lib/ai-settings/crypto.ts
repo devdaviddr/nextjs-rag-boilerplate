@@ -20,6 +20,9 @@ import { env } from '@/lib/env'
 
 const VERSION = 'v1'
 const INFO = 'ai-settings/v1'
+// NEVER CHANGE THIS, even when renaming the project (#138). It is a fixed
+// label mixed into the key, not the project's name: a different value makes
+// every API key already saved from Settings unreadable. See docs/forking.md.
 const SALT = 'nextjs-rag-boilerplate/ai-settings'
 
 function key(secret = env.SETTINGS_ENCRYPTION_KEY ?? env.AUTH_SECRET): Buffer {
