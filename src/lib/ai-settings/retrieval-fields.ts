@@ -25,6 +25,10 @@ export interface RetrievalField {
   options?: readonly string[]
   /** Only documents uploaded after the change are affected. */
   newUploadsOnly?: boolean
+  /** A `text` field: a valid value, shown as the input's placeholder. */
+  example?: string
+  /** A `text` field that may be left empty (it is optional). */
+  emptyAllowed?: boolean
 }
 
 export interface RetrievalGroup {
@@ -227,6 +231,20 @@ export const RETRIEVAL_GROUPS: readonly RetrievalGroup[] = [
         help: 'Sends pages with tables, charts or no text layer to a parsing model, so their content is indexed. Costs model calls at upload.',
         kind: 'boolean',
         newUploadsOnly: true,
+      },
+    ],
+  },
+  {
+    id: 'cost',
+    title: 'Cost',
+    fields: [
+      {
+        key: 'RAG_MODEL_PRICES',
+        label: 'Model prices',
+        example: 'openai/gpt-4o=5, nvidia/nemotron-3-embed-1b=0',
+        emptyAllowed: true,
+        help: 'What each model costs, so Observability can show the cost of a question or an upload. Write model=price pairs, comma-separated, in US dollars per million tokens, e.g. openai/gpt-4o=5, nvidia/nemotron-3-embed-1b=0. Models left out show tokens only.',
+        kind: 'text',
       },
     ],
   },

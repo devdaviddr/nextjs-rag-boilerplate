@@ -38,7 +38,7 @@ jobs:
       # AUTH_SECRET). See docs/self-hosting.md → Tier C.
       - name: Pull & deploy
         run: |
-          ENV_SRC="${DEPLOY_ENV_FILE:-$HOME/.config/nextjs-fullstack-boilerplate/.env}"
+          ENV_SRC="${DEPLOY_ENV_FILE:-$HOME/.config/${{ github.event.repository.name }}/.env}"
           if [ ! -f "$ENV_SRC" ]; then
             echo "::error::$ENV_SRC not found on the runner box — create it (see docs/self-hosting.md → Tier C)"
             exit 1

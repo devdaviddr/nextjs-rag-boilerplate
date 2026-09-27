@@ -16,6 +16,13 @@ const optionalStr = z
   .optional()
   .transform((v) => (v === undefined || v === '' ? undefined : v))
 
+/** Optional and non-empty; an empty value (`S3_BUCKET=`) counts as unset. */
+const optionalNonEmpty = optionalStr.pipe(z.string().min(1).optional())
+
+/** An optional URL; an empty value counts as unset. */
+const optionalUrl = (message: string) =>
+  optionalStr.pipe(z.string().url(message).optional())
+
 const envSchema = z
   .object({
     DATABASE_URL: z.string().url('DATABASE_URL must be a valid connection URL'),
@@ -93,10 +100,16 @@ const envSchema = z
     // Required: the docker-compose `minio` service ships working defaults in
     // .env.example, so `cp .env.example .env` works with zero extra setup —
     // same posture as DATABASE_URL.
-    S3_ENDPOINT: z.string().url('S3_ENDPOINT must be a valid URL'),
-    S3_ACCESS_KEY_ID: z.string().min(1, 'S3_ACCESS_KEY_ID is required'),
-    S3_SECRET_ACCESS_KEY: z.string().min(1, 'S3_SECRET_ACCESS_KEY is required'),
-    S3_BUCKET: z.string().min(1, 'S3_BUCKET is required'),
+    // Object storage (#137). With S3_ENDPOINT set, all four S3 values are
+    // required; without it, files are kept on disk under STORAGE_DIR.
+    S3_ENDPOINT: optionalUrl('S3_ENDPOINT must be a valid URL'),
+    S3_ACCESS_KEY_ID: optionalNonEmpty,
+    S3_SECRET_ACCESS_KEY: optionalNonEmpty,
+    S3_BUCKET: optionalNonEmpty,
+    STORAGE_DIR: z.string().min(1).optional().default('./data/storage'),
+    // Hosts a web page may be added from (spec 0047), comma-separated; their
+    // subdomains too. Unset: any public host.
+    URL_ALLOWED_HOSTS: optionalStr,
     S3_REGION: z.string().min(1).optional().default('us-east-1'),
     UPLOAD_MAX_SIZE_MB: z.coerce
       .number()
@@ -135,6 +148,25 @@ const envSchema = z
     // --- Observability (spec 0042) ------------------------------------------
     // Log lines are also kept in Postgres for the Logs page. Off with
     // LOG_PERSIST=false; lines older than LOG_RETENTION_DAYS are deleted.
+    // Which header carries the client's address for rate limits (#156); see
+    // src/lib/request-ip.ts. The deploy stacks set it; `auto` suits dev.
+    TRUSTED_IP_HEADER: z
+      .enum(['auto', 'cf-connecting-ip', 'x-forwarded-for', 'x-real-ip'])
+      .optional()
+      .default('auto'),
+    // Optional areas a deployment can switch off (#140). On unless 'false'.
+    // PWA_ENABLED=false stops service-worker registration (and unregisters
+    // one a browser already has) and makes the app not installable.
+    PWA_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v !== 'false'),
+    // OBSERVABILITY_UI_ENABLED=false hides the admin Observability pages;
+    // runs and logs are still recorded (see LOG_PERSIST).
+    OBSERVABILITY_UI_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v !== 'false'),
     LOG_PERSIST: z
       .string()
       .optional()
@@ -172,6 +204,24 @@ const envSchema = z
         message:
           'RAG_CHUNK_OVERLAP_TOKENS must be smaller than RAG_CHUNK_TOKENS',
       })
+    }
+
+    // S3 is all-or-nothing (#137): an endpoint without its credentials would
+    // fail on the first upload rather than at boot.
+    if (val.S3_ENDPOINT) {
+      for (const [key, value] of [
+        ['S3_ACCESS_KEY_ID', val.S3_ACCESS_KEY_ID],
+        ['S3_SECRET_ACCESS_KEY', val.S3_SECRET_ACCESS_KEY],
+        ['S3_BUCKET', val.S3_BUCKET],
+      ] as const) {
+        if (value === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `${key} is required when S3_ENDPOINT is set`,
+          })
+        }
+      }
     }
 
     // If email is toggled on, a provider MUST be configured — fail fast at boot

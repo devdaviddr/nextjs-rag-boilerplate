@@ -25,6 +25,12 @@ Only two things, and neither is urgent:
   authenticated app, and the service worker's strictness exists for security,
   not performance tuning.
 
+Don't want a PWA at all? Set `PWA_ENABLED=false`. The service worker is no
+longer registered (a browser that already has it unregisters it on its next
+visit), the install prompt is gone, and the manifest says `display: browser`,
+so the app can't be installed. Push notifications need the service worker, so
+they stop working too.
+
 ## Try it locally
 
 The service worker is skipped in development on purpose, because a stale

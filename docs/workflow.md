@@ -25,7 +25,7 @@ Here is the whole path.
               push a v* tag  ──▶  CI re-tags the image as the semver + stable,
                         │         and creates the GitHub Release from CHANGELOG
                         │
-      Mac mini (Tier B timer, <=60s poll) pulls, migrates, restarts
+      your box (Tier B timer, <=60s poll) pulls, migrates, restarts
                         │
                 live behind the Cloudflare Tunnel
 ```
@@ -170,7 +170,7 @@ milestone when it is done.
 
 ## 6 — The box picks it up
 
-A Mac mini (or any always-on host) running the recommended Tier B pull timer
+An always-on host running the recommended Tier B pull timer
 notices the new image digest on its next poll (≤60s) and runs `make deploy`
 itself. That pulls the new image, runs the one-shot migration, and restarts the
 app behind the tunnel. Nothing is pushed to the box; it only ever pulls.
@@ -203,7 +203,7 @@ make setup
 
 [Self-hosting](self-hosting.md) has the full walkthrough.
 
-For an always-on Mac mini, surviving a reboot is a separate, one-time concern
+On a macOS host (a Mac mini, say), surviving a reboot is a separate, one-time concern
 from the deploy flow above:
 
 ```bash

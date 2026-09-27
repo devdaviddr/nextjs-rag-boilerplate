@@ -106,6 +106,8 @@ export interface InspectedPage {
 }
 
 export interface InspectedDocument {
+  /** `section` for a non-PDF document (spec 0046 FR7): no page images. */
+  unit: 'page' | 'section'
   pages: InspectedPage[]
   /** Null when ingestion recorded no routing detail (FR8). */
   extraction: ExtractionSummary | null
@@ -346,8 +348,11 @@ export function buildInspection(input: {
    * the view cannot show a run as returnable whole when retrieval would not.
    */
   parentMaxTokens: number
+  /** What a location is: a PDF's page or a text document's section. */
+  unit?: 'page' | 'section'
 }): InspectedDocument {
   const { pageCount, extraction, chunks, parentMaxTokens } = input
+  const unit = input.unit ?? 'page'
 
   const byPage = new Map<number, InspectedChunk[]>()
   for (const c of chunks) {
@@ -410,5 +415,5 @@ export function buildInspection(input: {
   })
 
   const { partial, reasons } = indexingCompleteness(extraction, byPage)
-  return { pages, extraction, partial, partialReasons: reasons }
+  return { unit, pages, extraction, partial, partialReasons: reasons }
 }

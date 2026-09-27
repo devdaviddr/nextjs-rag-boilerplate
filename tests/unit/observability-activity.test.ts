@@ -192,3 +192,20 @@ describe('what gets published', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 })
+
+describe('tool calls in the activity drawer (#164)', () => {
+  it('says which tool was chosen, what it returned, and when it failed', () => {
+    expect(plainLine('Planner chose to tool', { tool: 'convert_units' })).toBe(
+      'Decided to use the tool convert_units',
+    )
+    expect(
+      plainLine('Called tool convert_units', {
+        tool: 'convert_units',
+        result: '62.14 miles',
+      }),
+    ).toMatch(/^Used convert_units: .*62\.14 miles/)
+    expect(
+      plainLine('Tool convert_units failed', { tool: 'convert_units' }),
+    ).toBe('The tool convert_units failed; carrying on without it')
+  })
+})

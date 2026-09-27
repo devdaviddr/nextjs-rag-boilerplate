@@ -1,5 +1,10 @@
 import 'server-only'
 
+import { createReadStream } from 'node:fs'
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { Readable } from 'node:stream'
+
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -11,27 +16,66 @@ import {
 import { env } from '@/lib/env'
 
 /**
- * S3-compatible client — talks to the self-hosted MinIO service by default,
- * but works unmodified against any S3-compatible endpoint (R2, real S3, etc).
- * `forcePathStyle` is required for MinIO (virtual-hosted-style bucket URLs
- * don't resolve against it).
+ * Object storage, behind one set of functions with two backends.
+ *
+ * - **S3-compatible**, when `S3_ENDPOINT` is set: the self-hosted MinIO
+ *   service by default, but any S3-compatible endpoint (R2, real S3) works
+ *   unmodified. `forcePathStyle` is required for MinIO.
+ * - **Local disk** otherwise (#137): objects are files under `STORAGE_DIR`,
+ *   so document chat runs with no storage service at all. Fine for one
+ *   instance; several instances need a shared store, which is what S3 is.
  */
-const client = new S3Client({
-  endpoint: env.S3_ENDPOINT,
-  region: env.S3_REGION,
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: env.S3_ACCESS_KEY_ID,
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
-  },
-})
+export function storageBackend(): 's3' | 'disk' {
+  return env.S3_ENDPOINT ? 's3' : 'disk'
+}
+
+let s3: S3Client | undefined
+function client(): S3Client {
+  s3 ??= new S3Client({
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY!,
+    },
+  })
+  return s3
+}
+
+function diskRoot(): string {
+  // A runtime path: without the comment, Turbopack cannot tell what it names
+  // and traces the whole project into the standalone build (#163).
+  return path.resolve(
+    /* turbopackIgnore: true */ env.STORAGE_DIR ?? './data/storage',
+  )
+}
+
+/**
+ * A key's file on disk. Keys are built by the app (`buildBucketKey`), but a
+ * key is still never allowed to name a path outside the storage folder.
+ */
+function diskPath(key: string): string {
+  const root = diskRoot()
+  const file = path.resolve(/* turbopackIgnore: true */ root, key)
+  if (!file.startsWith(root + path.sep)) {
+    throw new Error(`Refusing a storage key outside the storage folder: ${key}`)
+  }
+  return file
+}
 
 export async function putObject(
   key: string,
   body: Buffer,
   contentType: string,
 ): Promise<void> {
-  await client.send(
+  if (storageBackend() === 'disk') {
+    const file = diskPath(key)
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, body)
+    return
+  }
+  await client().send(
     new PutObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: key,
@@ -47,7 +91,15 @@ export async function getObjectStream(key: string): Promise<{
   contentType?: string
   contentLength?: number
 }> {
-  const result = await client.send(
+  if (storageBackend() === 'disk') {
+    const file = diskPath(key)
+    const { size } = await stat(file)
+    return {
+      body: Readable.toWeb(createReadStream(file)) as ReadableStream,
+      contentLength: size,
+    }
+  }
+  const result = await client().send(
     new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
   )
   if (!result.Body) {
@@ -66,7 +118,8 @@ export async function getObjectStream(key: string): Promise<{
  * upload size cap is what keeps this bounded.
  */
 export async function getObjectBuffer(key: string): Promise<Buffer> {
-  const result = await client.send(
+  if (storageBackend() === 'disk') return readFile(diskPath(key))
+  const result = await client().send(
     new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
   )
   if (!result.Body) {
@@ -76,7 +129,12 @@ export async function getObjectBuffer(key: string): Promise<Buffer> {
 }
 
 export async function deleteObject(key: string): Promise<void> {
-  await client.send(
+  if (storageBackend() === 'disk') {
+    // Like S3, deleting a key that does not exist is not an error.
+    await rm(diskPath(key), { force: true })
+    return
+  }
+  await client().send(
     new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
   )
 }
@@ -98,11 +156,13 @@ export async function listObjectKeys(prefix: string): Promise<string[]> {
     )
   }
 
+  if (storageBackend() === 'disk') return listDiskKeys(prefix)
+
   const keys: string[] = []
   let continuationToken: string | undefined
 
   do {
-    const page = await client.send(
+    const page = await client().send(
       new ListObjectsV2Command({
         Bucket: env.S3_BUCKET,
         Prefix: prefix,
@@ -121,6 +181,29 @@ export async function listObjectKeys(prefix: string): Promise<string[]> {
       : undefined
   } while (continuationToken)
 
+  return keys
+}
+
+/** Every key under a folder on disk, as `listObjectKeys` returns them. */
+async function listDiskKeys(prefix: string): Promise<string[]> {
+  const keys: string[] = []
+  const walk = async (folder: string): Promise<void> => {
+    let entries
+    try {
+      entries = await readdir(folder, { withFileTypes: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+    for (const entry of entries) {
+      const full = path.join(folder, entry.name)
+      if (entry.isDirectory()) await walk(full)
+      else if (entry.isFile()) {
+        keys.push(path.relative(diskRoot(), full).split(path.sep).join('/'))
+      }
+    }
+  }
+  await walk(diskPath(prefix))
   return keys
 }
 

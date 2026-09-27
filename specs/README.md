@@ -106,6 +106,11 @@ other — one isn't a substitute for the other.
 | [0041](0041-in-app-documentation.md)                  | Read the platform documentation inside the app                                       | Shipped  | v0.23.0 |
 | [0042](0042-observability.md)                         | See what the RAG pipeline and its agents are doing                                   | Shipped  | v0.23.0 |
 | [0043](0043-adaptive-planning.md)                     | Plan only when it pays                                                               | Proposed | —       |
+| [0044](0044-tool-registry.md)                         | Give the agent tools a developer can add                                             | Proposed | —       |
+| [0045](0045-provider-adapters.md)                     | Talk to model providers through adapters, Anthropic included                         | Proposed | —       |
+| [0046](0046-document-loaders.md)                      | Index Markdown, HTML and Word documents, through loaders                             | Proposed | —       |
+| [0047](0047-web-page-sources.md)                      | Add a web page to a knowledge base, fetched safely                                   | Proposed | —       |
+| [0048](0048-mcp-tools.md)                             | Give the agent tools from MCP servers                                                | Proposed | —       |
 
 <!-- specs:index:end -->
 

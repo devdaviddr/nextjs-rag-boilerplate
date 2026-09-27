@@ -1,23 +1,52 @@
+import { env } from '@/lib/env'
+
+/**
+ * Which header carries the client's address (#156). The rate limits are keyed
+ * on it, so it must be one the client cannot set.
+ *
+ * - `cf-connecting-ip`: behind a Cloudflare Tunnel. Only Cloudflare sets it.
+ * - `x-forwarded-for`: behind your own reverse proxy. The LAST hop, the one
+ *   the proxy appended; earlier entries came from the client and can be
+ *   anything.
+ * - `x-real-ip`: a proxy that sets that header instead.
+ * - `auto`: no proxy is declared — `CF-Connecting-IP`, then the first
+ *   `X-Forwarded-For` hop, then `X-Real-IP`. Right for local development and
+ *   the test suite, which give each client its own address that way; wrong
+ *   for an internet-facing box, where each of those can be forged.
+ */
+export type TrustedIpHeader =
+  'auto' | 'cf-connecting-ip' | 'x-forwarded-for' | 'x-real-ip'
+
 /**
  * Best-effort client IP from request headers.
  *
- * Order matters for correctness AND security behind a proxy:
- * 1. `CF-Connecting-IP` — set by Cloudflare, cannot be spoofed by the client
- *    (traffic only reaches the origin through Cloudflare). Preferred when the
- *    app runs behind a Cloudflare Tunnel.
- * 2. `X-Forwarded-For` (first hop) — spoofable if the app is directly exposed,
- *    so only meaningful behind a trusted proxy.
- * 3. `X-Real-IP`.
- *
- * Returns `'unknown'` when nothing usable is present (callers key rate limits
- * per IP; an `'unknown'` bucket degrades gracefully).
+ * Returns `'unknown'` when the trusted header is missing (callers key rate
+ * limits per IP; an `'unknown'` bucket degrades gracefully).
  */
-export function clientIpFromHeaders(headers: Headers): string {
-  const cf = headers.get('cf-connecting-ip')
-  if (cf) return cf.trim()
+export function clientIpFromHeaders(
+  headers: Headers,
+  trusted: TrustedIpHeader = env.TRUSTED_IP_HEADER,
+): string {
+  const header = (name: string) => headers.get(name)?.trim() || undefined
+  const forwarded = headers
+    .get('x-forwarded-for')
+    ?.split(',')
+    .map((hop) => hop.trim())
+    .filter(Boolean)
 
-  const forwarded = headers.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]!.trim()
-
-  return headers.get('x-real-ip')?.trim() ?? 'unknown'
+  switch (trusted) {
+    case 'cf-connecting-ip':
+      return header('cf-connecting-ip') ?? 'unknown'
+    case 'x-forwarded-for':
+      return forwarded?.at(-1) ?? 'unknown'
+    case 'x-real-ip':
+      return header('x-real-ip') ?? 'unknown'
+    case 'auto':
+      return (
+        header('cf-connecting-ip') ??
+        forwarded?.[0] ??
+        header('x-real-ip') ??
+        'unknown'
+      )
+  }
 }

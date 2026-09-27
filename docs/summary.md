@@ -88,15 +88,16 @@ Vitest unit tests and Playwright E2E, and Docker for local Postgres, MinIO and
 Mailpit. See [Usage & Development](usage.md).
 
 Deployment starts with a one-command self-hosting wizard (`make setup`). A
-Cloudflare Tunnel means no open ports and no certificates. The multi-stage
-Dockerfile has a non-root runtime, continuous deployment is pull-based from a
-published image (`make deploy`), and macOS boot persistence keeps an always-on
-Mac mini running (`make autostart`). Postgres + MinIO backups are automated.
+Cloudflare Tunnel means no open ports and no certificates, and a plain
+`docker compose` stack runs behind your own reverse proxy instead. The
+multi-stage Dockerfile has a non-root runtime, continuous deployment is
+pull-based from a published image (`make deploy`), and on a macOS host
+`make autostart` survives reboots. Postgres + MinIO backups are automated.
 See [Self-hosting](self-hosting.md), [Deployment](deployment.md) and
 [Backups](backups.md).
 
-> GitHub Actions CI runs format, lint, typecheck, unit tests, `specs:check`
-> and the Playwright suite on every PR. It publishes the app and migrate images
+> GitHub Actions CI runs format, lint, typecheck, unit tests and `specs:check`
+> on every PR, and the Playwright suite once per ship, on the release PR. It publishes the app and migrate images
 > to GHCR from `main`, and turns a `v*` tag into a release. See
 > [CI/CD](ci-cd.md).
 

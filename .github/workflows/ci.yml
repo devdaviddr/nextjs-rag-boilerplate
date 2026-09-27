@@ -108,8 +108,12 @@ jobs:
         if: env.CODE == 'true'
       - run: pnpm specs:check
       - run: pnpm docs:check
-      # Blocks on critical advisories only; Renovate raises the rest as PRs.
-      - name: Audit dependencies
+      # What ships in the image blocks on high; dev tooling only on critical,
+      # and Renovate raises the rest as PRs (#129).
+      - name: Audit production dependencies
+        if: env.CODE == 'true'
+        run: pnpm audit --prod --audit-level=high
+      - name: Audit all dependencies
         if: env.CODE == 'true'
         run: pnpm audit --audit-level=critical
       # A release PR must pass the same check the tag will, before it merges.
@@ -211,12 +215,42 @@ jobs:
           # The RAG suites (rag, knowledge-bases, the inference parts of chat)
           # always skip in CI: they call the rate-limited NIM endpoint, so they
           # run locally only. Set empty on purpose, so a repository secret of
-          # the same name can never switch them on here (#22).
+          # the same name can never switch them on here (#22). Both names:
+          # LLM_API_KEY, and its deprecated alias NVIDIA_API_KEY (#136).
+          LLM_API_KEY:
           NVIDIA_API_KEY:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # The README's "Getting started", run as written (#152): scripts/quickstart.mjs
+  # reads the commands out of README.md and runs them (docker compose for
+  # Postgres + MinIO included), with a stub model server in place of a real
+  # key, then tests/e2e/quickstart.spec.ts signs in, uploads a PDF and checks
+  # for a cited answer and a refusal. A README step that stops working fails
+  # the release PR here instead of a newcomer's first hour.
+  quickstart:
+    name: README quickstart
+    timeout-minutes: 25
+    needs: [plan]
+    if: needs.plan.outputs.full == 'true' && needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Follow the README
+        run: node scripts/quickstart.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: quickstart-report
           path: playwright-report/
           retention-days: 7
 

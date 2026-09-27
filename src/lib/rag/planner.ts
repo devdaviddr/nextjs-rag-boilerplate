@@ -27,7 +27,7 @@
  * evidence clears the floor (spec 0029 NFR1), and native tool calling had no
  * way to express it anyway, so the action was unreachable (#96).
  */
-export type PlannerAction = 'search' | 'answer' | 'read-figure'
+export type PlannerAction = 'search' | 'answer' | 'read-figure' | 'tool'
 
 export interface PlannerDecision {
   action: PlannerAction
@@ -53,6 +53,12 @@ export interface PlannerDecision {
    */
   chunkId?: string
   figureQuestion?: string
+  /**
+   * Present when `action === 'tool'` (spec 0044): a call to a registered
+   * tool. `arguments` is the model's raw JSON, validated against the tool's
+   * schema before the tool runs; it carries no scope.
+   */
+  tool?: { name: string; arguments: string }
 }
 
 /**
@@ -89,6 +95,8 @@ export const SEARCH_TOOL = {
     },
   },
 }
+
+const NO_TOOLS: ReadonlySet<string> = new Set()
 
 /** Shape of the subset of an OpenAI-compatible response we depend on. */
 interface RawToolCall {
@@ -147,6 +155,8 @@ function cleanId(value: unknown): string | undefined {
  */
 export function parseToolCallDecision(
   choice: RawChoice | undefined,
+  /** Names of the registered tools (spec 0044); none by default. */
+  toolNames: ReadonlySet<string> = NO_TOOLS,
 ): PlannerDecision | null {
   const calls = choice?.message?.tool_calls ?? []
 
@@ -159,6 +169,21 @@ export function parseToolCallDecision(
   if (figureCall?.function?.arguments) {
     const decision = parseFigureArguments(figureCall.function.arguments)
     if (decision) return decision
+  }
+
+  // A registered tool next (spec 0044): asking for one is a specific intent,
+  // like a figure read. Arguments are validated by the tool, not here.
+  const toolCall = calls.find(
+    (c) => c.function?.name !== undefined && toolNames.has(c.function.name),
+  )
+  if (toolCall?.function?.name) {
+    return {
+      action: 'tool',
+      tool: {
+        name: toolCall.function.name,
+        arguments: toolCall.function.arguments ?? '',
+      },
+    }
   }
 
   const call = calls.find((c) => c.function?.name === SEARCH_TOOL.function.name)

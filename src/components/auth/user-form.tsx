@@ -97,11 +97,16 @@ export function UserForm({
     setIsPending(true)
     try {
       if (isCreate) {
-        const created = await createUser({
+        const result = await createUser({
           name: values.name ?? '',
           email: values.email ?? '',
           roleIds: values.roleIds,
         })
+        if (!result.ok) {
+          setFormError(result.error)
+          return
+        }
+        const created = result.data
         // Show the one-time invite link; the dialog stays open until "Done".
         setEmailSent(created.emailSent)
         setInviteUrl(
@@ -111,13 +116,24 @@ export function UserForm({
         )
         return
       } else if (isEdit && initialData?.id) {
-        await updateUser(initialData.id, {
+        const result = await updateUser(initialData.id, {
           name: values.name,
           email: values.email,
           roleIds: values.roleIds,
         })
+        if (!result.ok) {
+          setFormError(result.error)
+          return
+        }
       } else if (isRoles && initialData?.id) {
-        await assignRoles({ userId: initialData.id, roleIds: values.roleIds })
+        const result = await assignRoles({
+          userId: initialData.id,
+          roleIds: values.roleIds,
+        })
+        if (!result.ok) {
+          setFormError(result.error)
+          return
+        }
       }
       onSuccess?.()
     } catch (err) {

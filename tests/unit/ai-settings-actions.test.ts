@@ -27,6 +27,7 @@ const { isAdmin, store, mockEnv } = vi.hoisted(() => ({
     rows: new Map<string, string>(),
     connections: [] as Array<Record<string, unknown>>,
     audit: [] as Array<Record<string, unknown>>,
+    mcp: [] as Array<Record<string, unknown>>,
   },
 }))
 
@@ -103,6 +104,50 @@ vi.mock('@/lib/ai-settings/store', () => ({
   ),
 }))
 
+vi.mock('@/lib/ai-settings/mcp-store', () => ({
+  readMcpServers: vi.fn(async () => store.mcp),
+  readMcpServer: vi.fn(async (id: string) =>
+    store.mcp.find((s) => s.id === id),
+  ),
+  insertMcpServer: vi.fn(async (values: Record<string, unknown>) => {
+    const token = values.token as { ciphertext: string; hint: string } | null
+    const id = `m-${store.mcp.length + 1}`
+    store.mcp.push({
+      id,
+      name: values.name,
+      url: values.url,
+      internal: values.internal,
+      tokenCiphertext: token?.ciphertext ?? null,
+      tokenHint: token?.hint ?? null,
+      tools: [],
+      enabledTools: [],
+      toolsFetchedAt: null,
+    })
+    return id
+  }),
+  updateMcpServer: vi.fn(
+    async (id: string, values: Record<string, unknown>) => {
+      const row = store.mcp.find((s) => s.id === id)!
+      const { token, ...rest } = values
+      Object.assign(row, rest)
+      if (token !== undefined) {
+        const t = token as { ciphertext: string; hint: string } | null
+        row.tokenCiphertext = t?.ciphertext ?? null
+        row.tokenHint = t?.hint ?? null
+      }
+    },
+  ),
+  deleteMcpServer: vi.fn(async (id: string) => {
+    const i = store.mcp.findIndex((s) => s.id === id)
+    if (i >= 0) store.mcp.splice(i, 1)
+  }),
+}))
+const { listMcpTools } = vi.hoisted(() => ({ listMcpTools: vi.fn() }))
+vi.mock('@/lib/rag/tools/mcp-client', () => {
+  class McpError extends Error {}
+  return { McpError, listMcpTools }
+})
+
 import { __resetAiSettingsForTests } from '@/lib/ai-settings'
 import {
   deleteConnection,
@@ -112,7 +157,11 @@ import {
   saveConnection,
   saveRetrievalSetting,
   saveRole,
+  removeMcpServer,
+  saveMcpServer,
+  setMcpToolEnabled,
   testConnection,
+  testMcpServer,
   testRole,
 } from '@/lib/ai-settings/actions'
 
@@ -124,6 +173,7 @@ beforeEach(() => {
   store.rows.clear()
   store.connections.length = 0
   store.audit.length = 0
+  store.mcp.length = 0
   mockEnv.AI_SETTINGS_LOCKED = false
   vi.restoreAllMocks()
 })
@@ -520,5 +570,104 @@ describe('FR9: provider behaviour', () => {
     )
     const result = await testRole('embed')
     expect(!result.ok && result.error).toContain('--embeddings')
+  })
+})
+
+describe('spec 0048: MCP tool servers', () => {
+  const TOKEN = 'mcp-bearer-token-secret-4242'
+  const TOOLS = [
+    { name: 'lookup', description: 'Look a thing up.', inputSchema: {} },
+    { name: 'delete_all', description: 'Dangerous.', inputSchema: {} },
+  ]
+
+  async function addServer() {
+    const saved = await saveMcpServer({
+      name: 'Tickets',
+      url: 'https://mcp.example.com/mcp',
+      token: TOKEN,
+    })
+    if (!saved.ok) throw new Error(saved.error)
+    return saved.data.id
+  }
+
+  it('FR7/FR6: every change is admin only', async () => {
+    isAdmin.value = false
+    const forbidden = {
+      ok: false,
+      error: 'Only admins can change AI settings.',
+    }
+    expect(
+      await saveMcpServer({ name: 'x', url: 'https://mcp.example.com' }),
+    ).toEqual(forbidden)
+    expect(await testMcpServer('m-1')).toEqual(forbidden)
+    expect(await setMcpToolEnabled('m-1', 'lookup', true)).toEqual(forbidden)
+    expect(await removeMcpServer('m-1')).toEqual(forbidden)
+    expect(store.mcp).toHaveLength(0)
+  })
+
+  it('NFR1: the token is stored encrypted and never reaches the view', async () => {
+    await addServer()
+    expect(store.mcp[0]!.tokenCiphertext).toMatch(/^v1:/)
+    expect(JSON.stringify(store.mcp[0])).not.toContain(TOKEN)
+    const view = await getAiSettingsView()
+    expect(view.ok).toBe(true)
+    const json = JSON.stringify(view)
+    expect(json).not.toContain(TOKEN)
+    expect(json).not.toContain(String(store.mcp[0]!.tokenCiphertext))
+    expect(view.ok && view.data.mcpServers[0]).toMatchObject({
+      name: 'Tickets',
+      tokenHint: '4242',
+      hasToken: true,
+    })
+  })
+
+  it('FR1, FR2: a test lists the tools, all off; switching one on is audited', async () => {
+    const id = await addServer()
+    listMcpTools.mockResolvedValueOnce(TOOLS)
+    expect(await testMcpServer(id)).toMatchObject({
+      ok: true,
+      data: { tools: 2 },
+    })
+    expect(listMcpTools.mock.calls[0]![0]).toMatchObject({ token: TOKEN })
+    let view = await getAiSettingsView()
+    expect(view.ok && view.data.mcpServers[0]!.tools).toEqual([
+      { name: 'lookup', description: 'Look a thing up.', enabled: false },
+      { name: 'delete_all', description: 'Dangerous.', enabled: false },
+    ])
+
+    expect(await setMcpToolEnabled(id, 'lookup', true)).toEqual({
+      ok: true,
+      data: null,
+    })
+    expect(await setMcpToolEnabled(id, 'not_listed', true)).toMatchObject({
+      ok: false,
+    })
+    view = await getAiSettingsView()
+    expect(
+      view.ok && view.data.mcpServers[0]!.tools.map((t) => t.enabled),
+    ).toEqual([true, false])
+    expect(store.audit.map((a) => a.action)).toEqual(['mcp-add', 'mcp-tool-on'])
+    expect(JSON.stringify(store.audit)).not.toContain(TOKEN)
+
+    // A tool the server stops listing is switched off.
+    listMcpTools.mockResolvedValueOnce([TOOLS[1]])
+    await testMcpServer(id)
+    expect(store.mcp[0]!.enabledTools).toEqual([])
+  })
+
+  it('FR6: removing is audited, and the lock refuses changes but not tests', async () => {
+    const id = await addServer()
+    mockEnv.AI_SETTINGS_LOCKED = true
+    expect(await removeMcpServer(id)).toMatchObject({ ok: false })
+    listMcpTools.mockResolvedValueOnce(TOOLS)
+    expect(await testMcpServer(id)).toMatchObject({ ok: true })
+    mockEnv.AI_SETTINGS_LOCKED = false
+    expect(await removeMcpServer(id)).toEqual({ ok: true, data: null })
+    expect(store.mcp).toHaveLength(0)
+    expect(store.audit.at(-1)).toMatchObject({
+      action: 'mcp-remove',
+      key: 'Tickets',
+      oldValue: 'https://mcp.example.com/mcp · token ••••4242',
+    })
   })
 })

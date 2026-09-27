@@ -57,6 +57,14 @@ export interface CitationLocation {
   kind: ChunkKind
   /** Possibly empty — see `toCitationBoxes`. Empty means "no highlight". */
   boxes: CitationBox[]
+  /**
+   * A non-PDF document (spec 0046 FR7): `pageNumber` is a section, there is
+   * no page image, and `text` is the whole section to show instead.
+   */
+  unit?: 'section'
+  text?: string
+  /** The page a web document was fetched from (spec 0047 FR4). */
+  sourceUrl?: string
 }
 
 /**

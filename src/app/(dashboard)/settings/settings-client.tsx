@@ -18,6 +18,7 @@ import { AiChangesCard } from '@/components/settings/ai-changes-card'
 import { AiConnectionsCard } from '@/components/settings/ai-connections-card'
 import { AiModelsCard } from '@/components/settings/ai-models-card'
 import { AiRetrievalCard } from '@/components/settings/ai-retrieval-card'
+import { AiToolsCard } from '@/components/settings/ai-tools-card'
 import { BuildInfoCard } from '@/components/settings/build-info-card'
 import type { AiSettingsView } from '@/lib/ai-settings/actions'
 import { InfoTip } from '@/components/ui/info-tip'
@@ -262,6 +263,10 @@ export function SettingsClient({
                     reindex={ai.reindex}
                     locked={ai.locked}
                   />
+                </div>
+                <div id="tools" className="space-y-4 border-t pt-6">
+                  <h3 className="font-semibold">Tools</h3>
+                  <AiToolsCard servers={ai.mcpServers} locked={ai.locked} />
                 </div>
                 <div id="retrieval" className="space-y-4 border-t pt-6">
                   <h3 className="font-semibold">Retrieval &amp; answering</h3>

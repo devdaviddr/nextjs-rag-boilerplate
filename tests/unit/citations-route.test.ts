@@ -36,6 +36,7 @@ vi.mock('@/db', () => {
         for (const method of [
           'from',
           'innerJoin',
+          'leftJoin',
           'where',
           'limit',
           'orderBy',

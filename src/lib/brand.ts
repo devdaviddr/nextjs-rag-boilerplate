@@ -12,7 +12,7 @@ export const APP_SHORT_NAME = 'Rag Boilerplate'
 
 /** One-line description used for metadata and the landing page. */
 export const APP_DESCRIPTION =
-  'Upload a PDF knowledge base and chat with your documents, with a citation for every answer.'
+  'Upload your documents into a knowledge base and chat with them, with a citation for every answer.'
 
 /** Where a signed-in user lands. Chat is the product; there is no dashboard. */
 export const HOME_PATH = '/chat'

@@ -10,6 +10,9 @@
 services:
   app:
     ports: !reset []
+    environment:
+      # Only Cloudflare can set this header on a tunnelled request (#156).
+      TRUSTED_IP_HEADER: cf-connecting-ip
 
   cloudflared:
     image: cloudflare/cloudflared:latest

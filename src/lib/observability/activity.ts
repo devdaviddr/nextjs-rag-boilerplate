@@ -74,6 +74,18 @@ export function plainLine(
   if (message.startsWith('Planner chose to read figure')) {
     return 'Decided to read a figure more closely'
   }
+  // Registered tools (spec 0044, #164).
+  const tool = str(meta.tool)
+  if (message === 'Planner chose to tool') {
+    return tool ? `Decided to use the tool ${tool}` : 'Decided to use a tool'
+  }
+  if (message.startsWith('Called tool ')) {
+    const result = str(meta.result)
+    return `Used ${tool ?? 'a tool'}${result ? `: ${quote(result, 60)}` : ''}`
+  }
+  if (message.startsWith('Tool ') && message.endsWith(' failed')) {
+    return `The tool ${tool ?? ''} failed; carrying on without it`
+  }
   if (message === 'Planner gave no usable decision') {
     return 'The planner gave no usable answer; carrying on without it'
   }

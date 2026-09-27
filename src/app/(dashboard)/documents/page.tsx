@@ -18,8 +18,9 @@ export default async function DocumentsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Knowledge bases</h1>
         <p className="text-muted-foreground text-sm">
-          Upload PDFs into a knowledge base to ask questions about them. Only
-          you can see or search your knowledge bases.
+          Upload PDFs, Word, HTML and Markdown files into a knowledge base to
+          ask questions about them. Only you can see or search your knowledge
+          bases.
         </p>
       </div>
       <KnowledgeBasesPanel initialKnowledgeBases={knowledgeBases} />

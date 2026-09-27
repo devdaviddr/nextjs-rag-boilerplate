@@ -165,6 +165,11 @@ export interface AuditWrite {
     | 'connection-add'
     | 'connection-edit'
     | 'connection-remove'
+    | 'mcp-add'
+    | 'mcp-edit'
+    | 'mcp-remove'
+    | 'mcp-tool-on'
+    | 'mcp-tool-off'
   key: string
   oldValue: string | null
   newValue: string | null

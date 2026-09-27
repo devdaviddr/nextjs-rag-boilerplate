@@ -80,6 +80,7 @@ function Control({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          placeholder={field.example}
           className="w-full max-w-sm font-mono text-sm"
         />
       )

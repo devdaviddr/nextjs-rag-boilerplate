@@ -12,7 +12,7 @@ import { inviteEmail } from '@/lib/email/templates'
 import { env } from '@/lib/env'
 import { AUTH_LIMITS, rateLimit } from '@/lib/rate-limit'
 import { clientIpFromHeaders } from '@/lib/request-ip'
-import { deleteAllFilesForUser } from '@/lib/storage/actions'
+import { deleteAllFilesForUser } from '@/lib/storage/cleanup'
 import { headers } from 'next/headers'
 import {
   createUserSchema,
@@ -23,6 +23,32 @@ import {
   type AssignRolesInput,
 } from '@/lib/validations/auth'
 import { logger } from '@/lib/logger'
+
+/**
+ * Expected, user-facing outcomes are returned, never thrown (#128). Next.js
+ * redacts a thrown Error's message in production builds, so a thrown
+ * "User not found." reached the admin as "an error occurred". Same pattern as
+ * `ActionResult` in `src/lib/storage/actions.ts`. Genuinely unexpected faults
+ * (DB down) still throw, and are rightly redacted.
+ */
+export type ActionResult<T> =
+  { ok: true; data: T } | { ok: false; error: string }
+
+/** A failure the admin is meant to read, as opposed to an unexpected fault. */
+class AdminActionError extends Error {}
+
+async function asResult<T>(run: () => Promise<T>): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await run() }
+  } catch (error) {
+    // ForbiddenError carries the guards' messages: not an admin, email not
+    // verified, or an admin acting on their own account.
+    if (error instanceof AdminActionError || error instanceof ForbiddenError) {
+      return { ok: false, error: error.message }
+    }
+    throw error
+  }
+}
 
 /** Get client IP for rate limiting. */
 async function getClientIp(): Promise<string> {
@@ -49,7 +75,7 @@ async function checkAdminRateLimit(action: string): Promise<void> {
   )
   if (!limited.success) {
     logger.warn('Admin action rate limit exceeded', { action, ip })
-    throw new Error('Too many requests. Please wait a moment.')
+    throw new AdminActionError('Too many requests. Please wait a moment.')
   }
 }
 
@@ -139,14 +165,22 @@ export async function getAllRoles(): Promise<
  * Create a new user (admin). No password — user sets it on first login.
  * Admin only.
  */
-export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
+export async function createUser(
+  input: CreateUserInput,
+): Promise<ActionResult<CreatedUser>> {
+  return asResult(() => createUserOrThrow(input))
+}
+
+async function createUserOrThrow(input: CreateUserInput): Promise<CreatedUser> {
   await requireRole('admin')
   await requireEmailVerifiedIfEnforced()
   await checkAdminRateLimit('create-user')
 
   const parsed = createUserSchema.safeParse(input)
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(', '))
+    throw new AdminActionError(
+      parsed.error.issues.map((i) => i.message).join(', '),
+    )
   }
 
   const { name, email, roleIds } = parsed.data
@@ -157,7 +191,7 @@ export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
     columns: { id: true },
   })
   if (existing) {
-    throw new Error('An account with this email already exists.')
+    throw new AdminActionError('An account with this email already exists.')
   }
 
   // Verify all roleIds exist
@@ -166,7 +200,7 @@ export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
     columns: { id: true },
   })
   if (validRoles.length !== roleIds.length) {
-    throw new Error('One or more roles do not exist.')
+    throw new AdminActionError('One or more roles do not exist.')
   }
 
   // Mint an invite token; the account can only be claimed with it via /register.
@@ -253,6 +287,13 @@ export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
 export async function updateUser(
   userId: string,
   input: UpdateUserInput,
+): Promise<ActionResult<UserWithRoles>> {
+  return asResult(() => updateUserOrThrow(userId, input))
+}
+
+async function updateUserOrThrow(
+  userId: string,
+  input: UpdateUserInput,
 ): Promise<UserWithRoles> {
   await requireRole('admin')
   await requireEmailVerifiedIfEnforced()
@@ -260,7 +301,9 @@ export async function updateUser(
 
   const parsed = updateUserSchema.safeParse(input)
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(', '))
+    throw new AdminActionError(
+      parsed.error.issues.map((i) => i.message).join(', '),
+    )
   }
 
   const session = await getCurrentSession()
@@ -273,7 +316,7 @@ export async function updateUser(
   })
 
   if (!targetUser) {
-    throw new Error('User not found.')
+    throw new AdminActionError('User not found.')
   }
 
   const { name, email, roleIds } = parsed.data
@@ -285,7 +328,7 @@ export async function updateUser(
       columns: { id: true },
     })
     if (emailTaken) {
-      throw new Error('An account with this email already exists.')
+      throw new AdminActionError('An account with this email already exists.')
     }
   }
 
@@ -306,7 +349,7 @@ export async function updateUser(
       columns: { id: true },
     })
     if (validRoles.length !== roleIds.length) {
-      throw new Error('One or more roles do not exist.')
+      throw new AdminActionError('One or more roles do not exist.')
     }
 
     // Prevent admin from removing own admin role
@@ -371,7 +414,14 @@ export async function updateUser(
  * Delete a user (admin). Admin only.
  * Cannot delete self.
  */
-export async function deleteUser(userId: string): Promise<void> {
+export async function deleteUser(userId: string): Promise<ActionResult<null>> {
+  return asResult(async () => {
+    await deleteUserOrThrow(userId)
+    return null
+  })
+}
+
+async function deleteUserOrThrow(userId: string): Promise<void> {
   await requireRole('admin')
   await requireEmailVerifiedIfEnforced()
   await checkAdminRateLimit('delete-user')
@@ -389,7 +439,7 @@ export async function deleteUser(userId: string): Promise<void> {
   })
 
   if (!targetUser) {
-    throw new Error('User not found.')
+    throw new AdminActionError('User not found.')
   }
 
   // The FK cascade removes `userRoles`/`files` rows automatically, but never
@@ -409,14 +459,25 @@ export async function deleteUser(userId: string): Promise<void> {
 /**
  * Assign/replace all roles for a user (admin). Admin only.
  */
-export async function assignRoles(input: AssignRolesInput): Promise<void> {
+export async function assignRoles(
+  input: AssignRolesInput,
+): Promise<ActionResult<null>> {
+  return asResult(async () => {
+    await assignRolesOrThrow(input)
+    return null
+  })
+}
+
+async function assignRolesOrThrow(input: AssignRolesInput): Promise<void> {
   await requireRole('admin')
   await requireEmailVerifiedIfEnforced()
   await checkAdminRateLimit('assign-roles')
 
   const parsed = assignRolesSchema.safeParse(input)
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(', '))
+    throw new AdminActionError(
+      parsed.error.issues.map((i) => i.message).join(', '),
+    )
   }
 
   const { userId, roleIds } = parsed.data
@@ -427,7 +488,7 @@ export async function assignRoles(input: AssignRolesInput): Promise<void> {
     columns: { id: true },
   })
   if (!targetUser) {
-    throw new Error('User not found.')
+    throw new AdminActionError('User not found.')
   }
 
   // Verify all roles exist
@@ -436,7 +497,7 @@ export async function assignRoles(input: AssignRolesInput): Promise<void> {
     columns: { id: true },
   })
   if (validRoles.length !== roleIds.length) {
-    throw new Error('One or more roles do not exist.')
+    throw new AdminActionError('One or more roles do not exist.')
   }
 
   const session = await getCurrentSession()
@@ -466,51 +527,6 @@ export async function assignRoles(input: AssignRolesInput): Promise<void> {
     targetUserId: userId,
     roleIds,
   })
-}
-
-/**
- * Check if a user can complete registration (has pre-created account, no password).
- * Used by /register page to show appropriate UI.
- */
-export async function canCompleteRegistration(email: string): Promise<boolean> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-    columns: { id: true, hashedPassword: true },
-  })
-  return !!user && !user.hashedPassword
-}
-
-/**
- * Complete registration for a pre-created user (set password).
- * This is called from the register action when user already exists without password.
- */
-export async function completeRegistration(
-  email: string,
-  password: string,
-): Promise<void> {
-  await checkAdminRateLimit('complete-registration')
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-    columns: { id: true, hashedPassword: true },
-  })
-
-  if (!user) {
-    throw new Error('Account not found.')
-  }
-  if (user.hashedPassword) {
-    throw new Error('Account already has a password. Please sign in.')
-  }
-
-  // Hash password
-  const { hashPassword } = await import('@/lib/auth/password')
-  const hashed = await hashPassword(password)
-
-  await db
-    .update(users)
-    .set({ hashedPassword: hashed })
-    .where(eq(users.id, user.id))
-  logger.info('User completed registration', { userId: user.id })
 }
 
 // Import getCurrentSession here to avoid circular dependency

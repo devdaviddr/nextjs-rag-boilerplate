@@ -101,6 +101,11 @@ ENV APP_GIT_SHA=$APP_GIT_SHA
 # here. Mount a volume on /app/.cache to keep the download across redeploys.
 RUN mkdir -p /app/.cache && chown nextjs:nodejs /app/.cache
 
+# Without S3_ENDPOINT, uploads are kept on disk under STORAGE_DIR (default
+# data/storage, relative to /app; #137). Created for the app user here. Mount
+# a volume on /app/data, or the files go with the container.
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
 USER nextjs
 EXPOSE 3000
 

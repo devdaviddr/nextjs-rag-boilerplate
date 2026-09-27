@@ -264,17 +264,3 @@ export async function removeProfilePhoto(): Promise<ActionResult<null>> {
   logger.info('Profile photo removed', { userId })
   return { ok: true, data: null }
 }
-
-/**
- * Delete every S3 object owned by a user. Used by `admin-actions.ts`'s
- * `deleteUser` BEFORE the user row is deleted — the DB foreign key cascades
- * the `files` rows automatically, but never the underlying S3 objects, so
- * those must be removed explicitly while their bucket keys are still known.
- */
-export async function deleteAllFilesForUser(userId: string): Promise<void> {
-  const rows = await db.query.files.findMany({
-    where: eq(files.ownerId, userId),
-    columns: { bucketKey: true },
-  })
-  await Promise.all(rows.map((r) => deleteObject(r.bucketKey)))
-}

@@ -4,6 +4,7 @@ import { SessionProvider } from 'next-auth/react'
 import { AppShell } from '@/components/shell/app-shell'
 import { VerificationBanner } from '@/components/auth/verification-banner'
 import { getCurrentSession } from '@/lib/auth/session'
+import { env } from '@/lib/env'
 import { listConversations } from '@/lib/chat/actions'
 import {
   isCurrentUserVerified,
@@ -41,6 +42,7 @@ export default async function DashboardLayout({
           image: session.user.image,
         }}
         conversations={conversations}
+        features={{ observability: env.OBSERVABILITY_UI_ENABLED }}
       >
         {showVerificationBanner && <VerificationBanner />}
         {children}

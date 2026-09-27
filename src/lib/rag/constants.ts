@@ -12,8 +12,12 @@
  */
 export type EmbeddingInputType = 'passage' | 'query'
 
-/** Only PDFs are ingestible today (spec 0025 non-goals). */
-export const DOCUMENT_MIME_TYPES = ['application/pdf'] as const
+/**
+ * The file picker's `accept` list (spec 0046). The loaders decide what is
+ * accepted, by the bytes; this only filters the picker, and lives here because
+ * a client component cannot import the loaders. A test keeps the two equal.
+ */
+export const DOCUMENT_ACCEPT = '.pdf,.docx,.html,.htm,.md,.markdown,.txt'
 
 /** Returned verbatim when retrieval finds nothing above the similarity floor. */
 export const NO_CONTEXT_ANSWER =

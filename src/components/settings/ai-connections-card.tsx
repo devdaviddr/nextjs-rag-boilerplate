@@ -428,7 +428,7 @@ export function AiConnectionsCard({
               {c.builtIn && (
                 <p className="text-muted-foreground text-xs">
                   From <code>RAG_LLM_BASE_URL</code> and{' '}
-                  <code>NVIDIA_API_KEY</code>; change it in <code>.env</code>.
+                  <code>LLM_API_KEY</code>; change it in <code>.env</code>.
                 </p>
               )}
               <TestLine state={tests[c.id] ?? { kind: 'idle' }} />

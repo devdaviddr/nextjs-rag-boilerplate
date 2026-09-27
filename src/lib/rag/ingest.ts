@@ -21,7 +21,8 @@ import { span, startRun } from '@/lib/observability/runs'
 import { logger } from '@/lib/logger'
 import { getObjectBuffer } from '@/lib/storage/client'
 import { buildEmbeddingText } from './chunk'
-import { type ParsedPageCache, chunksFromPdf } from './crack'
+import type { ParsedPageCache } from './crack'
+import { loaderForMimeType } from './loaders'
 import { embedPassages } from './embed'
 import { ExtractionError } from './extract'
 import type { ParsedElement } from './parse-types'
@@ -402,7 +403,7 @@ async function ingestOne(
   try {
     const file = await db.query.files.findFirst({
       where: eq(files.id, doc.fileId),
-      columns: { bucketKey: true },
+      columns: { bucketKey: true, mimeType: true },
     })
     if (!file)
       throw new ExtractionError('The uploaded file is no longer available.')
@@ -417,7 +418,9 @@ async function ingestOne(
       pageCount,
       extraction,
     } = await span('extract', async (step) => {
-      const out = await chunksFromPdf(buffer, {
+      // The format's loader (spec 0046); PDF is today's pipeline, unchanged.
+      const loader = loaderForMimeType(file.mimeType)
+      const out = await loader.toChunks(buffer, {
         chunkTokens: aiSettings().RAG_CHUNK_TOKENS,
         overlapTokens: aiSettings().RAG_CHUNK_OVERLAP_TOKENS,
         documentTitle: doc.title,
@@ -445,7 +448,7 @@ async function ingestOne(
 
     if (pieces.length === 0) {
       throw new ExtractionError(
-        'No readable text could be extracted from this PDF.',
+        'No readable text could be extracted from this document.',
       )
     }
 

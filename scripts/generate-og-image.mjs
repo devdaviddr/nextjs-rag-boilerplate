@@ -4,6 +4,7 @@
 // regenerated in CI, so relying on local system fonts for the text is fine.
 // To rebrand a fork without touching code, just replace public/og.png with a
 // 1200x630 image of the same name.
+import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,8 +18,13 @@ const MUTED = '#94a3b8' // slate-400
 const ACCENT = '#38bdf8' // sky-400
 const root = fileURLToPath(new URL('..', import.meta.url))
 
-const TITLE = 'Next.js Full-Stack Boilerplate'
-const SUBTITLE = 'Auth.js · Drizzle · Postgres · PWA · Docker'
+// The title is the app's name from src/lib/brand.ts (#139), so a rename there
+// reaches the share image on the next `pnpm gen:og`. Read as text because
+// this script runs under plain Node and cannot import TypeScript.
+const brand = readFileSync(join(root, 'src/lib/brand.ts'), 'utf8')
+const TITLE = brand.match(/export const APP_NAME = '([^']+)'/)?.[1]
+if (!TITLE) throw new Error('APP_NAME not found in src/lib/brand.ts')
+const SUBTITLE = 'Grounded document chat · Next.js · pgvector'
 
 // The same 2x2 "app grid" mark used by the icons, scaled up.
 const mark = `
@@ -43,4 +49,6 @@ const out = join(root, 'public/og.png')
 await mkdir(dirname(out), { recursive: true })
 await sharp(svg).png().toFile(out)
 console.log('✓ public/og.png (1200x630)')
-console.log('Swap public/og.png (or edit this script) to rebrand a fork.')
+console.log(
+  'The title is APP_NAME from src/lib/brand.ts; to use your own image instead, replace public/og.png.',
+)

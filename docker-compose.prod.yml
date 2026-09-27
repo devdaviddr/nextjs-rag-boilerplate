@@ -137,10 +137,22 @@ services:
       context: .
       target: runner
     restart: unless-stopped
+    # Localhost only: a reverse proxy on this host is the way in (#139). The
+    # tunnel overlays reset this, since cloudflared reaches app:3000 directly.
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
+    # Everything else the app reads — the model key and RAG_* settings, OAuth,
+    # email, flags — comes from .env when there is one (#139). The values
+    # below win over it: inside the stack the database and storage live at
+    # their service names, not at .env's localhost addresses.
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
+      # Behind your own reverse proxy: the address it appended (#156). The
+      # tunnel overlays set cf-connecting-ip instead.
+      TRUSTED_IP_HEADER: ${TRUSTED_IP_HEADER:-x-forwarded-for}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_TRUST_HOST: 'true'

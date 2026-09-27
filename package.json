@@ -29,6 +29,7 @@
     "db:seed": "tsx src/db/seed.ts",
     "gen:icons": "node scripts/generate-icons.mjs",
     "gen:og": "node scripts/generate-og-image.mjs",
+    "init:project": "node scripts/init-project.mjs",
     "specs:index": "node scripts/specs-index.mjs",
     "specs:check": "node scripts/specs-index.mjs --check",
     "docs:check": "node scripts/docs-check.mjs",
@@ -40,7 +41,8 @@
     "docker:mail": "docker compose up -d mailpit",
     "prepare": "husky || true",
     "rag:eval": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/run.ts",
-    "rag:corpus": "node eval/make-corpus.mjs"
+    "rag:corpus": "node eval/make-corpus.mjs",
+    "rag:gate": "NODE_ENV=test NODE_OPTIONS=--conditions=react-server tsx eval/run.ts --gate"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.3",
@@ -62,10 +64,12 @@
     "drizzle-orm": "0.45.2",
     "github-slugger": "2.0.0",
     "lucide-react": "1.24.0",
+    "mammoth": "^1.12.3",
     "mermaid": "12.0.0",
     "next": "16.3.6",
     "next-auth": "5.0.0-beta.32",
     "next-themes": "^0.4.6",
+    "node-html-parser": "^9.0.4",
     "nodemailer": "^9.1.1",
     "onnxruntime-node": "1.30.0",
     "postgres": "3.4.9",

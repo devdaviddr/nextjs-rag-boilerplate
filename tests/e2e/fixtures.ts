@@ -20,4 +20,12 @@ export const test = base.extend({
   },
 })
 
+/**
+ * True when the test process has an inference key: `LLM_API_KEY`, or the
+ * deprecated `NVIDIA_API_KEY` (#136). The RAG suites skip without one.
+ */
+export const hasInferenceKey = Boolean(
+  process.env.LLM_API_KEY || process.env.NVIDIA_API_KEY,
+)
+
 export { expect }

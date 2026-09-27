@@ -17,6 +17,7 @@ import { PartitionBar } from '@/components/observability/partition-bar'
 import { StatTile } from '@/components/observability/stat-tile'
 import { InfoTip } from '@/components/ui/info-tip'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
+import { formatUsd } from '@/lib/model-prices'
 import { listRuns } from '@/lib/observability/queries'
 import { RANGES, type Range, telemetry } from '@/lib/observability/telemetry'
 import { cn } from '@/lib/utils'
@@ -255,6 +256,46 @@ export default async function OverviewPage({
               </dd>
             </div>
           </dl>
+        </Panel>
+        <Panel
+          title="Cost"
+          help="What this window's model calls cost at the prices in Settings → Configuration → Cost, in US dollars. Tokens from models with no price are counted separately, never as free."
+        >
+          {t.cost.pricedTokens === 0 && t.cost.unpricedTokens === 0 ? (
+            <p className="text-muted-foreground text-sm">No model calls yet.</p>
+          ) : (
+            <>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-muted-foreground text-xs">Total</dt>
+                  <dd className="text-lg font-semibold tabular-nums">
+                    {formatUsd(t.cost.usd)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">
+                    Tokens without a price
+                  </dt>
+                  <dd className="text-lg font-semibold tabular-nums">
+                    {t.cost.unpricedTokens.toLocaleString()}
+                  </dd>
+                </div>
+              </dl>
+              <ul className="mt-3 space-y-1 text-xs">
+                {t.cost.byModel.slice(0, 5).map((m) => (
+                  <li key={m.model} className="flex justify-between gap-3">
+                    <span className="text-muted-foreground truncate">
+                      {m.model}
+                    </span>
+                    <span className="tabular-nums">
+                      {m.tokens.toLocaleString()} tokens ·{' '}
+                      {m.usd === null ? 'no price' : formatUsd(m.usd)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </Panel>
       </div>
 

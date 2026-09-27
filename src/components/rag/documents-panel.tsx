@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   FileText,
   FolderInput,
+  Globe,
+  RefreshCw,
   RotateCw,
   Trash2,
   TriangleAlert,
@@ -14,6 +16,7 @@ import {
 import { FormMessage } from '@/components/auth/field-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Card,
   CardContent,
@@ -45,13 +48,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  addDocumentFromUrl,
   deleteDocument,
+  refreshDocument,
   listMyDocuments,
   retryDocument,
   uploadDocument,
   type DocumentSummary,
 } from '@/lib/rag/actions'
 import { moveDocument, type KnowledgeBaseSummary } from '@/lib/rag/kb-actions'
+import { DOCUMENT_ACCEPT } from '@/lib/rag/constants'
 
 const IN_FLIGHT = new Set(['pending', 'extracting', 'embedding'])
 
@@ -92,6 +98,8 @@ export function DocumentsPanel({
   const [error, setError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DocumentSummary | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [url, setUrl] = useState('')
+  const [isFetching, setIsFetching] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Every other knowledge base the user owns — the "Move to…" candidates.
@@ -159,6 +167,29 @@ export function DocumentsPanel({
     }
   }
 
+  // Spec 0047: the server fetches the page, under its SSRF rules, and indexes
+  // what it fetched like an upload.
+  const handleAddUrl = async () => {
+    if (!url.trim()) return
+    setError(null)
+    setIsFetching(true)
+    try {
+      const result = await addDocumentFromUrl(knowledgeBaseId, url)
+      if (result.ok) setUrl('')
+      else setError(result.error)
+      await refresh()
+    } finally {
+      setIsFetching(false)
+    }
+  }
+
+  const handleRefetch = async (id: string) => {
+    setError(null)
+    const result = await refreshDocument(id)
+    if (!result.ok) setError(result.error)
+    await refresh()
+  }
+
   const handleRetry = async (id: string) => {
     setError(null)
     const result = await retryDocument(id)
@@ -197,13 +228,13 @@ export function DocumentsPanel({
         <CardTitle>Your documents</CardTitle>
         <CardDescription>
           {cracking
-            ? 'PDFs, including scanned ones. Pages with tables, figures or an unusual layout are read page by page, which takes longer than a plain text PDF.'
-            : "PDFs with selectable text. Scanned documents aren't supported yet — they have no text layer to index."}
+            ? 'PDFs, including scanned ones, and Word, HTML and Markdown files. PDF pages with tables, figures or an unusual layout are read page by page, which takes longer.'
+            : "PDFs with selectable text, and Word, HTML and Markdown files. Scanned PDFs aren't supported yet — they have no text layer to index."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!configured && (
-          <FormMessage message="Document chat isn't configured on this deployment. Set NVIDIA_API_KEY to enable uploads and chat." />
+          <FormMessage message="Document chat isn't configured on this deployment. Set LLM_API_KEY to enable uploads and chat." />
         )}
         {error && <FormMessage message={error} />}
 
@@ -211,8 +242,8 @@ export function DocumentsPanel({
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf"
-            aria-label="Upload a PDF"
+            accept={DOCUMENT_ACCEPT}
+            aria-label="Upload a document"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
@@ -225,14 +256,43 @@ export function DocumentsPanel({
             onClick={() => inputRef.current?.click()}
           >
             <Upload className="mr-2 size-4" />
-            {isUploading ? 'Uploading…' : 'Upload PDF'}
+            {isUploading ? 'Uploading…' : 'Upload'}
           </Button>
+          <form
+            className="flex min-w-0 flex-1 items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void handleAddUrl()
+            }}
+          >
+            <Input
+              type="url"
+              inputMode="url"
+              placeholder="https://… a web page or PDF"
+              aria-label="Add from a URL"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={isFetching || !configured}
+              className="min-w-0"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={isFetching || !configured || !url.trim()}
+            >
+              <Globe className="mr-2 size-4" />
+              {isFetching ? 'Fetching…' : 'Add URL'}
+            </Button>
+          </form>
         </div>
 
         {documents.length === 0 ? (
           <div className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-sm">
             <FileText className="size-8 opacity-50" />
-            <p>No documents yet. Upload a PDF to get started.</p>
+            <p>
+              No documents yet. Upload a PDF, Word, HTML or Markdown file to get
+              started.
+            </p>
           </div>
         ) : (
           <Table>
@@ -255,6 +315,16 @@ export function DocumentsPanel({
                     >
                       {doc.title}
                     </Link>
+                    {doc.sourceUrl && (
+                      <a
+                        href={doc.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground block max-w-xs truncate text-xs font-normal hover:underline"
+                      >
+                        {doc.sourceUrl}
+                      </a>
+                    )}
                     {doc.error && (
                       <p className="text-destructive mt-1 text-xs font-normal">
                         {doc.error}
@@ -306,6 +376,18 @@ export function DocumentsPanel({
                           onClick={() => void handleRetry(doc.id)}
                         >
                           <RotateCw className="size-4" />
+                        </Button>
+                      )}
+                      {doc.sourceUrl && !IN_FLIGHT.has(doc.status) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Refresh ${doc.title} from the web`}
+                          title="Fetch the page again"
+                          onClick={() => void handleRefetch(doc.id)}
+                        >
+                          <RefreshCw className="size-4" />
                         </Button>
                       )}
                       {otherKnowledgeBases.length > 0 && (

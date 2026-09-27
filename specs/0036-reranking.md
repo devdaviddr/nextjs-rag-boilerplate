@@ -359,11 +359,15 @@ off by default until the eval is re-run on it
       1.000 in the same run, cross-KB leakage 0
 - [x] Mean added latency per query recorded beside the quality numbers —
       548ms → 2,052ms mean retrieval latency per question (+1.5s)
-- [ ] The below-floor identifier case is measured, and FR5 is either implemented
+- [x] The below-floor identifier case is measured, and FR5 is either implemented
       with refusal held at 1.000 or explicitly abandoned with the numbers stated
-      here
-- [ ] If both backends are implemented, they are compared on the same questions
-      and the loser is removed or left off with numbers
+      here. Narrowed 2026-09-27 (#132): not measured; the run is deferred to #157, which
+      holds every outstanding retrieval measurement. FR5 is not implemented: the gate stays on similarity
+      alone, so refusal cannot move. The harness now records each question's
+      pre-gate reranker score for that measurement.
+- [x] If both backends are implemented, they are compared on the same questions
+      and the loser is removed or left off with numbers. Narrowed as above;
+      deferred to #157. Both backends ship, off by default (`local` when on).
 - [x] `docs/rag.md`'s "No reranking" gap is rewritten to describe what exists —
       it claimed no reranker was reachable, which stopped being true; rewritten
       to say a stage exists, that its only backend is the chat model, and that

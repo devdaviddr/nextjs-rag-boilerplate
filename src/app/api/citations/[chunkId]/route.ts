@@ -2,7 +2,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
 import { db } from '@/db'
-import { chunks, documents } from '@/db/schema'
+import { chunks, documents, files } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
 import { type CitationLocation, toCitationBoxes } from '@/lib/citations/boxes'
 import { parentRunBoxes } from '@/lib/rag/parents'
@@ -66,9 +66,12 @@ export async function GET(
       kind: chunks.kind,
       bbox: chunks.bbox,
       boxes: chunks.boxes,
+      mimeType: files.mimeType,
+      sourceUrl: documents.sourceUrl,
     })
     .from(chunks)
     .innerJoin(documents, eq(documents.id, chunks.documentId))
+    .leftJoin(files, eq(files.id, documents.fileId))
     .where(and(eq(chunks.id, chunkId), eq(chunks.ownerId, userId)))
     .limit(1)
 
@@ -120,6 +123,26 @@ export async function GET(
     pageCount: row.pageCount,
     kind: row.kind,
     boxes,
+    ...(row.sourceUrl ? { sourceUrl: row.sourceUrl } : {}),
+  }
+
+  // Not a PDF (spec 0046 FR7): no page to draw, so the whole section's text,
+  // under the same owner predicate as the lookup above.
+  if (row.mimeType && row.mimeType !== 'application/pdf') {
+    const section = await db
+      .select({ content: chunks.content })
+      .from(chunks)
+      .where(
+        and(
+          eq(chunks.documentId, row.documentId),
+          eq(chunks.pageNumber, row.pageNumber),
+          eq(chunks.ownerId, userId),
+        ),
+      )
+      .orderBy(asc(chunks.chunkIndex))
+    location.unit = 'section'
+    location.text = section.map((c) => c.content).join('\n\n')
+    location.boxes = []
   }
 
   return NextResponse.json(location, {

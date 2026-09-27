@@ -66,3 +66,6 @@ eval/results/
 
 # Local reranker model cache (RAG_RERANK_MODEL_DIR default)
 /.cache/
+
+# Local object storage when S3 is not configured (#137)
+/data/

@@ -3,8 +3,8 @@
 This page covers taking a fresh clone to a live app on your own domain, and
 keeping that machine up to date afterwards.
 
-Self-hosting here means one machine you control (a Mac mini under a desk, a
-Linux box, a cheap VPS) running the whole stack in Docker: the Next.js app,
+Self-hosting here means one machine you control (a Linux box, a cheap VPS, a
+Mac mini under a desk) running the whole stack in Docker: the Next.js app,
 Postgres, MinIO for uploaded files, and the nightly backup sidecars. There is no
 platform to sign up for and nothing to pay for beyond the machine itself.
 
@@ -21,15 +21,17 @@ make setup
 ```
 
 This page follows the path from clone to live to kept current. It is the guide
-to `make setup` and to the deploy loop that follows it.
+to `make setup` and to the deploy loop that follows it. If you already run a
+reverse proxy and don't want a tunnel, skip to
+[Without a tunnel](#without-a-tunnel-docker-compose-behind-your-own-proxy).
 
 Two neighbouring pages cover the same ground from different angles. If you would
 rather drive the tunnel by hand with the individual `make tunnel-*` targets, or
 you want to understand the tunnel itself, read [deployment.md](deployment.md).
 Once you are live, [backups.md](backups.md) covers data safety, and
 [Feature → Production](workflow.md) is the full loop from a feature branch to a
-deploy on this box. The former CI pipeline is removed, and kept as a record in
-[ci-cd.md](ci-cd.md).
+deploy on this box. [ci-cd.md](ci-cd.md) covers the CI that builds and
+publishes the image.
 
 ---
 
@@ -216,6 +218,43 @@ trigger it.
 
 ---
 
+## Without a tunnel: Docker Compose behind your own proxy
+
+Everything above assumes a Cloudflare Tunnel. If you already have a reverse
+proxy (Caddy, nginx, Traefik) that terminates TLS, the same stack runs without
+one. `docker-compose.prod.yml` is the whole stack (Postgres, the migrator,
+MinIO, the backup sidecars and the app on port 3000), and it reads your `.env`
+for everything else: the model key, `RAG_*` settings, OAuth, email.
+
+```bash
+cp .env.example .env
+# set AUTH_SECRET (openssl rand -base64 33), AUTH_URL and APP_URL to your
+# https:// address, and LLM_API_KEY
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+To run the image CI publishes instead of building on the box, layer the deploy
+overlay and name the image:
+
+```bash
+APP_IMAGE=ghcr.io/your-org/your-repo \
+  docker compose -f docker-compose.prod.yml -f docker-compose.deploy.yml up -d
+```
+
+Point the proxy at `localhost:3000`. The app keys its rate limits on the
+client's address, and in this stack it reads it from the address your proxy
+appends to `X-Forwarded-For` (`TRUSTED_IP_HEADER=x-forwarded-for`, set in
+`docker-compose.prod.yml`). Caddy and nginx
+(`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`) both do that.
+Headers the client sent, including a forged `CF-Connecting-IP`, are ignored. If
+your proxy sets `X-Real-IP` instead, set `TRUSTED_IP_HEADER=x-real-ip` in
+`.env`.
+
+The app listens on `127.0.0.1:3000` only, so the proxy on the same host is the
+only way in. If the proxy runs on another machine, change the `ports:` entry and
+firewall it to that machine. The stack keeps its data in the
+`pgdata` and `miniodata` volumes and writes backups to `./backups`.
+
 ## Continuous deployment
 
 `make setup` gets you live the first time. Continuous deployment keeps a running
@@ -240,7 +279,7 @@ Point the box at the published image, and updating takes one command. In the
 box's `.env`:
 
 ```bash
-APP_IMAGE="ghcr.io/your-org/nextjs-fullstack-boilerplate"
+APP_IMAGE="ghcr.io/your-org/your-repo"
 APP_TAG="stable"        # newest RELEASE — moves when a v* tag is pushed (recommended)
 # APP_TAG="latest"      # every release merge, minutes before its tag
 # APP_TAG="0.18.0"      # pin an exact release — never moves; bump it to update
@@ -278,7 +317,7 @@ make deploy-timer                              # every 60s (default; digest-skip
 ```
 
 Each tick refreshes the checkout (`git pull --ff-only`, best-effort) and copies
-the operator's off-checkout `.env` from `~/.config/nextjs-fullstack-boilerplate/.env`
+the operator's off-checkout `.env` from `~/.config/<repo>/.env`
 (override with `DEPLOY_ENV_FILE`) into the project dir. It then checks whether
 the published app image actually changed, by refreshing only that image's
 manifest and comparing its digest to the last-deployed one
@@ -312,7 +351,7 @@ register your box as a GitHub self-hosted runner and enable the shipped
 1. Add a self-hosted runner on the box (GitHub → Settings → Actions → Runners).
    The runner dials out to GitHub, so it works behind the tunnel.
 2. Put the box's config at
-   `~/.config/nextjs-fullstack-boilerplate/.env` (chmod 600). The runner's
+   `~/.config/<repo>/.env` (chmod 600). The runner's
    checkout is wiped every run (`git clean`), so `.env` can't live in the work
    tree. It needs at least `AUTH_SECRET`, `AUTH_URL`,
    `CLOUDFLARE_TUNNEL_TOKEN` and `APP_IMAGE` (and optionally `APP_TAG`). To use
@@ -421,7 +460,7 @@ Find the symptom and apply the fix. These are the failures people actually hit.
 | **503 everywhere + "No ingress rules" in `cloudflared` logs** | The tunnel is _locally-managed_ (created with `cloudflared tunnel create`), so a token-run daemon gets no remote config. Create tunnels in the **dashboard** or via **Terraform** (both remotely-managed), or push a remote config: the token embedded in `~/.cloudflared/cert.pem` (`ARGO TUNNEL TOKEN` block → base64 JSON `.apiToken`) can `PUT …/cfd_tunnel/<id>/configurations`. |
 | **Quick URL changed**                                         | It's ephemeral by design. Use guided/automated for a stable domain.                                                                                                                                                                                                                                                                                                                   |
 | **Rate limiting sees wrong IP**                               | Traffic must arrive via Cloudflare so `CF-Connecting-IP` is present; direct origin hits won't have it.                                                                                                                                                                                                                                                                                |
-| **`make deploy` / timer tick fails: `.env` not found**        | The box's `.env` needs at least `AUTH_SECRET`, `AUTH_URL`, `CLOUDFLARE_TUNNEL_TOKEN`, and `APP_IMAGE` (+ optionally `APP_TAG`). `make deploy` reads the project-dir `.env`; `make deploy-timer` copies it in each tick from `~/.config/nextjs-fullstack-boilerplate/.env`; override the source path with `DEPLOY_ENV_FILE`.                                                           |
+| **`make deploy` / timer tick fails: `.env` not found**        | The box's `.env` needs at least `AUTH_SECRET`, `AUTH_URL`, `CLOUDFLARE_TUNNEL_TOKEN`, and `APP_IMAGE` (+ optionally `APP_TAG`). `make deploy` reads the project-dir `.env`; `make deploy-timer` copies it in each tick from `~/.config/<repo>/.env`; override the source path with `DEPLOY_ENV_FILE`.                                                                                 |
 
 ---
 

@@ -18,8 +18,8 @@ export const REPO_URL = 'https://github.com/devdaviddr/nextjs-rag-boilerplate'
 export const DOC_SECTIONS = [
   {
     title: 'About',
-    description: 'What this project is and what it is for.',
-    slugs: ['summary'],
+    description: 'What this project is, and making it your own.',
+    slugs: ['summary', 'forking'],
   },
   {
     title: 'Using the app',
@@ -33,8 +33,9 @@ export const DOC_SECTIONS = [
   },
   {
     title: 'Architecture & retrieval',
-    description: 'How the pieces fit together and how answers are grounded.',
-    slugs: ['architecture', 'rag'],
+    description:
+      'How the pieces fit together, how answers are grounded, and how to extend them.',
+    slugs: ['architecture', 'rag', 'extending'],
   },
   {
     title: 'Data',

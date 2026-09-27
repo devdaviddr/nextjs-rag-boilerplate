@@ -10,6 +10,8 @@ import {
   when,
 } from '@/components/observability/format'
 import { RunTrace } from '@/components/observability/run-trace'
+import { refreshAiSettings } from '@/lib/ai-settings'
+import { formatUsd } from '@/lib/model-prices'
 import { getRun } from '@/lib/observability/queries'
 import { cn } from '@/lib/utils'
 
@@ -22,9 +24,11 @@ export default async function RunPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  // Saved prices apply to the cost below (#150).
+  await refreshAiSettings()
   const found = await getRun(id)
   if (!found) notFound()
-  const { run, steps } = found
+  const { run, steps, cost } = found
   const s = runStatus(run.status)
 
   const facts: [string, string][] = [
@@ -42,6 +46,14 @@ export default async function RunPage({
         ] as [string, string][])
       : ([['Passages', String(run.sourceCount ?? 0)]] as [string, string][])),
     ['Tokens', run.totalTokens ? run.totalTokens.toLocaleString() : '–'],
+    [
+      'Cost',
+      cost.unpricedTokens > 0 && cost.usd !== null
+        ? `${formatUsd(cost.usd)} + unpriced`
+        : cost.unpricedTokens > 0
+          ? 'no prices set'
+          : formatUsd(cost.usd),
+    ],
   ]
 
   return (

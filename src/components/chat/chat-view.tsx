@@ -7,6 +7,7 @@ import { ChevronDown, Send } from 'lucide-react'
 import { FormMessage } from '@/components/auth/field-error'
 import { Markdown } from '@/components/chat/markdown'
 import { SourceViewer } from '@/components/chat/source-viewer'
+import { groupCitations } from '@/lib/chat/citations'
 import {
   AgentActivity,
   type LiveActivity,
@@ -165,7 +166,11 @@ export function ChatView({
   // The request still being answered, whose drawer follows it live.
   const [liveRequestId, setLiveRequestId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [source, setSource] = useState<StoredCitation | null>(null)
+  // The chip's first citation, and the others on the same page (#165).
+  const [source, setSource] = useState<{
+    citation: StoredCitation
+    also: StoredCitation[]
+  } | null>(null)
   const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases)
   const [selection, setSelection] = useState<Selection>('all')
   const [createOpen, setCreateOpen] = useState(false)
@@ -514,8 +519,9 @@ export function ChatView({
         <div className="max-w-md text-center">
           <h1 className="text-lg font-semibold">Not configured</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Set <code>NVIDIA_API_KEY</code> to enable document chat. A free key
-            is available at build.nvidia.com.
+            Set <code>LLM_API_KEY</code> to enable document chat. A free NVIDIA
+            NIM key is available at build.nvidia.com, or point{' '}
+            <code>RAG_LLM_BASE_URL</code> at a local model server.
           </p>
         </div>
       </div>
@@ -707,19 +713,50 @@ export function ChatView({
                             <span className="text-muted-foreground text-xs">
                               Sources
                             </span>
-                            {message.citations.map((citation) => (
-                              <button
-                                key={citation.chunkId}
-                                type="button"
-                                onClick={() => setSource(citation)}
-                                className="bg-muted hover:bg-accent rounded-full px-2.5 py-1 text-xs transition-colors"
-                              >
-                                [{citation.index}] {citation.documentTitle} — p
-                                {citation.pageNumber}
-                              </button>
-                            ))}
+                            {groupCitations(message.citations).map(
+                              ({ key, citations }) => {
+                                const [first, ...rest] = citations
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() =>
+                                      setSource({
+                                        citation: first!,
+                                        also: rest,
+                                      })
+                                    }
+                                    className="bg-muted hover:bg-accent rounded-full px-2.5 py-1 text-xs transition-colors"
+                                  >
+                                    {citations
+                                      .map((c) => `[${c.index}]`)
+                                      .join('')}{' '}
+                                    {first!.documentTitle} —{' '}
+                                    {first!.unit === 'section' ? '§' : 'p'}
+                                    {first!.pageNumber}
+                                    {citations.length > 1 &&
+                                      ` · ${citations.length} passages`}
+                                  </button>
+                                )
+                              },
+                            )}
                           </div>
                         )}
+                        {message.metrics?.tools?.length ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-muted-foreground text-xs">
+                              Answered with
+                            </span>
+                            {message.metrics.tools.map((tool) => (
+                              <span
+                                key={tool}
+                                className="rounded-full border px-2.5 py-1 font-mono text-xs"
+                              >
+                                {tool}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         {message.metrics && (
                           <p className="text-muted-foreground mt-2 text-xs">
                             {formatMetrics(message.metrics).join(' · ')}
@@ -759,8 +796,9 @@ export function ChatView({
         // Keyed by chunk, so switching citations remounts rather than trying
         // to reconcile a half-loaded page image with a new one's boxes.
         <SourceViewer
-          key={source.chunkId}
-          citation={source}
+          key={source.citation.chunkId}
+          citation={source.citation}
+          also={source.also}
           onClose={closeSource}
         />
       )}

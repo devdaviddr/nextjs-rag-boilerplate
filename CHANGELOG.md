@@ -8,6 +8,113 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Tools from MCP servers.** Settings → Configuration → Tools connects a
+  Model Context Protocol server over Streamable HTTP. Its tools are listed,
+  each off until an admin switches it on, and switched-on tools are offered to
+  the agentic planner like tools in code: validated against the server's
+  schema, budgeted, fenced and logged. Tokens are encrypted at rest, changes
+  are audited, and a server's URL gets the web-page fetch rules unless it is
+  marked as on a private network (spec 0048, #162).
+- **Anthropic as a provider.** Settings → AI provider has an Anthropic preset,
+  and Claude models can be the chat, planner and vision models. Requests go
+  through provider adapters (`src/lib/rag/providers/`), so a provider that is
+  not OpenAI-compatible is one module; Anthropic has no embeddings API, so
+  embeddings stay on another connection (spec 0045, #159).
+- **Web pages by URL.** "Add URL" on a knowledge base fetches a web page or
+  an online PDF, indexes it like an upload and links its citations back to the
+  page; refresh fetches it again. The fetch refuses private, loopback,
+  link-local and metadata addresses, directly or through a redirect, connects
+  only to the address it checked, and has time and size limits.
+  `URL_ALLOWED_HOSTS` limits it to named sites (spec 0047, #161).
+- An answer that used a registered tool says so ("Answered with …"), kept with
+  the message, and the Agent activity drawer shows each tool call and what it
+  returned (#164).
+- **Word, HTML and Markdown documents.** A knowledge base takes `.docx`,
+  `.html`, `.md` and `.txt` files as well as PDFs. Each is split into sections
+  at its headings and answers with a citation that shows the section's text.
+  Uploads are recognised by their bytes, not their name, and each format is a
+  loader in `src/lib/rag/loaders/` (spec 0046, #160).
+- Observability shows what questions and uploads cost. Set model prices in
+  Settings → Configuration → Cost (or `RAG_MODEL_PRICES`), in dollars per
+  million tokens; the overview totals the window by model and each run shows
+  its cost. Tokens from unpriced models are listed, never counted as free
+  (#150).
+- **[Extending the agent](docs/extending.md)**, a guide to building on the
+  template: adding a tool (with a worked `days_between` example that is tested
+  and shown verbatim), changing chunking, switching the embedding model, and
+  where to replace the vector store (#149).
+- **The agent can call tools you add.** Write one module with `defineTool`
+  (name, description, a Zod schema, a `run` function) and add it to
+  `agentTools` in `src/lib/rag/tools/index.ts`. The planner is offered it, the
+  call runs with the user's scope bound on the server, and its result reaches
+  the answer. The registry ships empty, so nothing changes until you add one
+  (spec 0044, #158).
+- `make init` (`pnpm init:project`) renames a project started from this
+  template in one step: name, description, repository URL and theme colour,
+  with the share image and icons regenerated. It never touches the settings
+  encryption salt and is safe to run again (#151).
+- S3 is optional. Without `S3_ENDPOINT`, uploads are kept on disk under
+  `STORAGE_DIR` (default `./data/storage`), so document chat runs with no
+  storage service. The Docker image has a writable `/app/data` to mount a
+  volume on (#137).
+- `PWA_ENABLED=false` switches the PWA off: no service worker (one a browser
+  already has is unregistered) and no install. `OBSERVABILITY_UI_ENABLED=false`
+  hides the admin Observability pages; runs and logs are still recorded (#140).
+
+### Changed
+
+- Several passages from the same page of a document share one citation chip
+  ("[1][3] handbook — p1 · 2 passages"), and its source panel marks all of
+  them (#165).
+- The inference key is now `LLM_API_KEY`, whatever the provider.
+  `NVIDIA_API_KEY` still works and logs a one-time deprecation warning. A
+  custom `RAG_LLM_BASE_URL`, such as a local Ollama or llama.cpp server, no
+  longer needs a key at all (#136).
+
+### Fixed
+
+- Embeddings requests send NVIDIA's `input_type` only where it is understood:
+  not to OpenAI or OpenRouter, which reject it. The OpenAI preset no longer
+  says its embeddings are unusable; they index at their own size (#159).
+- The production build no longer copies the whole repository into its
+  standalone output (186 MB down to 119 MB): the local-disk storage paths are
+  marked for the bundler. Following the extending guide no longer fails
+  `pnpm test`, and doc slips found by a newcomer dry run are fixed (#163).
+- The production compose stack now reads `.env` for the model key and `RAG_*`
+  settings, so document chat works in it, and listens on localhost only for a
+  reverse proxy. `docs/self-hosting.md` covers running it without a tunnel.
+  The share image takes its title from `src/lib/brand.ts`, and leftovers of the
+  old repository name are gone (#139).
+- Every grounded answer is now checked against its sources, not only answers
+  from the agentic path, and a sentence without a citation is checked too. An
+  invented claim with no `[n]` used to reach the user unchecked (#127).
+- Admins now see why adding, editing, deleting or changing the roles of a user
+  failed (for example "An account with this email already exists."). In
+  production builds these messages were replaced by a generic error (#128).
+- The README, usage guide, tutorial and summary now say the agentic retrieval
+  loop is on by default, that the embedding model can be switched in Settings
+  up to 4000 dimensions, and that Playwright runs on the release PR (#130).
+
+### Security
+
+- `TRUSTED_IP_HEADER` says which header the client address for rate limits is
+  read from. The tunnel stacks set `cf-connecting-ip` and the plain compose
+  stack the last `X-Forwarded-For` hop, so a client can no longer choose its
+  own address with a forged header and dodge the login limit (#156).
+- The helper that removes a deleted user's stored files is no longer
+  reachable as a Server Action; it now runs only from the admin-checked
+  delete-user path (#125).
+- A document can no longer close the fence around retrieved text and have what
+  follows read as instructions. The fence now uses a random id per prompt, and
+  the agentic planner and the citation verifier see fenced text too (#126).
+- Removed two unused account-setup functions from the admin module, which
+  were still registered as Server Actions (#155).
+- `lodash-es` is pinned to 4.17.24 or later, fixing a high and a moderate
+  advisory reached through the docs' Mermaid diagrams, and CI now fails on any
+  high-severity advisory in production dependencies (#129).
+
 ## [0.26.0] - 2026-09-26
 
 ### Added

@@ -34,7 +34,7 @@ pnpm install
 # 2. Configure the environment
 cp .env.example .env
 npx auth secret            # writes AUTH_SECRET into .env
-# then set NVIDIA_API_KEY in .env
+# then set LLM_API_KEY in .env
 
 # 3. Start Postgres + MinIO, apply the schema, seed a demo user
 pnpm docker:db
@@ -49,7 +49,9 @@ pnpm dev                   # http://localhost:3000
 `pnpm docker:db` starts a `pgvector/pgvector:pg17` container, which is Postgres
 with the vector extension already compiled in, as the knowledge-base tables
 need. `pnpm docker:minio` starts MinIO, the S3-compatible object store that
-holds uploaded files, plus a one-shot container that creates the bucket.
+holds uploaded files, plus a one-shot container that creates the bucket. It is
+optional: blank the four `S3_*` values in `.env` and skip it, and uploads are
+kept on disk under `./data/storage` instead.
 `pnpm db:migrate` applies the committed migrations under `drizzle/`, and
 `pnpm db:seed` inserts the demo user and the default roles.
 
@@ -64,7 +66,7 @@ which validates the whole environment with Zod when the module is first
 imported. A missing or malformed value therefore fails fast at boot with a
 readable error, instead of surfacing as `undefined` deep inside a request.
 
-The AI variables (`NVIDIA_API_KEY`, `RAG_LLM_BASE_URL` and every `RAG_*`) are
+The AI variables (`LLM_API_KEY`, `RAG_LLM_BASE_URL` and every `RAG_*`) are
 defined in `src/lib/ai-env.ts` and read through `aiSettings()` in
 `src/lib/ai-settings`. A value saved from Settings takes precedence over the
 variable, and without one the variable (or its default) applies, as before. Code
@@ -84,51 +86,57 @@ A variable marked required has no default, and the app will not start without
 it. Everything else is optional and has a default, and the features those
 variables control stay inert until you set them.
 
-| Variable                           | Required | Notes                                                                                                                        |
-| ---------------------------------- | :------: | ---------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                     |    ✅    | Postgres connection string                                                                                                   |
-| `S3_ENDPOINT`                      |    ✅    | S3-compatible endpoint (MinIO by default)                                                                                    |
-| `S3_ACCESS_KEY_ID`                 |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                  |
-| `S3_SECRET_ACCESS_KEY`             |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                  |
-| `S3_BUCKET`                        |    ✅    | Bucket name — auto-created by `minio-init`                                                                                   |
-| `S3_REGION`                        |    –     | Defaults to `us-east-1` (MinIO ignores region)                                                                               |
-| `UPLOAD_MAX_SIZE_MB`               |    –     | Per-file size cap. Default `10`                                                                                              |
-| `MAX_STORAGE_PER_USER_MB`          |    –     | Per-user quota. Default `500`                                                                                                |
-| `UPLOAD_ALLOWED_MIME_TYPES`        |    –     | Comma-separated allow-list. Default images + PDF                                                                             |
-| `AUTH_SECRET`                      |    ✅    | `npx auth secret` — unique per environment, never reuse                                                                      |
-| `AUTH_URL`                         |    –     | Canonical auth URL; set in production                                                                                        |
-| `AUTH_TRUST_HOST`                  |    –     | `true` behind a trusted proxy / in Docker                                                                                    |
-| `AUTH_GITHUB_ID` / `_SECRET`       |    –     | Enables GitHub sign-in when both set — see [OAuth](oauth.md)                                                                 |
-| `AUTH_GOOGLE_ID` / `_SECRET`       |    –     | Enables Google sign-in when both set — see [OAuth](oauth.md)                                                                 |
-| `APP_URL`                          |    –     | Public origin for OG/`metadataBase`, `robots`/`sitemap`, and OAuth callback URLs. Default `http://localhost:3000`            |
-| `NODE_ENV`                         |    –     | `development` \| `test` \| `production`                                                                                      |
-| `LOG_LEVEL`                        |    –     | `debug` \| `info` \| `warn` \| `error`                                                                                       |
-| `LOG_PERSIST`                      |    –     | `false` stops keeping log lines in Postgres for Observability → Logs (stdout is unaffected). Default on                      |
-| `LOG_RETENTION_DAYS`               |    –     | Days of log lines kept for Observability → Logs. Default `7`                                                                 |
-| `TELEMETRY_RETENTION_DAYS`         |    –     | Days of runs (questions and ingestions, step by step) kept for Observability. Default `30`                                   |
-| `RATE_LIMIT_DISABLED`              |    –     | `true` to disable the in-memory auth rate limiter                                                                            |
-| `EMAIL_ENABLED`                    |    –     | `true` to turn on email; requires the SMTP vars below                                                                        |
-| `EMAIL_FROM`                       |    †     | From address (required when `EMAIL_ENABLED=true`)                                                                            |
-| `SMTP_HOST`                        |    †     | SMTP host (required when `EMAIL_ENABLED=true`)                                                                               |
-| `SMTP_PORT`                        |    †     | SMTP port, e.g. `587` or `465` (required when enabled)                                                                       |
-| `SMTP_USER`                        |    –     | SMTP username (if the server requires auth)                                                                                  |
-| `SMTP_PASSWORD`                    |    –     | SMTP password (if the server requires auth)                                                                                  |
-| `SMTP_SECURE`                      |    –     | `true` for implicit TLS; auto-true on port `465`                                                                             |
-| `REQUIRE_EMAIL_VERIFICATION`       |    –     | `true` soft-gates unverified users (only with email on) — see [Email](email.md)                                              |
-| `VAPID_PUBLIC_KEY`                 |    –     | Web Push — enabled only when all three VAPID vars are set                                                                    |
-| `VAPID_PRIVATE_KEY`                |    –     | Web Push private key (server-only)                                                                                           |
-| `VAPID_SUBJECT`                    |    –     | Web Push contact URL, e.g. `mailto:you@example.com`                                                                          |
-| `NVIDIA_API_KEY`                   |    –     | Enables document chat. Free key from build.nvidia.com; ~40 requests/min. Unset: `/chat` reports unconfigured                 |
-| `RAG_LLM_BASE_URL`                 |    –     | Any OpenAI-compatible endpoint. Default `https://integrate.api.nvidia.com/v1`; point at Ollama/llama.cpp to go fully offline |
-| `RAG_EMBED_MODEL`                  |    –     | Default `nvidia/nemotron-3-embed-1b`. Must emit **2048** dimensions to match the `halfvec` column                            |
-| `RAG_CHAT_MODEL`                   |    –     | Writes the prose. Default `nvidia/nemotron-3-super-120b-a12b`                                                                |
-| `RAG_PLANNER_MODEL`                |    –     | Plans and calls tools on the agentic path. Default `nvidia/nemotron-3.5-lightning-30b-a3b`                                   |
-| `RAG_PLANNER_REASONING`            |    –     | `off` skips the planner's hidden reasoning (faster decisions; Nemotron / Qwen3 on NIM or vLLM). Default `on`                 |
-| `RAG_AGENTIC_ROUTE`                |    –     | `adaptive` plans only follow-ups and multi-part questions; `always` plans every question. Default `always`                   |
-| `RAG_AGENTIC_CONFIDENT_SIMILARITY` |    –     | A first-search best match at or above this skips the planner's second decision. `1` (default) turns it off                   |
-| `RAG_PLANNER_CALL_MS`              |    –     | Most any one planner call may take, in ms; `0` (default) means only `RAG_MAX_LOOP_MS` applies                                |
-| `RAG_AGENTIC_ENABLED`              |    –     | `true` for the agentic retrieval loop. Default `false` — ~10× slower, better on follow-ups; see [RAG](rag.md)                |
-| `RAG_*` (tuning)                   |    –     | Chunking, retrieval floor, hybrid pool, loop budgets — all defaulted; the full table is in [RAG → Tuning](rag.md#tuning)     |
+| Variable                           | Required | Notes                                                                                                                                                                                                                      |
+| ---------------------------------- | :------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                     |    ✅    | Postgres connection string                                                                                                                                                                                                 |
+| `S3_ENDPOINT`                      |    –     | S3-compatible endpoint (MinIO by default). Unset: files are kept on disk under `STORAGE_DIR`, one instance only                                                                                                            |
+| `S3_ACCESS_KEY_ID`                 |    –     | Required with `S3_ENDPOINT`. Matches `.env.example` / `docker-compose.yml` for local dev                                                                                                                                   |
+| `S3_SECRET_ACCESS_KEY`             |    –     | Required with `S3_ENDPOINT`. Matches `.env.example` / `docker-compose.yml` for local dev                                                                                                                                   |
+| `S3_BUCKET`                        |    –     | Required with `S3_ENDPOINT`. Bucket name — auto-created by `minio-init`                                                                                                                                                    |
+| `STORAGE_DIR`                      |    –     | Where files go without S3. Default `./data/storage`; in Docker mount a volume on `/app/data`                                                                                                                               |
+| `S3_REGION`                        |    –     | Defaults to `us-east-1` (MinIO ignores region)                                                                                                                                                                             |
+| `UPLOAD_MAX_SIZE_MB`               |    –     | Per-file size cap. Default `10`                                                                                                                                                                                            |
+| `MAX_STORAGE_PER_USER_MB`          |    –     | Per-user quota. Default `500`                                                                                                                                                                                              |
+| `UPLOAD_ALLOWED_MIME_TYPES`        |    –     | Comma-separated allow-list. Default images + PDF                                                                                                                                                                           |
+| `URL_ALLOWED_HOSTS`                |    –     | Sites "Add URL" may fetch, comma-separated; subdomains included. Unset: any public address                                                                                                                                 |
+| `AUTH_SECRET`                      |    ✅    | `npx auth secret` — unique per environment, never reuse                                                                                                                                                                    |
+| `AUTH_URL`                         |    –     | Canonical auth URL; set in production                                                                                                                                                                                      |
+| `AUTH_TRUST_HOST`                  |    –     | `true` behind a trusted proxy / in Docker                                                                                                                                                                                  |
+| `AUTH_GITHUB_ID` / `_SECRET`       |    –     | Enables GitHub sign-in when both set — see [OAuth](oauth.md)                                                                                                                                                               |
+| `AUTH_GOOGLE_ID` / `_SECRET`       |    –     | Enables Google sign-in when both set — see [OAuth](oauth.md)                                                                                                                                                               |
+| `APP_URL`                          |    –     | Public origin for OG/`metadataBase`, `robots`/`sitemap`, and OAuth callback URLs. Default `http://localhost:3000`                                                                                                          |
+| `NODE_ENV`                         |    –     | `development` \| `test` \| `production`                                                                                                                                                                                    |
+| `LOG_LEVEL`                        |    –     | `debug` \| `info` \| `warn` \| `error`                                                                                                                                                                                     |
+| `TRUSTED_IP_HEADER`                |    –     | Header the client address for rate limits comes from: `cf-connecting-ip`, `x-forwarded-for` (last hop), `x-real-ip`, or `auto` (default; dev only). The compose stacks set it                                              |
+| `PWA_ENABLED`                      |    –     | `false` switches the PWA off: no service worker (an existing one is unregistered), not installable. Default on                                                                                                             |
+| `OBSERVABILITY_UI_ENABLED`         |    –     | `false` hides the admin Observability pages (404); runs and logs are still recorded. Default on                                                                                                                            |
+| `RAG_MODEL_PRICES`                 |    –     | Model prices for Observability's cost figures: `model=price` pairs, US dollars per million tokens. Also in Settings → Configuration → Cost                                                                                 |
+| `LOG_PERSIST`                      |    –     | `false` stops keeping log lines in Postgres for Observability → Logs (stdout is unaffected). Default on                                                                                                                    |
+| `LOG_RETENTION_DAYS`               |    –     | Days of log lines kept for Observability → Logs. Default `7`                                                                                                                                                               |
+| `TELEMETRY_RETENTION_DAYS`         |    –     | Days of runs (questions and ingestions, step by step) kept for Observability. Default `30`                                                                                                                                 |
+| `RATE_LIMIT_DISABLED`              |    –     | `true` to disable the in-memory auth rate limiter                                                                                                                                                                          |
+| `EMAIL_ENABLED`                    |    –     | `true` to turn on email; requires the SMTP vars below                                                                                                                                                                      |
+| `EMAIL_FROM`                       |    †     | From address (required when `EMAIL_ENABLED=true`)                                                                                                                                                                          |
+| `SMTP_HOST`                        |    †     | SMTP host (required when `EMAIL_ENABLED=true`)                                                                                                                                                                             |
+| `SMTP_PORT`                        |    †     | SMTP port, e.g. `587` or `465` (required when enabled)                                                                                                                                                                     |
+| `SMTP_USER`                        |    –     | SMTP username (if the server requires auth)                                                                                                                                                                                |
+| `SMTP_PASSWORD`                    |    –     | SMTP password (if the server requires auth)                                                                                                                                                                                |
+| `SMTP_SECURE`                      |    –     | `true` for implicit TLS; auto-true on port `465`                                                                                                                                                                           |
+| `REQUIRE_EMAIL_VERIFICATION`       |    –     | `true` soft-gates unverified users (only with email on) — see [Email](email.md)                                                                                                                                            |
+| `VAPID_PUBLIC_KEY`                 |    –     | Web Push — enabled only when all three VAPID vars are set                                                                                                                                                                  |
+| `VAPID_PRIVATE_KEY`                |    –     | Web Push private key (server-only)                                                                                                                                                                                         |
+| `VAPID_SUBJECT`                    |    –     | Web Push contact URL, e.g. `mailto:you@example.com`                                                                                                                                                                        |
+| `LLM_API_KEY`                      |    –     | Enables document chat. Free NIM key from build.nvidia.com; ~40 requests/min. Not needed for a custom `RAG_LLM_BASE_URL` such as a local Ollama. Old name `NVIDIA_API_KEY` still works. Unset: `/chat` reports unconfigured |
+| `RAG_LLM_BASE_URL`                 |    –     | Any OpenAI-compatible endpoint. Default `https://integrate.api.nvidia.com/v1`; point at Ollama/llama.cpp to go fully offline                                                                                               |
+| `RAG_EMBED_MODEL`                  |    –     | Default `nvidia/nemotron-3-embed-1b`. Must emit **2048** dimensions to match the `halfvec` column                                                                                                                          |
+| `RAG_CHAT_MODEL`                   |    –     | Writes the prose. Default `nvidia/nemotron-3-super-120b-a12b`                                                                                                                                                              |
+| `RAG_PLANNER_MODEL`                |    –     | Plans and calls tools on the agentic path. Default `nvidia/nemotron-3.5-lightning-30b-a3b`                                                                                                                                 |
+| `RAG_PLANNER_REASONING`            |    –     | `off` skips the planner's hidden reasoning (faster decisions; Nemotron / Qwen3 on NIM or vLLM). Default `on`                                                                                                               |
+| `RAG_AGENTIC_ROUTE`                |    –     | `adaptive` plans only follow-ups and multi-part questions; `always` plans every question. Default `always`                                                                                                                 |
+| `RAG_AGENTIC_CONFIDENT_SIMILARITY` |    –     | A first-search best match at or above this skips the planner's second decision. `1` (default) turns it off                                                                                                                 |
+| `RAG_PLANNER_CALL_MS`              |    –     | Most any one planner call may take, in ms; `0` (default) means only `RAG_MAX_LOOP_MS` applies                                                                                                                              |
+| `RAG_AGENTIC_ENABLED`              |    –     | The agentic retrieval loop. Default `true` — ~10× slower, better on follow-ups; `false` for speed. See [RAG](rag.md)                                                                                                       |
+| `RAG_*` (tuning)                   |    –     | Chunking, retrieval floor, hybrid pool, loop budgets — all defaulted; the full table is in [RAG → Tuning](rag.md#tuning)                                                                                                   |
 
 † Required only when `EMAIL_ENABLED=true`. Setting the toggle without a provider
 fails fast at boot. SMTP is provider-agnostic: Resend, SendGrid, Mailgun, SES,
@@ -156,30 +164,31 @@ Everything is a `pnpm` script. You will use `dev`, `test` and the pre-push
 verify chain daily. The rest are listed here so you do not have to go digging
 in `package.json`.
 
-| Command                                                                 | Description                                        |
-| ----------------------------------------------------------------------- | -------------------------------------------------- |
-| `pnpm dev`                                                              | Start the dev server (Turbopack)                   |
-| `pnpm build` / `pnpm start`                                             | Production build / serve                           |
-| `pnpm lint` · `pnpm lint:fix`                                           | ESLint                                             |
-| `pnpm typecheck`                                                        | `tsc --noEmit`                                     |
-| `pnpm format` · `pnpm format:check`                                     | Prettier                                           |
-| `pnpm test` · `pnpm test:watch` · `pnpm test:coverage`                  | Vitest units                                       |
-| `pnpm test:e2e` · `pnpm test:e2e:ui`                                    | Playwright E2E                                     |
-| `pnpm db:generate` · `db:migrate` · `db:push` · `db:studio` · `db:seed` | Database (see [Database](database.md))             |
-| `pnpm rag:eval`                                                         | Retrieval evaluation (see [RAG](rag.md))           |
-| `pnpm rag:eval --compare`                                               | Fixed pipeline vs agentic, side by side            |
-| `pnpm rag:eval --label x --baseline y`                                  | Save a run; fail on a refusal regression           |
-| `pnpm rag:eval --no-ingest`                                             | Reuse what is already indexed                      |
-| `pnpm rag:corpus`                                                       | Rebuild the eval corpus PDFs                       |
-| `pnpm gen:icons` · `pnpm gen:og`                                        | Regenerate PWA icons · OG share image              |
-| `pnpm docs:check`                                                       | Check every doc is indexed and every link resolves |
-| `pnpm specs:index` · `pnpm specs:check`                                 | Regenerate · verify the spec index                 |
-| `pnpm release:next`                                                     | Suggest the next version from commits              |
-| `pnpm release:check`                                                    | Check a release before tagging it                  |
-| `pnpm pr:check`                                                         | The PR check, locally (`PR_TITLE`/`PR_BODY`)       |
-| `pnpm docker:db`                                                        | Start the local Postgres container                 |
-| `pnpm docker:minio`                                                     | Start local MinIO + bucket init                    |
-| `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)                |
+| Command                                                                 | Description                                                    |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `pnpm dev`                                                              | Start the dev server (Turbopack)                               |
+| `pnpm build` / `pnpm start`                                             | Production build / serve                                       |
+| `pnpm lint` · `pnpm lint:fix`                                           | ESLint                                                         |
+| `pnpm typecheck`                                                        | `tsc --noEmit`                                                 |
+| `pnpm format` · `pnpm format:check`                                     | Prettier                                                       |
+| `pnpm test` · `pnpm test:watch` · `pnpm test:coverage`                  | Vitest units                                                   |
+| `pnpm test:e2e` · `pnpm test:e2e:ui`                                    | Playwright E2E                                                 |
+| `pnpm db:generate` · `db:migrate` · `db:push` · `db:studio` · `db:seed` | Database (see [Database](database.md))                         |
+| `pnpm rag:eval`                                                         | Retrieval evaluation (see [RAG](rag.md))                       |
+| `pnpm rag:eval --compare`                                               | Fixed pipeline vs agentic, side by side                        |
+| `pnpm rag:eval --label x --baseline y`                                  | Save a run; fail on a refusal regression                       |
+| `pnpm rag:gate`                                                         | Release gate: fail on a retrieval-quality drop vs the baseline |
+| `pnpm rag:eval --no-ingest`                                             | Reuse what is already indexed                                  |
+| `pnpm rag:corpus`                                                       | Rebuild the eval corpus PDFs                                   |
+| `pnpm gen:icons` · `pnpm gen:og`                                        | Regenerate PWA icons · OG share image                          |
+| `pnpm docs:check`                                                       | Check every doc is indexed and every link resolves             |
+| `pnpm specs:index` · `pnpm specs:check`                                 | Regenerate · verify the spec index                             |
+| `pnpm release:next`                                                     | Suggest the next version from commits                          |
+| `pnpm release:check`                                                    | Check a release before tagging it                              |
+| `pnpm pr:check`                                                         | The PR check, locally (`PR_TITLE`/`PR_BODY`)                   |
+| `pnpm docker:db`                                                        | Start the local Postgres container                             |
+| `pnpm docker:minio`                                                     | Start local MinIO + bucket init                                |
+| `pnpm docker:mail`                                                      | Start local Mailpit (email catcher)                            |
 
 Run this before every push. CI runs the same gate on every PR, but a failure
 caught locally is faster to fix:
@@ -213,7 +222,7 @@ pnpm test:e2e        # E2E (needs a migrated DB + running/built app)
   product end to end: ingestion, citations, refusal, conversation history, and
   cross-knowledge-base isolation (`rag.spec.ts`, `chat.spec.ts`,
   `knowledge-bases.spec.ts`). The RAG specs skip themselves without
-  `NVIDIA_API_KEY` and always skip in CI, so run them locally.
+  `LLM_API_KEY` and always skip in CI, so run them locally.
 - The RAG unit tests cover chunking, scope resolution, the router, the planner
   adapters, the bounded loop and its budgets, and citation stripping. They also
   include SQL-text assertions that both tenant and knowledge-base isolation are
@@ -280,10 +289,9 @@ has no published ports in this stack, and the app is the only public gateway to
 it, which is why uploads and downloads are proxied through the app instead of
 presigned.
 
-Before you test document chat in that stack, note that the compose files set
-the database and storage variables inline on the `app` service and **do not
-pass `NVIDIA_API_KEY` or the `RAG_*` variables through**. Add them to the `app`
-service's `environment:` block if you want the chat configured there. See
+In that stack the `app` service reads your `.env` for the model key, the
+`RAG_*` settings and the rest, while the database and storage addresses are set
+inline to the stack's own services. See
 [Backups](backups.md) for the backup sidecars and
 [Self-hosting](self-hosting.md) for the deploy stacks.
 
@@ -331,10 +339,21 @@ edit the schema, generate the migration, review it, commit it, and apply it.
 | Point storage at real S3/R2 | Set `S3_ENDPOINT`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_BUCKET` — `src/lib/storage/client.ts` is unmodified either way |
 | Add an env var              | Add it to the schema in `src/lib/env.ts` and to `.env.example`                                                                 |
 | Add an AI setting           | Add the field to `src/lib/ai-env.ts` and `.env.example`; read it with `aiSettings().RAG_X`                                     |
-| Turn on agentic retrieval   | `RAG_AGENTIC_ENABLED=true` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus first — see [RAG](rag.md)          |
+| Turn off agentic retrieval  | `RAG_AGENTIC_ENABLED=false` in `.env`, restart. Run `pnpm rag:eval --compare` on your corpus to see the trade — [RAG](rag.md)  |
 | Go fully offline            | Point `RAG_LLM_BASE_URL` at Ollama/llama.cpp, then pick its embedding model in Settings (re-indexes; up to 4000 dims)          |
 | Use another provider        | Settings → AI provider → Add connection, then pick it for a job under Models. Embeddings stay on the `.env` endpoint for now   |
 | Tune the agentic loop       | Settings → Configuration → Retrieval & answering, or the same variables in `.env` — [RAG → Tuning](rag.md#tuning)              |
+
+## Harmless log lines
+
+Two messages look like errors and are not:
+
+- **`⨯ Error: The destination stream closed early.`** The browser left a page
+  (or a chat answer) while the server was still streaming it. Nothing was lost:
+  an answer is saved as it streams.
+- **`"next start" does not work with "output: standalone"`**, from
+  `pnpm start` after `pnpm build`. The app is built for the Docker image's
+  standalone server, and `pnpm start` still serves it correctly locally.
 
 ## Production checklist
 

@@ -83,7 +83,7 @@ pnpm install
 # 2. Configure the environment
 cp .env.example .env
 npx auth secret            # writes AUTH_SECRET into .env
-# then set NVIDIA_API_KEY in .env
+# then set LLM_API_KEY in .env
 
 # 3. Start Postgres + MinIO, apply the schema, seed a demo user
 pnpm docker:db
@@ -101,7 +101,7 @@ and leaves you a `demo@example.com` / `Password123` login. `pnpm dev` serves
 the app on `http://localhost:3000`.
 
 If you skipped the API key, the app still boots. The documents panel shows
-_"Document chat isn't configured on this deployment. Set NVIDIA_API_KEY to
+_"Document chat isn't configured on this deployment. Set LLM_API_KEY to
 enable uploads and chat."_ and the upload button stays disabled. You can read
 the rest of the template, but this tutorial needs the key from stage 3 onwards.
 
@@ -537,13 +537,13 @@ calls the agentic retrieval directly so that one run scores both. Expect it to
 take a while and to use a lot of your rate limit. The agentic path costs
 several upstream calls per question, against two for the fixed path.
 
-To use it in the app, set the flag and restart the dev server:
+The app already uses it, because the flag is on unless you turn it off:
 
 ```bash
-RAG_AGENTIC_ENABLED=true        # in .env, then restart pnpm dev
+RAG_AGENTIC_ENABLED=false       # in .env, then restart pnpm dev, for the fixed path
 ```
 
-When you ask a question now, the thinking indicator shows a phase label
+When you ask a follow-up or multi-part question, the thinking indicator shows a phase label
 instead of bare dots: _"Deciding where to look…"_, _"Searching your
 documents…"_ (with a number if it searches again), _"Writing the answer…"_,
 _"Checking sources…"_. The metrics line reports `agentic search` in place of
@@ -627,6 +627,7 @@ and chat, see [`0025`](../specs/0025-rag-knowledge-base-and-chat.md),
 
 ---
 
-**Next:** [Summary](summary.md) for the project on one page, then
-[Usage & Development](usage.md) for the scripts and environment variables you
-will use every day.
+**Next:** [Extending the agent](extending.md) to build your own agentic app on
+what you have just learned, [Summary](summary.md) for the project on one page,
+or [Usage & Development](usage.md) for the scripts and environment variables
+you will use every day.

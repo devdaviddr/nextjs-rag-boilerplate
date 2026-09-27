@@ -1,7 +1,7 @@
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import postgres from 'postgres'
 
-import { expect, test } from './fixtures'
+import { expect, hasInferenceKey, test } from './fixtures'
 
 // Independent knowledge bases (spec 0028), end to end through the UI.
 //
@@ -16,8 +16,8 @@ import { expect, test } from './fixtures'
 // self-skip rather than fail when one isn't configured.
 test.beforeEach(() => {
   test.skip(
-    !process.env.NVIDIA_API_KEY,
-    'NVIDIA_API_KEY is not set — RAG end-to-end tests skipped',
+    !hasInferenceKey,
+    'No inference key (LLM_API_KEY) — RAG end-to-end tests skipped',
   )
 })
 
@@ -64,7 +64,7 @@ async function uploadAndWaitReady(
   rowName: RegExp,
 ) {
   await page.goto(`/documents/${knowledgeBaseId}`)
-  await page.getByLabel('Upload a PDF').setInputFiles(fixtureFile)
+  await page.getByLabel('Upload a document').setInputFiles(fixtureFile)
   const row = page.getByRole('row', { name: rowName })
   await expect(row.getByText('Ready')).toBeVisible({ timeout: INGEST_TIMEOUT })
 }
@@ -216,7 +216,9 @@ test.describe('cross-knowledge-base isolation', () => {
 
         // Gone from the old KB's page…
         await expect(
-          page.getByText('No documents yet. Upload a PDF to get started.'),
+          page.getByText(
+            'No documents yet. Upload a PDF, Word, HTML or Markdown file to get started.',
+          ),
         ).toBeVisible()
         // …and present, already Ready (no re-ingestion), on the new one.
         await page.goto(`/documents/${facilitiesKbId}`)
@@ -338,7 +340,11 @@ test('a brand-new user with no knowledge bases cannot send a question', async ({
 }) => {
   await register(page, 'zero-kb')
 
-  await expect(page.getByText('Ready when you are.')).toBeVisible()
+  // The heading, not any text: in production Next's route announcer repeats
+  // the page's heading, so a text match finds two elements.
+  await expect(
+    page.getByRole('heading', { name: 'Ready when you are.' }),
+  ).toBeVisible()
   await expect(
     page.getByText(
       'Create a knowledge base to start asking questions about your documents.',

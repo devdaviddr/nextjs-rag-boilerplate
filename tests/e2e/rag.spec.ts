@@ -1,6 +1,6 @@
 import postgres from 'postgres'
 
-import { expect, test } from './fixtures'
+import { expect, hasInferenceKey, test } from './fixtures'
 
 // RAG knowledge base + document chat (spec 0025), end to end through the UI.
 //
@@ -13,8 +13,8 @@ import { expect, test } from './fixtures'
 // when one is configured; with none set, this whole file skips.
 test.beforeEach(() => {
   test.skip(
-    !process.env.NVIDIA_API_KEY,
-    'NVIDIA_API_KEY is not set — RAG end-to-end tests skipped',
+    !hasInferenceKey,
+    'No inference key (LLM_API_KEY) — RAG end-to-end tests skipped',
   )
 })
 
@@ -65,11 +65,13 @@ test.describe('knowledge base', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await expect(
-      page.getByText('No documents yet. Upload a PDF to get started.'),
+      page.getByText(
+        'No documents yet. Upload a PDF, Word, HTML or Markdown file to get started.',
+      ),
     ).toBeVisible()
 
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
 
     const row = page.getByRole('row', { name: /handbook/i })
@@ -119,7 +121,9 @@ test.describe('knowledge base', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(
-      page.getByText('No documents yet. Upload a PDF to get started.'),
+      page.getByText(
+        'No documents yet. Upload a PDF, Word, HTML or Markdown file to get started.',
+      ),
     ).toBeVisible()
   })
 
@@ -131,7 +135,7 @@ test.describe('knowledge base', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/no-text-layer.pdf`)
 
     const row = page.getByRole('row', { name: /no-text-layer/i })
@@ -196,7 +200,7 @@ test('re-ingesting a document does not duplicate its chunks', async ({
   const kbId = await createKnowledgeBase(page, 'My documents')
   await page.goto(`/documents/${kbId}`)
   await page
-    .getByLabel('Upload a PDF')
+    .getByLabel('Upload a document')
     .setInputFiles(`${FIXTURES}/handbook.pdf`)
 
   const row = page.getByRole('row', { name: /handbook/i })
@@ -235,6 +239,7 @@ test('re-ingesting a document does not duplicate its chunks', async ({
 // fails to parse, which is exactly what makes this worth asserting.
 test('a document can be inspected page by page, and a partial one says so', async ({
   page,
+  browser,
 }) => {
   test.slow()
   const dbUrl = process.env.DATABASE_URL
@@ -244,7 +249,7 @@ test('a document can be inspected page by page, and a partial one says so', asyn
   const kbId = await createKnowledgeBase(page, 'My documents')
   await page.goto(`/documents/${kbId}`)
   await page
-    .getByLabel('Upload a PDF')
+    .getByLabel('Upload a document')
     .setInputFiles(`${FIXTURES}/handbook.pdf`)
 
   const row = page.getByRole('row', { name: /handbook/i })
@@ -280,6 +285,11 @@ test('a document can be inspected page by page, and a partial one says so', asyn
       budgetExhausted: false,
     })} WHERE id = ${documentId}
         AND owner_id = (SELECT id FROM users WHERE email = ${email})`
+    // A failed page counts as unsearchable only when nothing was indexed from
+    // it (inspect.ts); the fixture's page 3 has real text, so clear its chunks
+    // to make the failure what the banner is about.
+    await sql`DELETE FROM chunks
+      WHERE document_id = ${documentId} AND page_number = 3`
 
     await page.reload()
     await expect(
@@ -298,11 +308,14 @@ test('a document can be inspected page by page, and a partial one says so', asyn
   }
 
   // NFR1: someone else's document is a 404, indistinguishable from one that
-  // does not exist. Cookies first — `/register` redirects a signed-in user
-  // away, so the second account cannot be created while the first is active.
-  await page.context().clearCookies()
-  await register(page, 'inspect-other')
-  const otherKbId = await createKnowledgeBase(page, 'Not mine')
-  const response = await page.goto(`/documents/${otherKbId}/${documentId}`)
+  // does not exist. A separate browser context for the second account:
+  // clearing cookies raced a session refresh still in flight, which signed
+  // the first user back in and left `/register` redirecting to the chat.
+  const other = await browser.newContext()
+  const otherPage = await other.newPage()
+  await register(otherPage, 'inspect-other')
+  const otherKbId = await createKnowledgeBase(otherPage, 'Not mine')
+  const response = await otherPage.goto(`/documents/${otherKbId}/${documentId}`)
   expect(response?.status()).toBe(404)
+  await other.close()
 })

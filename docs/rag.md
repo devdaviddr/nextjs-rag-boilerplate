@@ -337,6 +337,36 @@ That is the status you watch in the documents list after an upload. Chunks are
 written **delete-then-insert inside one transaction**, so re-ingesting a failed
 document can never double up its chunks.
 
+### Web pages by URL
+
+"Add URL" on a knowledge base's documents page takes an `http` or `https`
+address. The server fetches it once, keeps the bytes like an upload, and
+indexes them through the HTML loader, or the PDF loader when the address
+serves a PDF; anything else is refused. The document is titled from the page's
+`<title>`, remembers its URL and when it was fetched, and its citations link to
+that URL. The refresh button fetches it again and re-indexes the same document.
+There is no crawling and no scheduled refresh (spec 0047).
+
+Letting a server fetch an address a user typed is the classic server-side
+request forgery hole: the server can reach `localhost`, the database, the
+storage service and the cloud metadata endpoint, which the user cannot.
+`safeFetch` (`src/lib/rag/fetch-url.ts`) closes it:
+
+- only `http` and `https` on ports 80 and 443, with no user name or password
+  in the address;
+- the name is resolved once and **every** address it has must be public
+  (loopback, private, link-local, carrier-grade NAT, multicast, documentation
+  and reserved ranges are refused, including their IPv4-mapped and NAT64
+  IPv6 forms). The connection then goes to the address that was checked, not
+  to a second lookup that rebinding DNS could answer differently;
+- redirects are followed by hand, at most 3, each checked the same way;
+- 15 seconds for the whole fetch, and the body stops at the upload size limit.
+
+Set `URL_ALLOWED_HOSTS` (comma-separated) to allow only those sites and their
+subdomains. Adding a URL is rate-limited like an upload and counts against the
+same storage quota. Fetched text is untrusted and reaches models fenced, like
+any document.
+
 ---
 
 ## Search
@@ -549,9 +579,13 @@ because there is no model call.
 labels it as data, never instructions. An uploaded PDF is untrusted input that
 reaches the model, which makes it the indirect-injection surface. (Someone can
 put "ignore your instructions and…" in a PDF; the fence tells the model that
-block is material to read and not orders to follow.) Fencing mitigates the risk
-without eliminating it. The primary defence remains that the model is not called
-at all when nothing is retrieved.
+block is material to read and not orders to follow.) The fence's markers carry
+a random id made fresh for every prompt, and any run of `<<<` or `>>>` in the
+document text is shortened, so a document cannot close the fence early and have
+the text after it read as instructions. The planner's view of search results
+and the citation verifier's sources are fenced the same way. Fencing mitigates
+the risk without eliminating it. The primary defence remains that the model is
+not called at all when nothing is retrieved.
 
 The route streams NDJSON, one JSON object per line, so the browser can act on
 each frame the moment it arrives instead of waiting for the whole answer:
@@ -580,7 +614,7 @@ Get a free NVIDIA NIM key from [build.nvidia.com](https://build.nvidia.com). It
 is rate-limited, not token-billed.
 
 ```bash
-NVIDIA_API_KEY=nvapi-...
+LLM_API_KEY=nvapi-...
 ```
 
 Without it the app still boots; `/chat` and `/documents` report themselves as
@@ -685,21 +719,27 @@ sends over the wire, and what a free-tier rate limit costs you per question.
 
 ### Module map
 
-| Concern                                    | File                        |
-| ------------------------------------------ | --------------------------- |
-| PDF → per-page text, image-only detection  | `src/lib/rag/extract.ts`    |
-| Token-aware, page-bounded chunking (pure)  | `src/lib/rag/chunk.ts`      |
-| `embedPassages()` / `embedQuery()`         | `src/lib/rag/embed.ts`      |
-| NIM client: retries, backoff, usage frame  | `src/lib/rag/client.ts`     |
-| Ingestion state machine                    | `src/lib/rag/ingest.ts`     |
-| Content question vs whole-document request | `src/lib/rag/scope.ts`      |
-| Owner- and KB-scoped retrieval             | `src/lib/rag/retrieve.ts`   |
-| Section runs and parent assembly (pure)    | `src/lib/rag/parents.ts`    |
-| Prompt construction and fencing            | `src/lib/rag/prompt.ts`     |
-| Upload / list / delete / retry actions     | `src/lib/rag/actions.ts`    |
-| Knowledge base CRUD and `moveDocument`     | `src/lib/rag/kb-actions.ts` |
-| Permitted-KB resolution (`server-only`)    | `src/lib/rag/kb-scope.ts`   |
-| Streaming, persistence, metrics, retries   | `src/app/api/chat/route.ts` |
+| Concern                                     | File                             |
+| ------------------------------------------- | -------------------------------- |
+| PDF → per-page text, image-only detection   | `src/lib/rag/extract.ts`         |
+| Token-aware, page-bounded chunking (pure)   | `src/lib/rag/chunk.ts`           |
+| `embedPassages()` / `embedQuery()`          | `src/lib/rag/embed.ts`           |
+| NIM client: retries, backoff, usage frame   | `src/lib/rag/client.ts`          |
+| Provider adapters (OpenAI, Anthropic)       | `src/lib/rag/providers/`         |
+| Ingestion state machine                     | `src/lib/rag/ingest.ts`          |
+| Content question vs whole-document request  | `src/lib/rag/scope.ts`           |
+| Owner- and KB-scoped retrieval              | `src/lib/rag/retrieve.ts`        |
+| All retrieval SQL (swap for another store)  | `src/lib/rag/retrieval-store.ts` |
+| Document formats: one loader each           | `src/lib/rag/loaders/`           |
+| Fetching a URL safely (SSRF rules)          | `src/lib/rag/fetch-url.ts`       |
+| MCP client and MCP tools                    | `src/lib/rag/tools/mcp*.ts`      |
+| Section runs and parent assembly (pure)     | `src/lib/rag/parents.ts`         |
+| Prompt construction and fencing             | `src/lib/rag/prompt.ts`          |
+| Upload / URL / list / delete / retry        | `src/lib/rag/actions.ts`         |
+| Knowledge base CRUD and `moveDocument`      | `src/lib/rag/kb-actions.ts`      |
+| Permitted-KB resolution (`server-only`)     | `src/lib/rag/kb-scope.ts`        |
+| Answering: evidence, refusal, draft, verify | `src/lib/rag/answer.ts`          |
+| Auth, conversation, the NDJSON stream       | `src/app/api/chat/route.ts`      |
 
 The agentic path (spec 0029) adds:
 
@@ -709,6 +749,7 @@ The agentic path (spec 0029) adds:
 | `PlannerDecision`, tool schema, both adapters   | `src/lib/rag/planner.ts`      |
 | The bounded loop, budgets, attempt-scaled floor | `src/lib/rag/agentic.ts`      |
 | Wiring: scope, planner calls, search, verify    | `src/lib/rag/agentic-run.ts`  |
+| Tools you add: `AgentTool`, the registry        | `src/lib/rag/tools/`          |
 | Citation verification: sentence stripping       | `src/lib/rag/verify.ts`       |
 | Conversation-turn type and context window size  | `src/lib/rag/rewrite.ts`      |
 
@@ -727,16 +768,16 @@ under the agentic path for why that was removed.
 `POST /api/chat` answers with newline-delimited JSON, one object per line, so
 the client acts on each as it arrives.
 
-| Frame          | When                                                                                            | Payload                                   |
-| -------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `conversation` | First, always                                                                                   | `conversationId`, `title`                 |
-| `step`         | Each phase change: `drafting` on both paths; `routing` / `searching` / `verifying` agentic only | `phase`, `iteration`                      |
-| `citations`    | Once evidence is gathered                                                                       | `citations[]`, before any prose           |
-| `token`        | Per streamed delta                                                                              | `value`                                   |
-| `revision`     | If verification stripped anything                                                               | `value`, the full corrected answer        |
-| `metrics`      | As soon as drafting ends; the answer is saved and the composer unlocks                          | tokens, tok/s, time to first token, model |
-| `error`        | Instead of an answer                                                                            | `message`                                 |
-| `done`         | Last, always                                                                                    | —                                         |
+| Frame          | When                                                                                              | Payload                                   |
+| -------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `conversation` | First, always                                                                                     | `conversationId`, `title`                 |
+| `step`         | Each phase change: `drafting` and `verifying` on both paths; `routing` / `searching` agentic only | `phase`, `iteration`                      |
+| `citations`    | Once evidence is gathered                                                                         | `citations[]`, before any prose           |
+| `token`        | Per streamed delta                                                                                | `value`                                   |
+| `revision`     | If verification stripped anything                                                                 | `value`, the full corrected answer        |
+| `metrics`      | As soon as drafting ends; the answer is saved and the composer unlocks                            | tokens, tok/s, time to first token, model |
+| `error`        | Instead of an answer                                                                              | `message`                                 |
+| `done`         | Last, always                                                                                      | —                                         |
 
 Drafting is retried once if the model produces no prose. The upstream can also
 answer `200` and then send an error _as a frame_,
@@ -766,7 +807,7 @@ that into questions, because the two paths spend it very differently.
 
 | Path    | Upstream calls per question                                    | Questions per minute, roughly |
 | ------- | -------------------------------------------------------------- | ----------------------------- |
-| Fixed   | 1 embedding + 1 chat stream                                    | ~20                           |
+| Fixed   | 1 embedding + 1 chat stream + 1 verify                         | ~13                           |
 | Agentic | 1–3 planner calls + 1 embedding per search + 1 chat + 1 verify | **~5–8**                      |
 
 This has two consequences. Running the E2E suite with the agentic path on
@@ -795,7 +836,7 @@ column can be unit-tested without a database, a network or a PDF.
 flowchart TB
     subgraph api["Entry points — called from src/components/chat and src/app/(dashboard)"]
         AC["actions.ts<br>Server Actions<br>quota · rate limit · ownership"]
-        RT["api/chat/route.ts<br>streaming · persistence · metrics"]
+        RT["api/chat/route.ts<br>auth · conversation · stream<br>→ answer.ts: evidence · draft · verify"]
         SRC["api/documents/[id]/source<br>inline PDF, ownership-checked"]
     end
 
@@ -1428,9 +1469,13 @@ tried three phrasings and surfaced a chunk at **0.358**, just above the 0.35
 floor. The fixed pipeline refuses that question outright.
 
 That is why **citation verification** exists. It is a second model pass over
-the finished answer that asks whether the cited sources actually support each
+the finished answer that asks whether the sources actually support each
 sentence, strips unsupported sentences, and sends a corrected version as a
-`revision` frame. It is also why refusal accuracy is a hard gate instead of a
+`revision` frame. It runs on every grounded answer, fixed path included, and
+sees the answer as numbered sentences: a cited sentence is judged against the
+sources it cites, and an uncited one against all of them, so a claim without a
+`[n]` cannot slip through. Connective prose and sentences saying what the
+documents don't cover are never stripped. It is also why refusal accuracy is a hard gate instead of a
 number on a report.
 
 **The gate fired.** The first A/B put agentic refusal accuracy at **0.667**

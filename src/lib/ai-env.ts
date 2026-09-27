@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { parseModelPrices } from './model-prices'
+
 /**
  * The AI settings' environment fields (spec 0040): provider, models, and the
  * retrieval and answering knobs. Spread into the env schema in `./env.ts`, and
@@ -9,6 +11,20 @@ import { z } from 'zod'
  * zod only, like env.ts, so it is safe in any runtime.
  */
 
+/** NVIDIA NIM, the endpoint used when `RAG_LLM_BASE_URL` is not set. */
+export const DEFAULT_LLM_BASE_URL = 'https://integrate.api.nvidia.com/v1'
+
+/**
+ * The `.env` endpoint's key: `LLM_API_KEY`, else the deprecated
+ * `NVIDIA_API_KEY` (#136).
+ */
+export function inferenceKey(s: {
+  LLM_API_KEY?: string
+  NVIDIA_API_KEY?: string
+}): string | undefined {
+  return s.LLM_API_KEY ?? s.NVIDIA_API_KEY
+}
+
 /** Treat unset AND empty-string env vars as "not provided". */
 const optionalStr = z
   .string()
@@ -16,6 +32,15 @@ const optionalStr = z
   .transform((v) => (v === undefined || v === '' ? undefined : v))
 
 export const aiEnvShape = {
+  // Prices for Observability's cost figures (#150): model=price pairs, US
+  // dollars per million tokens. Unset: token counts only, as before.
+  RAG_MODEL_PRICES: optionalStr.refine(
+    (v) => v === undefined || parseModelPrices(v).ok,
+    {
+      message:
+        'RAG_MODEL_PRICES must be model=price pairs, e.g. "openai/gpt-4o=5, nvidia/nemotron-3-embed-1b=0"',
+    },
+  ),
   // --- RAG / NVIDIA NIM (spec 0025) --------------------------------------
   // Opt-in, same posture as OAuth/email/push: absent -> the knowledge-base
   // and chat features report themselves as unconfigured rather than the app
@@ -23,12 +48,17 @@ export const aiEnvShape = {
   //
   // The base URL is any OpenAI-compatible endpoint, so pointing it at a
   // local Ollama or llama.cpp gives a fully offline deployment.
+  //
+  // LLM_API_KEY is the endpoint's key, whatever the provider (#136).
+  // NVIDIA_API_KEY is the name it had while NIM was the only provider, and
+  // still works as a deprecated alias; read both through `inferenceKey`.
+  LLM_API_KEY: optionalStr,
   NVIDIA_API_KEY: optionalStr,
   RAG_LLM_BASE_URL: z
     .string()
     .url('RAG_LLM_BASE_URL must be a valid URL')
     .optional()
-    .default('https://integrate.api.nvidia.com/v1'),
+    .default(DEFAULT_LLM_BASE_URL),
   // Measured 2026-09-07: this is the only embedding model reachable on a
   // free NIM account, and it is fixed at 2048 dimensions (`dimensions: 1024`
   // is rejected). It names the model of the first embedding generation; a
@@ -98,8 +128,8 @@ export const aiEnvShape = {
     .default(200),
 
   // --- Document cracking (spec 0031) -------------------------------------
-  // Off by default, same posture as RAG_AGENTIC_ENABLED below: with this
-  // false, ingestion runs exactly as it did, page routing included.
+  // Off by default: with this false, ingestion runs exactly as it did, page
+  // routing included.
   RAG_CRACK_ENABLED: z
     .string()
     .optional()
@@ -257,9 +287,9 @@ export const aiEnvShape = {
     .default(8000),
 
   // --- Reranking (spec 0036) ---------------------------------------------
-  // Off by default, same posture as RAG_AGENTIC_ENABLED and RAG_CRACK_ENABLED
-  // above: with this false, `retrieveForOwner` returns the fused order
-  // byte-identically and spends no extra call.
+  // Off by default, same posture as RAG_CRACK_ENABLED above: with this
+  // false, `retrieveForOwner` returns the fused order byte-identically and
+  // spends no extra call.
   //
   // Turning it on only PERMUTES the fused candidates — see rerank.ts for why
   // that means the similarity gate admits exactly the same set either way,

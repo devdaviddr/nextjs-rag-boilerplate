@@ -15,6 +15,12 @@ import {
 } from 'drizzle-orm'
 
 import { db } from '@/db'
+import { aiSettings } from '@/lib/ai-settings'
+import {
+  type CostSummary,
+  parseModelPrices,
+  summariseCost,
+} from '@/lib/model-prices'
 import { appLogs, ragRuns, ragSpans } from '@/db/schema'
 import type { LogCategory } from '@/lib/logger'
 
@@ -238,7 +244,7 @@ export async function listRuns(
 /** One run with its steps, in the order they started. */
 export async function getRun(
   id: string,
-): Promise<{ run: RunSummary; steps: RunStep[] } | null> {
+): Promise<{ run: RunSummary; steps: RunStep[]; cost: CostSummary } | null> {
   const [row] = await db.select().from(ragRuns).where(eq(ragRuns.id, id))
   if (!row) return null
   const spans = await db
@@ -246,7 +252,10 @@ export async function getRun(
     .from(ragSpans)
     .where(eq(ragSpans.runId, id))
     .orderBy(ragSpans.key)
+  const prices = parseModelPrices(aiSettings().RAG_MODEL_PRICES)
   return {
+    // What this run's model calls cost at RAG_MODEL_PRICES (#150).
+    cost: summariseCost(spans, prices.ok ? prices.prices : new Map()),
     run: toSummary(row),
     steps: spans.map((s) => ({
       key: s.key,

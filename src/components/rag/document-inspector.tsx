@@ -43,6 +43,9 @@ export function DocumentInspector({
   inspection: InspectedDocument
 }) {
   const { pages, extraction, partial, partialReasons } = inspection
+  // Not a PDF (spec 0046 FR7): sections of text, with no page to render.
+  const isSection = inspection.unit === 'section'
+  const Unit = isSection ? 'Section' : 'Page'
   const [selectedPage, setSelectedPage] = useState(pages[0]?.page ?? 1)
   const [selectedChunk, setSelectedChunk] = useState<string | null>(null)
   const [render, setRender] = useState<'loading' | 'ready' | 'failed'>(
@@ -90,7 +93,7 @@ export function DocumentInspector({
 
       {/* FR8. Saying the record is absent is the whole point — the alternative
           is a per-page story this document never produced. */}
-      {!extraction && (
+      {!extraction && !isSection && (
         <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
           How each page was read was not recorded for this document. It was
           indexed before the app kept a per-page record, or with page-by-page
@@ -100,7 +103,10 @@ export function DocumentInspector({
       )}
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
-        <nav aria-label="Pages" className="max-h-[70vh] overflow-auto pr-1">
+        <nav
+          aria-label={isSection ? 'Sections' : 'Pages'}
+          className="max-h-[70vh] overflow-auto pr-1"
+        >
           <ul className="space-y-1">
             {pages.map((p) => {
               const d = describePage({ ...p, hasChunks: p.chunks.length > 0 })
@@ -147,11 +153,13 @@ export function DocumentInspector({
         <div className="min-w-0 space-y-3">
           <div>
             <h2 className="text-sm font-medium">
-              Page {page.page}
-              <span className="text-muted-foreground font-normal">
-                {' '}
-                — {description.headline}
-              </span>
+              {Unit} {page.page}
+              {!isSection && (
+                <span className="text-muted-foreground font-normal">
+                  {' '}
+                  — {description.headline}
+                </span>
+              )}
             </h2>
             {description.detail && (
               <p className="text-muted-foreground mt-0.5 text-xs">
@@ -175,7 +183,7 @@ export function DocumentInspector({
             </div>
           )}
 
-          {render === 'ready' && page.chunks.length > 0 && (
+          {!isSection && render === 'ready' && page.chunks.length > 0 && (
             <ul className="text-muted-foreground mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
               <li className="flex items-center gap-1.5">
                 <span
@@ -204,75 +212,77 @@ export function DocumentInspector({
               )}
             </ul>
           )}
-          <div className="bg-muted/40 rounded-md p-3">
-            <div className="relative mx-auto w-full max-w-[720px]">
-              {/* eslint-disable-next-line @next/next/no-img-element --
+          {!isSection && (
+            <div className="bg-muted/40 rounded-md p-3">
+              <div className="relative mx-auto w-full max-w-[720px]">
+                {/* eslint-disable-next-line @next/next/no-img-element --
                   Same reasoning as the citation panel: a private, `no-store`
                   render of one page, which the image optimiser would both cache
                   and resample out from under the boxes positioned over it. */}
-              <img
-                key={page.page}
-                src={`/api/documents/${documentId}/page?n=${page.page}`}
-                alt={`Page ${page.page} of ${title}`}
-                onLoad={() => setRender('ready')}
-                onError={() => setRender('failed')}
-                className={cn(
-                  'block h-auto w-full bg-white shadow-sm',
-                  render !== 'ready' && 'invisible',
-                )}
-              />
-              {render === 'loading' && (
-                <div
-                  className="bg-muted absolute inset-0 animate-pulse rounded"
-                  aria-hidden="true"
+                <img
+                  key={page.page}
+                  src={`/api/documents/${documentId}/page?n=${page.page}`}
+                  alt={`Page ${page.page} of ${title}`}
+                  onLoad={() => setRender('ready')}
+                  onError={() => setRender('failed')}
+                  className={cn(
+                    'block h-auto w-full bg-white shadow-sm',
+                    render !== 'ready' && 'invisible',
+                  )}
                 />
-              )}
-              {render === 'failed' && (
-                <p className="text-muted-foreground absolute inset-0 flex items-center justify-center p-4 text-center text-xs">
-                  This page couldn&rsquo;t be rendered. What was indexed from it
-                  is listed below regardless.
-                </p>
-              )}
-              {/* Spec 0038 FR4. Drawn UNDER the chunk regions so a chunk is
+                {render === 'loading' && (
+                  <div
+                    className="bg-muted absolute inset-0 animate-pulse rounded"
+                    aria-hidden="true"
+                  />
+                )}
+                {render === 'failed' && (
+                  <p className="text-muted-foreground absolute inset-0 flex items-center justify-center p-4 text-center text-xs">
+                    This page couldn&rsquo;t be rendered. What was indexed from
+                    it is listed below regardless.
+                  </p>
+                )}
+                {/* Spec 0038 FR4. Drawn UNDER the chunk regions so a chunk is
                   never obscured by the context around it, and in different
                   weights because they are different claims: a chunk is a
                   passage retrieval can return, a heading or caption is text
                   indexed to make that passage findable. */}
-              {render === 'ready' &&
-                page.annotations.map((a) => (
-                  <div
-                    key={`${a.kind}:${a.box.xmin}:${a.box.ymin}`}
-                    aria-hidden="true"
-                    style={boxPercentStyle(a.box)}
-                    className={cn(
-                      'pointer-events-none absolute rounded-[2px]',
-                      a.kind === 'heading'
-                        ? 'border border-sky-600'
-                        : 'border-2 border-dashed border-teal-600',
-                    )}
-                  />
-                ))}
-              {render === 'ready' &&
-                page.chunks.map((chunk) =>
-                  chunk.boxes.map((box, i) => (
+                {render === 'ready' &&
+                  page.annotations.map((a) => (
                     <div
-                      key={`${chunk.id}:${i}`}
+                      key={`${a.kind}:${a.box.xmin}:${a.box.ymin}`}
                       aria-hidden="true"
-                      style={boxPercentStyle(box)}
+                      style={boxPercentStyle(a.box)}
                       className={cn(
                         'pointer-events-none absolute rounded-[2px]',
-                        // Amber against the page rather than a theme token: the
-                        // rendered page is white in dark mode too.
-                        chunk.kind === 'figure'
-                          ? 'border-2 border-dashed border-amber-500'
-                          : 'ring-2 ring-amber-500/60',
-                        selectedChunk === chunk.id && 'bg-amber-300/40',
+                        a.kind === 'heading'
+                          ? 'border border-sky-600'
+                          : 'border-2 border-dashed border-teal-600',
                       )}
                     />
-                  )),
-                )}
+                  ))}
+                {render === 'ready' &&
+                  page.chunks.map((chunk) =>
+                    chunk.boxes.map((box, i) => (
+                      <div
+                        key={`${chunk.id}:${i}`}
+                        aria-hidden="true"
+                        style={boxPercentStyle(box)}
+                        className={cn(
+                          'pointer-events-none absolute rounded-[2px]',
+                          // Amber against the page rather than a theme token: the
+                          // rendered page is white in dark mode too.
+                          chunk.kind === 'figure'
+                            ? 'border-2 border-dashed border-amber-500'
+                            : 'ring-2 ring-amber-500/60',
+                          selectedChunk === chunk.id && 'bg-amber-300/40',
+                        )}
+                      />
+                    )),
+                  )}
+              </div>
             </div>
-          </div>
+          )}
 
           {page.chunks.length > 0 && (
             <ul className="space-y-2">

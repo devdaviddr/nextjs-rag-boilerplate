@@ -51,8 +51,14 @@ there is no answer, and you can only ever retrieve your own documents.
 
 - Keep multiple independent knowledge bases per user: create, rename, delete,
   and move a document between them without re-ingesting it.
-- Upload PDFs into a chosen knowledge base. This reuses the MinIO storage, quota
+- Upload PDFs, Word (`.docx`), HTML and Markdown or text files into a chosen
+  knowledge base, recognised by their bytes, not their name. A non-PDF is split
+  into sections at its headings, and its citations show the section's text. This reuses the MinIO storage, quota
   and rate limits from [file uploads](#file-uploads).
+- Add a web page or an online PDF by its URL. The server fetches it once,
+  under rules that stop it reaching private or internal addresses, and
+  citations link back to the page. Refresh fetches it again
+  ([Web pages by URL](rag.md#web-pages-by-url)).
 - Hold conversations scoped to a set of knowledge bases. The scope is fixed when
   the thread is created, so every message in it has one auditable scope.
 - Read streamed Markdown answers with clickable page-level citations that open
@@ -91,8 +97,9 @@ you can search. [RAG](rag.md) walks through each step.
 `RAG_AGENTIC_ENABLED`, on by default. The model plans its own searches via a
 tool call, resolves conversational references, and can search again when the
 first attempt is thin, inside hard caps on searches, wall-clock and tokens.
-Citation verification then strips claims their sources do not support. It is
-roughly ten times slower and markedly better on follow-ups. The measured A/B is
+Citation verification then strips claims their sources do not support; it
+checks every grounded answer, on both paths. The agentic path is roughly ten
+times slower and markedly better on follow-ups. The measured A/B is
 in [RAG → The agentic path](rag.md#the-agentic-path).
 
 ### Choosing the provider and models from Settings
@@ -101,8 +108,10 @@ Admins get a **Configuration** section in **Settings** (spec 0040):
 
 - **AI provider** lists the endpoints the app can send questions to. The
   `.env` endpoint is always there. Add more with a preset (NVIDIA NIM,
-  OpenRouter, a llama.cpp server, OpenAI, Ollama, vLLM / LM Studio) or any
-  OpenAI-compatible URL. API keys are encrypted at rest (AES-256-GCM) and never
+  OpenRouter, a llama.cpp server, OpenAI, Anthropic, Ollama, vLLM / LM Studio)
+  or any OpenAI-compatible URL. Anthropic is spoken natively through its own
+  adapter, for chat, the planner and vision; it has no embeddings API, so
+  embeddings stay on the `.env` endpoint. API keys are encrypted at rest (AES-256-GCM) and never
   sent back to the browser; the page shows the last four characters at most.
   **Test** lists the endpoint's models; for OpenRouter the model picker also
   shows each model's context length and price, and requests carry its
@@ -114,6 +123,11 @@ Admins get a **Configuration** section in **Settings** (spec 0040):
   `--jinja` is told so), or one embedding of the size the index needs (a
   llama.cpp server without `--embeddings` is told so). **Use .env** removes
   the change.
+- **Tools** connects Model Context Protocol servers (Streamable HTTP). A test
+  lists a server's tools, each off until an admin switches it on; switched-on
+  tools are offered to the agentic planner. Tokens are encrypted like API
+  keys, and every change is in Recent changes
+  ([Extending](extending.md#or-connect-an-mcp-server)).
 - **Retrieval & answering** holds the switches and limits behind search:
   passages per answer, the relevance floor, agentic search and its limits,
   reranking, and how documents are processed. Each is saved on its own,
@@ -326,6 +340,8 @@ it. Nothing is uploaded straight from a browser to a bucket.
 
 - Storage is self-hosted and S3-compatible, via MinIO. It needs no cloud
   account, and it works unmodified against R2/S3 if you ever want to swap.
+  Without `S3_ENDPOINT`, files are kept on local disk under `STORAGE_DIR`
+  instead, which suits a single instance with no storage service to run.
 - Uploads and downloads are proxied through the app (`src/lib/storage/`)
   instead of using presigned direct URLs, so MinIO itself is never publicly
   exposed and needs no second Cloudflare Tunnel hostname.
@@ -412,7 +428,7 @@ walks, and the RAG suites skip themselves when there is no API key.
 - Playwright for E2E (full auth flow, protected-route redirects, PWA
   manifest/SW/offline).
 - RAG suites covering chunking, retrieval scoping, the agentic loop's budgets,
-  and the product end to end. They self-skip without `NVIDIA_API_KEY`.
+  and the product end to end. They self-skip without `LLM_API_KEY`.
 - Runs locally against a real Postgres.
 
 The full scope of each suite, and the `--workers=1` rule for the agentic path,

@@ -1,6 +1,11 @@
 import 'server-only'
 
-import { AI_ENV_KEYS, type AiEnvKey, aiEnvShape } from '@/lib/ai-env'
+import {
+  AI_ENV_KEYS,
+  type AiEnvKey,
+  aiEnvShape,
+  inferenceKey,
+} from '@/lib/ai-env'
 import { env, type Env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 
@@ -33,6 +38,7 @@ export type AiSettingKey = AiEnvKey
  * stored encrypted with their connection (#54).
  */
 const CONNECTION_KEYS = new Set<AiSettingKey>([
+  'LLM_API_KEY',
   'NVIDIA_API_KEY',
   'RAG_LLM_BASE_URL',
 ])
@@ -265,7 +271,7 @@ export function envConnection(): ResolvedConnection {
     name: 'Environment (.env)',
     preset: presetForUrl(s.RAG_LLM_BASE_URL),
     baseUrl: s.RAG_LLM_BASE_URL,
-    apiKey: s.NVIDIA_API_KEY,
+    apiKey: inferenceKey(s),
     keyUnreadable: false,
   }
 }

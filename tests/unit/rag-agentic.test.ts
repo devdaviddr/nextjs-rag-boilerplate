@@ -532,6 +532,8 @@ describe('runAgenticLoop — planner failure', () => {
       'searches',
       'textSearches',
       'figureReadings',
+      // Evidence from registered tools (spec 0044), like figure readings.
+      'toolResults',
       'tokensUsed',
       'elapsedMs',
     ])

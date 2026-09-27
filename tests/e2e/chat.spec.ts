@@ -1,6 +1,6 @@
 import postgres from 'postgres'
 
-import { expect, test } from './fixtures'
+import { expect, hasInferenceKey, test } from './fixtures'
 
 // Chat-first UX and conversation history (spec 0026).
 //
@@ -56,13 +56,15 @@ test('signing in lands on the chat, and there is no dashboard', async ({
 
 test('an empty chat is a centred greeting and composer', async ({ page }) => {
   test.skip(
-    !process.env.NVIDIA_API_KEY,
-    'NVIDIA_API_KEY is not set — the chat renders its unconfigured state',
+    !hasInferenceKey,
+    'No inference key (LLM_API_KEY) — the chat renders its unconfigured state',
   )
   await register(page, 'greeting')
 
   // FR11: greeting + composer, no surrounding card.
-  await expect(page.getByText('Ready when you are.')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Ready when you are.' }),
+  ).toBeVisible()
   await expect(page.getByLabel('Question')).toBeVisible()
 })
 
@@ -115,8 +117,8 @@ test.describe('with an indexed document', () => {
   test.slow()
   test.beforeEach(() => {
     test.skip(
-      !process.env.NVIDIA_API_KEY,
-      'NVIDIA_API_KEY is not set — chat end-to-end tests skipped',
+      !hasInferenceKey,
+      'No inference key (LLM_API_KEY) — chat end-to-end tests skipped',
     )
   })
 
@@ -128,7 +130,7 @@ test.describe('with an indexed document', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
     await expect(
       page.getByRole('row', { name: /handbook/i }).getByText('Ready'),
@@ -149,12 +151,14 @@ test.describe('with an indexed document', () => {
     // FR4: the URL adopts the new conversation without a navigation.
     await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}/)
 
-    // FR7: it appears in Recents, titled from the question.
+    // FR7: it appears in Recents, titled from the question. Recents refresh
+    // when the answer's stream ends, which is after verification (#127): a
+    // model call, so allow for it rather than the default 5 seconds.
     await expect(
       page
         .getByRole('link', { name: /How many days of annual leave/i })
         .first(),
-    ).toBeVisible()
+    ).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Today').first()).toBeVisible()
 
     // FR12: reloading shows the same messages AND the same citations.
@@ -205,7 +209,7 @@ test.describe('with an indexed document', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
     await expect(
       page.getByRole('row', { name: /handbook/i }).getByText('Ready'),
@@ -250,7 +254,7 @@ test.describe('with an indexed document', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
     await expect(
       page.getByRole('row', { name: /handbook/i }).getByText('Ready'),
@@ -330,7 +334,7 @@ test.describe('with an indexed document', () => {
 test('a second question sent immediately is not swallowed by the post-answer refresh', async ({
   page,
 }) => {
-  test.skip(!process.env.NVIDIA_API_KEY, 'NVIDIA_API_KEY is not set')
+  test.skip(!hasInferenceKey, 'No inference key (LLM_API_KEY)')
   await register(page, 'refresh-race')
   // No knowledge base, so both questions take the instant refusal path with no
   // model streaming — which is the tightest version of the race.

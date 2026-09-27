@@ -1,4 +1,5 @@
 import './load-env'
+import { DEFAULT_TOLERANCE, type GateMetrics, gateFailures } from './gate'
 
 import {
   existsSync,
@@ -81,6 +82,10 @@ import { deleteObjectsUnderPrefix, putObject } from '@/lib/storage/client'
  *   pnpm rag:eval                 # run the fixed pipeline, print a report
  *   pnpm rag:eval --label hybrid  # save results under that label for comparison
  *   pnpm rag:eval --no-ingest     # reuse what is already indexed
+ *   pnpm rag:eval --gate          # the release gate (#133): fixed pipeline vs
+ *                                 # eval/results/baseline.json; fails on any
+ *                                 # refusal drop or leak, or hit@1/hit@k/MRR
+ *                                 # down more than --tolerance (default 0.05)
  *   pnpm rag:eval --label X --baseline Y   # gate X's refusal accuracy against
  *                                           # saved eval/results/Y.json (default Y=baseline)
  *   pnpm rag:eval --answers       # ALSO generate answers and assert against
@@ -316,6 +321,14 @@ interface QuestionResult {
   adjacentChildren?: number
   assembledFrom?: number
   gating?: boolean
+  /**
+   * #101: the best candidate BEFORE the similarity gate — its cosine
+   * similarity and, with reranking on, the reranker's score. Recorded for
+   * refused questions too, which is the point: whether a reranker score
+   * separates answerable from unanswerable questions better than similarity.
+   */
+  candidateTopSimilarity?: number
+  candidateTopRerankScore?: number
 }
 
 /** One chunk that came back from a knowledge base it should never have. */
@@ -623,6 +636,8 @@ function buildResult(
     latencyMs?: number
     tokensUsed?: number
     termination?: string
+    candidateTopSimilarity?: number
+    candidateTopRerankScore?: number
   } = {},
 ): QuestionResult {
   const { rank, factRanks, passed } = scoreQuestion(q, retrieved, titleById)
@@ -743,18 +758,54 @@ async function baselineRetrieve(
   chunks: RetrievedChunk[]
   latencyMs: number
   mode: 'document' | 'search'
+  candidate?: { similarity: number; rerankScore?: number }
 }> {
   const startedAt = Date.now()
   const scope = resolveScope(q.question, docsInScope)
+  let candidate: { similarity: number; rerankScore?: number } | undefined
   const chunks =
     scope.mode === 'document'
       ? await retrieveDocumentChunks(ownerId, scope.documentId, kbIds)
-      : await retrieveForOwner(ownerId, q.question, kbIds, options)
+      : await retrieveForOwner(ownerId, q.question, kbIds, {
+          ...options,
+          onRanked: (ranked) => {
+            const top = ranked[0]
+            if (!top) return
+            candidate = {
+              similarity: Math.max(...ranked.map((r) => r.similarity)),
+              rerankScore: top.rerankScore,
+            }
+          },
+        })
   return {
     chunks,
     latencyMs: Date.now() - startedAt,
     mode: scope.mode === 'document' ? 'document' : 'search',
+    candidate,
   }
+}
+
+/**
+ * #101: would a gate on X refuse every unanswerable question while admitting
+ * more answerable ones than the cosine floor does? For each threshold that
+ * refuses all the unanswerable questions, how many answerable ones pass.
+ */
+function gateSeparation(
+  results: readonly QuestionResult[],
+  score: (r: QuestionResult) => number | undefined,
+): { threshold: number; admitted: number; answerable: number } | null {
+  const scored = results.filter(
+    (r) =>
+      (r.type === 'single-hop' || r.type === undefined) &&
+      score(r) !== undefined,
+  )
+  const answerable = scored.filter((r) => r.answerable)
+  const refusals = scored.filter((r) => !r.answerable)
+  if (answerable.length === 0 || refusals.length === 0) return null
+  // The lowest threshold that still refuses every unanswerable question.
+  const threshold = Math.max(...refusals.map((r) => score(r)!)) + Number.EPSILON
+  const admitted = answerable.filter((r) => score(r)! >= threshold).length
+  return { threshold, admitted, answerable: answerable.length }
 }
 
 /**
@@ -1375,9 +1426,18 @@ async function main(): Promise<void> {
     )
     process.exit(1)
   }
-  const label = arg('label') ?? 'baseline'
+  // The release gate (#133): the fixed pipeline against the saved baseline,
+  // failing on a quality drop as well as on refusal or leakage.
+  const gate = hasFlag('gate')
+  if (gate && (compare || parentsAb)) {
+    console.error(
+      '--gate runs the fixed pipeline alone; drop --compare/--parents-ab.',
+    )
+    process.exit(1)
+  }
+  const label = arg('label') ?? (gate ? 'gate' : 'baseline')
   const baselineLabel = arg('baseline') ?? 'baseline'
-  const explicitLabel = arg('label') !== undefined
+  const explicitLabel = arg('label') !== undefined || gate
   const { questions } = JSON.parse(
     readFileSync('eval/questions.json', 'utf8'),
   ) as { questions: Question[] }
@@ -1465,13 +1525,52 @@ async function main(): Promise<void> {
     retrievedById.set(q.id, chunks)
     // Only `latencyMs`. `searches`, `tokensUsed` and `termination` are left
     // off entirely rather than passed as 0 — see QuestionResult's note.
-    const result = buildResult(q, chunks, titleById, { latencyMs })
+    const result = buildResult(q, chunks, titleById, {
+      latencyMs,
+      ...(outcome.candidate
+        ? {
+            candidateTopSimilarity: Number(
+              outcome.candidate.similarity.toFixed(3),
+            ),
+            ...(outcome.candidate.rerankScore !== undefined
+              ? {
+                  candidateTopRerankScore: Number(
+                    outcome.candidate.rerankScore.toFixed(4),
+                  ),
+                }
+              : {}),
+          }
+        : {}),
+    })
     baselineResults.push(result)
     logResult(result)
   }
   if (parentsAb) {
     console.log('\nFlat (children only, the same retrieval) — per question:')
     for (const result of flatResults) logResult(result)
+  }
+
+  // #101: could the reranker's score be the relevance gate instead?
+  const byRerank = gateSeparation(
+    baselineResults,
+    (r) => r.candidateTopRerankScore,
+  )
+  if (byRerank) {
+    const bySimilarity = gateSeparation(
+      baselineResults,
+      (r) => r.candidateTopSimilarity,
+    )
+    console.log(
+      '\nGate separation (#101), single-hop questions, every refusal kept:',
+    )
+    console.log(
+      `  reranker score >= ${byRerank.threshold.toFixed(4)} admits ${byRerank.admitted}/${byRerank.answerable} answerable`,
+    )
+    if (bySimilarity) {
+      console.log(
+        `  similarity     >= ${bySimilarity.threshold.toFixed(3)} admits ${bySimilarity.admitted}/${bySimilarity.answerable} answerable`,
+      )
+    }
   }
 
   // --- Agentic pass, ONLY under --compare: real NVIDIA calls, several per
@@ -1742,7 +1841,37 @@ async function main(): Promise<void> {
   // from before spec 0029) — only meaningful outside --compare, for gating
   // one fixed-pipeline config change against another (e.g. hybrid vs dense).
   let savedLabelGateFailed = false
-  if (!compare && explicitLabel && label !== baselineLabel) {
+  if (gate) {
+    const baselinePath = join(RESULTS_DIR, `${baselineLabel}.json`)
+    if (!existsSync(baselinePath)) {
+      console.error(`\n--gate: no ${baselinePath} to compare against.`)
+      savedLabelGateFailed = true
+    } else {
+      const saved = JSON.parse(readFileSync(baselinePath, 'utf8')) as {
+        metrics: GateMetrics
+      }
+      const tolerance = Number(arg('tolerance') ?? DEFAULT_TOLERANCE)
+      const failures = gateFailures(
+        { ...baselineCore, crossKbLeakage },
+        saved.metrics,
+        tolerance,
+      )
+      if (failures.length > 0) {
+        savedLabelGateFailed = true
+        console.error(
+          `\nRELEASE GATE FAILED against "${baselineLabel}" (tolerance ${tolerance}):`,
+        )
+        for (const f of failures) {
+          console.error(`  ${f.metric}: ${f.current} (baseline ${f.baseline})`)
+        }
+      } else {
+        console.log(
+          `\nRelease gate: hit@1, hit@k, MRR within ${tolerance} of ` +
+            `"${baselineLabel}", refusal and leakage held — OK`,
+        )
+      }
+    }
+  } else if (!compare && explicitLabel && label !== baselineLabel) {
     const baselinePath = join(RESULTS_DIR, `${baselineLabel}.json`)
     if (existsSync(baselinePath)) {
       const saved = JSON.parse(readFileSync(baselinePath, 'utf8')) as {

@@ -22,9 +22,12 @@ release tags.
 │ plan    : sorts the run (feature PR · release PR · release   │
 │           merge · other main push · manual) → which jobs run │
 │   quality : format:check · lint · typecheck · test:coverage  │
-│             · specs:check · pnpm audit (critical)  [all PRs] │
+│             · specs:check · pnpm audit (prod high, all      │
+│             critical)                             [all PRs] │
 │   e2e     : Postgres service + MinIO + Mailpit → migrate/seed │
 │             → build → Playwright           [release PR only] │
+│   quickstart : README steps as written + stub model          │
+│             → cited answer + refusal     [release PR only]   │
 │   docker  : per-arch native (amd64 + arm64); cache-only on   │
 │             the release PR, push by digest on release merge  │
 │             · Trivy scan of the app image (critical, fixed)  │
@@ -130,9 +133,27 @@ pnpm typecheck
 pnpm test:coverage
 pnpm specs:check
 pnpm docs:check                 # every docs/*.md indexed, every link and anchor resolves
-pnpm audit --audit-level=critical   # blocks on critical advisories only
+pnpm audit --prod --audit-level=high   # what ships in the image: blocks on high
+pnpm audit --audit-level=critical      # dev tooling too: blocks on critical only
 pnpm release:check                  # release/* PRs only: the check the tag will run
 ```
+
+### `quickstart` job
+
+Runs the README's _Getting started_ as a newcomer would, on the release PR
+(#152). `scripts/quickstart.mjs` reads the commands out of `README.md` and runs
+them in order, `pnpm docker:db` and `pnpm docker:minio` included, so the check
+and the README cannot drift apart. Two steps are made non-interactive:
+`npx auth secret` (it prompts) becomes a random `AUTH_SECRET`, and `pnpm dev`
+becomes `pnpm build` so Playwright can start the server. The README's "set
+`LLM_API_KEY`" step points `.env` at `tests/stub-llm/server.mjs`, an
+OpenAI-compatible stub with deterministic embeddings and scripted answers, so
+no key is needed. `tests/e2e/quickstart.spec.ts` then signs in as the demo
+user, uploads a PDF, and checks for a cited answer and a refusal.
+
+If you change the README's quickstart, `node scripts/quickstart.mjs --print`
+shows what the job will run. It refuses to run over an existing `.env` outside
+CI, because the README's `cp .env.example .env` would overwrite yours.
 
 ### `e2e` job
 
@@ -159,7 +180,8 @@ CI value.
 
 The RAG suites always skip in CI. `rag.spec.ts`, `knowledge-bases.spec.ts`
 and the inference-dependent tests in `chat.spec.ts` self-skip without
-`NVIDIA_API_KEY`, and the E2E step sets it to an empty string on purpose: they
+`LLM_API_KEY`, and the E2E step sets it (and its old name, `NVIDIA_API_KEY`)
+to an empty string on purpose: they
 call the rate-limited NIM endpoint, so they are not run on every PR. A
 repository secret of that name has no effect. Run them locally, with the key in
 `.env`, before merging a change to retrieval, ingestion or chat:
@@ -168,7 +190,16 @@ repository secret of that name has no effect. Run them locally, with the key in
 pnpm test:e2e tests/e2e/rag.spec.ts tests/e2e/knowledge-bases.spec.ts tests/e2e/chat.spec.ts
 ```
 
-Each E2E test uses a unique client IP (via `CF-Connecting-IP`) so rate-limit
+The retrieval gate works the same way, for the same reason. `pnpm rag:gate`
+scores the fixed pipeline against the committed `eval/results/baseline.json`
+and fails on any drop in refusal accuracy, any cross-knowledge-base leak, or
+hit@1, hit@k or MRR down by more than 0.05 (`--tolerance` to change it). It
+takes about a minute with the key in `.env`. The `/ship` routine runs it before
+the release PR whenever the release touches `src/lib/rag` or the eval corpus
+(#133). To accept a deliberate change in retrieval quality, re-record the
+baseline with `pnpm rag:eval --no-ingest` in the same PR and say why.
+
+Each E2E test uses a unique client IP (via `X-Forwarded-For`) so rate-limit
 buckets do not leak between tests. That keeps a parallel suite reproducible, and
 it means the rate-limit tests assert something real. The implementation is in
 `tests/e2e/fixtures.ts`.
@@ -437,7 +468,10 @@ Locally, Husky runs `lint-staged` (ESLint + Prettier) over staged files on every
 `git commit`, and commitlint checks the message. Both are installed by the
 `prepare` script when you `pnpm install`.
 
-Aim for unit-test coverage above 80% (`pnpm test:coverage` reports it). Before
+`pnpm test:coverage` fails when coverage drops below the floor in
+`vitest.config.ts` (`coverage.thresholds`), set just under the measured numbers
+(about 52% of lines). Raise the floor when coverage rises; never lower it to
+make a change pass. Aim for unit-test coverage above 80%. Before
 you call a deployment production-ready, verify a restore as well as a backup;
 see [Backups & restore](backups.md).
 
@@ -446,7 +480,7 @@ see [Backups & restore](backups.md).
 1. Put it in the `quality` job, the fast, blocking one, next to
    `format:check` / `lint` / `typecheck` / `test:coverage` / `specs:check`.
 2. If a check is exploratory or has a high false-positive rate, as
-   `pnpm audit` would at `high`, mark the step `continue-on-error: true` so it
+   `pnpm audit` would at `high` over dev tooling, mark the step `continue-on-error: true` so it
    reports without blocking merges. Don't leave it out entirely.
 3. Expose it as a `pnpm` script in `package.json` so a contributor can run it
    locally before pushing.

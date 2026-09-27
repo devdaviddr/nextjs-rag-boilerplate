@@ -30,6 +30,15 @@ export default defineConfig({
         'src/db/migrate.ts',
         'src/db/seed.ts',
       ],
+      // A floor, not a goal (#134): just under the measured numbers, so a
+      // change that drops coverage fails `pnpm test:coverage` in CI. Raise it
+      // when coverage rises; never lower it to make a change pass.
+      thresholds: {
+        statements: 51,
+        branches: 44,
+        functions: 44,
+        lines: 51,
+      },
     },
   },
 })

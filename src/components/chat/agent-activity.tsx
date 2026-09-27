@@ -10,6 +10,7 @@ import {
 } from '@/components/observability/log-style'
 import { STEP_LABEL, duration } from '@/components/observability/format'
 import { useRole } from '@/lib/auth/client-rbac'
+import { useFeatures } from '@/lib/shell/features'
 import type { LogCategory } from '@/lib/logger'
 import type {
   ActivityEvent,
@@ -126,6 +127,7 @@ export function AgentActivity({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const isAdmin = useRole().includes('admin')
+  const { observability } = useFeatures()
 
   // Older answers have no live events: load what was recorded, once opened.
   const needsHistory = open && !liveEvents?.length && !!requestId && !history
@@ -356,7 +358,7 @@ export function AgentActivity({
             </ul>
           )}
 
-          {isAdmin && requestId && !live && (
+          {isAdmin && observability && requestId && !live && (
             <p className="flex flex-wrap gap-3 border-t pt-2 text-xs">
               <Link
                 href={`/observability/runs/${requestId}`}

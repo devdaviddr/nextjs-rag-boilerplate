@@ -61,10 +61,15 @@ which this project is built on. `pnpm rag:eval` scores how well the search is wo
 
 ---
 
+Making it your own project? `make init` renames it in one step, and
+[Starting your own project](docs/forking.md) covers the rest: what not to
+rename, what to delete and what to switch off.
+
 ## Getting started
 
 You need Node ≥ 20.9 (22 recommended), [pnpm](https://pnpm.io)
-(`corepack enable`), Docker, and an API key for an OpenAI-compatible endpoint.
+(`corepack enable`, or `npm install -g pnpm` where Node ships without
+corepack), Docker, and an API key for an OpenAI-compatible endpoint.
 A free [NVIDIA NIM](https://build.nvidia.com) key works; it is rate-limited,
 not token-billed.
 
@@ -77,7 +82,7 @@ pnpm install
 # 2. Configure the environment
 cp .env.example .env
 npx auth secret            # writes AUTH_SECRET into .env
-# then set NVIDIA_API_KEY in .env
+# then set LLM_API_KEY in .env
 
 # 3. Start Postgres + MinIO, apply the schema, seed a demo user
 pnpm docker:db
@@ -96,7 +101,7 @@ and ask a question the document answers. Every answer cites the page it came
 from. Now ask something the document does not cover. You get a refusal instead
 of a guess, which is what the app is designed to do.
 
-Without `NVIDIA_API_KEY` the app still boots. `/chat` and `/documents` report
+Without `LLM_API_KEY` the app still boots. `/chat` and `/documents` report
 themselves as unconfigured and the RAG test suites self-skip, so you can
 evaluate the rest of the template first.
 
@@ -115,11 +120,14 @@ table is in [Usage → Environment variables](docs/usage.md#environment-variable
 
 ### Required
 
-| Variable       | Description                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `DATABASE_URL` | PostgreSQL connection string (pgvector extension required)                                   |
-| `AUTH_SECRET`  | Auth.js signing secret; generate with `npx auth secret`                                      |
-| `S3_ENDPOINT`  | S3-compatible endpoint; `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` alongside it |
+| Variable       | Description                                                |
+| -------------- | ---------------------------------------------------------- |
+| `DATABASE_URL` | PostgreSQL connection string (pgvector extension required) |
+| `AUTH_SECRET`  | Auth.js signing secret; generate with `npx auth secret`    |
+
+File storage is S3-compatible (MinIO locally) and optional: without
+`S3_ENDPOINT`, uploads are kept on disk under `STORAGE_DIR`, so you can skip
+`pnpm docker:minio` for a single-instance setup.
 
 In production also set `AUTH_URL` (canonical app URL), `APP_URL` (OpenGraph,
 robots, sitemap) and `AUTH_TRUST_HOST=true` when TLS terminates at a trusted
@@ -127,25 +135,26 @@ proxy.
 
 ### Models and endpoint
 
-| Variable           | Default                               | Description                                                                                |
-| ------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `NVIDIA_API_KEY`   | —                                     | API key for the inference endpoint; unset disables chat + documents                        |
-| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline       |
-| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                    |
-| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | **Fixed at 2048 dimensions**; changing it requires a schema migration and a full re-ingest |
+| Variable           | Default                               | Description                                                                                                 |
+| ------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `LLM_API_KEY`      | —                                     | API key for the inference endpoint; unset disables chat + documents (old name `NVIDIA_API_KEY` still works) |
+| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline                        |
+| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                                     |
+| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes                |
 
-Running offline has two constraints: the embedding model must emit
-2048-dimension vectors, and the planner model must emit native tool calls
-reliably. See [RAG → Setup](docs/rag.md#setup).
+Running offline has two constraints: the embedding model must emit at most
+4000 numbers per passage, and the planner model must emit native tool calls
+reliably. Embeddings use the `.env` endpoint. See
+[RAG → Setup](docs/rag.md#setup).
 
 ### Retrieval and agentic tuning
 
 Chunking, `RAG_TOP_K`, the similarity floor, the hybrid candidate pool and the
 agentic loop budgets are all optional and defaulted. `RAG_MIN_SIMILARITY`
 (0.35) is the one worth tuning deliberately. The agentic loop
-(`RAG_AGENTIC_ENABLED`, off by default) is ~10× slower but far better on
-follow-ups and multi-hop questions. Full tables, defaults and the measured
-A/B are in [RAG → Tuning](docs/rag.md#tuning) and
+(`RAG_AGENTIC_ENABLED`, on by default) is ~10× slower but far better on
+follow-ups and multi-hop questions; set it to `false` for speed. Full tables,
+defaults and the measured A/B are in [RAG → Tuning](docs/rag.md#tuning) and
 [RAG → The agentic path](docs/rag.md#the-agentic-path).
 
 ### Optional features
@@ -172,6 +181,7 @@ The scripts you will use most:
 ```bash
 pnpm dev                   # dev server (Turbopack) at localhost:3000
 pnpm build && pnpm start   # production build — required to exercise the PWA
+                           # (its "output: standalone" warning is harmless here)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # verify the setup
 pnpm rag:eval              # score retrieval against the ground-truth corpus
 pnpm rag:eval --compare    # A/B the fixed and agentic retrieval paths
@@ -200,25 +210,27 @@ system you understand. If you have built retrieval before, jump straight to
 [Usage](docs/usage.md) for env vars and scripts, or
 [Self-hosting](docs/self-hosting.md) to get it deployed.
 
-| Doc                                             | What's inside                                                        |
-| ----------------------------------------------- | -------------------------------------------------------------------- |
-| 🎓 **[Tutorial](docs/tutorial.md)**             | Start here: build up a working RAG system step by step               |
-| 📄 **[Summary](docs/summary.md)**               | One-page project overview: stats, stack, what ships                  |
-| 🛠️ **[Usage & Development](docs/usage.md)**     | Scripts, env vars, testing, Docker, extending the app                |
-| 🧠 **[RAG](docs/rag.md)**                       | Ingestion, index design, hybrid search, the agentic loop, evaluation |
-| 🗄️ **[Database](docs/database.md)**             | ERD, schema, migrations, Drizzle workflow, seeding                   |
-| 🏛️ **[Architecture](docs/architecture.md)**     | Request flow, auth design, security model, project structure         |
-| 📋 **[Features](docs/features.md)**             | Complete feature list and what's included                            |
-| 🔑 **[OAuth](docs/oauth.md)**                   | GitHub + Google sign-in: setup, callback URLs, linking               |
-| ✉️ **[Email](docs/email.md)**                   | SMTP setup, password reset, email verification, soft gate            |
-| 📱 **[PWA & App Shell](docs/pwa.md)**           | Manifest, service worker strategy, icons, responsive shell           |
-| 🔔 **[Web Push](docs/push.md)**                 | VAPID setup, subscribe/send, service-worker handlers                 |
-| 📦 **[Self-hosting](docs/self-hosting.md)**     | `make setup` clone-to-live + continuous deployment (`make deploy`)   |
-| 🚀 **[Deployment](docs/deployment.md)**         | Cloudflare Tunnel: quick, guided, and Terraform paths                |
-| 💾 **[Backups](docs/backups.md)**               | Nightly Postgres + MinIO backups, restore runbook, offsite           |
-| 🔁 **[Feature → Production](docs/workflow.md)** | One playbook: branch → PR → release → deploy                         |
-| ⚙️ **[CI/CD](docs/ci-cd.md)**                   | GitHub Actions: quality gate, E2E, GHCR images, release fast-path    |
-| 📐 **[Specs](specs/README.md)**                 | Spec-driven development: one spec per feature/release                |
+| Doc                                                 | What's inside                                                           |
+| --------------------------------------------------- | ----------------------------------------------------------------------- |
+| 🎓 **[Tutorial](docs/tutorial.md)**                 | Start here: build up a working RAG system step by step                  |
+| 📄 **[Summary](docs/summary.md)**                   | One-page project overview: stats, stack, what ships                     |
+| 🧭 **[Starting your own project](docs/forking.md)** | Rename, the one string to keep, what to delete, what to switch off      |
+| 🧩 **[Extending the agent](docs/extending.md)**     | Add a tool the agent can call; change chunking, embeddings or the store |
+| 🛠️ **[Usage & Development](docs/usage.md)**         | Scripts, env vars, testing, Docker, extending the app                   |
+| 🧠 **[RAG](docs/rag.md)**                           | Ingestion, index design, hybrid search, the agentic loop, evaluation    |
+| 🗄️ **[Database](docs/database.md)**                 | ERD, schema, migrations, Drizzle workflow, seeding                      |
+| 🏛️ **[Architecture](docs/architecture.md)**         | Request flow, auth design, security model, project structure            |
+| 📋 **[Features](docs/features.md)**                 | Complete feature list and what's included                               |
+| 🔑 **[OAuth](docs/oauth.md)**                       | GitHub + Google sign-in: setup, callback URLs, linking                  |
+| ✉️ **[Email](docs/email.md)**                       | SMTP setup, password reset, email verification, soft gate               |
+| 📱 **[PWA & App Shell](docs/pwa.md)**               | Manifest, service worker strategy, icons, responsive shell              |
+| 🔔 **[Web Push](docs/push.md)**                     | VAPID setup, subscribe/send, service-worker handlers                    |
+| 📦 **[Self-hosting](docs/self-hosting.md)**         | `make setup` clone-to-live + continuous deployment (`make deploy`)      |
+| 🚀 **[Deployment](docs/deployment.md)**             | Cloudflare Tunnel: quick, guided, and Terraform paths                   |
+| 💾 **[Backups](docs/backups.md)**                   | Nightly Postgres + MinIO backups, restore runbook, offsite              |
+| 🔁 **[Feature → Production](docs/workflow.md)**     | One playbook: branch → PR → release → deploy                            |
+| ⚙️ **[CI/CD](docs/ci-cd.md)**                       | GitHub Actions: quality gate, E2E, GHCR images, release fast-path       |
+| 📐 **[Specs](specs/README.md)**                     | Spec-driven development: one spec per feature/release                   |
 
 ---
 

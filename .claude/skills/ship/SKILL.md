@@ -57,7 +57,11 @@ done
 ```
 
 Show the list with each branch's issue, and **ask the user which to include**.
-For each chosen branch, in dependency order:
+Branches may be stacked, each built on the one before (check with
+`git log --oneline origin/main..<branch>`: a stacked branch carries its
+predecessors' commits). Merge a stack oldest first; after each merge the next
+PR's diff shrinks to its own commits. For each chosen branch, in dependency
+order:
 
 1. `gh pr create --base main --head <branch>`: Conventional Commit title,
    `Closes #N`, template filled in. The PR checks enforce the issue link and
@@ -119,6 +123,22 @@ pnpm format:check
 All must pass. `release:check` is also run by CI on the tag, so a failure here
 would only fail there later.
 
+**Retrieval gate (#133), only when retrieval changed.** CI cannot run it (it
+has no model key, on purpose), so it runs here, and only if the release touches
+retrieval:
+
+```bash
+git diff --quiet vPREV..HEAD -- src/lib/rag eval/questions.json eval/corpus \
+  || pnpm rag:gate          # needs the model key in .env; about a minute
+```
+
+It scores the fixed pipeline against `eval/results/baseline.json` and fails on
+any refusal drop or cross-KB leak, or hit@1, hit@k or MRR down by more than
+0.05. A failure stops the release: tell the user which metric moved. If the
+drop is intended (a deliberate trade), re-record the baseline with
+`pnpm rag:eval --no-ingest` in the release PR and say so in its body. If the
+endpoint is down, say so and ask the user whether to ship without the gate.
+
 ## 4 — Release PR
 
 ```bash
@@ -144,7 +164,10 @@ git push origin vX.Y.Z
 ```
 
 The annotated tag's message becomes the GitHub Release title
-("vX.Y.Z — short title").
+("vX.Y.Z — short title"). If the release's CHANGELOG section has a
+`### Security` heading, start the title with **"Security:"**, so projects
+started from this template see at a glance that they should take it
+(`docs/forking.md` → _Taking fixes from upstream_ tells them to look).
 
 ## 6 — Confirm it shipped
 

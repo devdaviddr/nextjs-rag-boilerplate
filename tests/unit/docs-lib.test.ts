@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  REPO_URL,
   DOC_ORDER,
   docSummary,
   docTitle,
@@ -47,7 +48,8 @@ describe('resolveDocHref', () => {
     expect(resolveDocHref('../README.md', 'abc123')).toMatchObject({
       kind: 'repo',
       path: 'README.md',
-      href: 'https://github.com/devdaviddr/nextjs-rag-boilerplate/blob/abc123/README.md',
+      // From REPO_URL, not a literal, so a renamed project's CI passes (#151).
+      href: `${REPO_URL}/blob/abc123/README.md`,
     })
     expect(resolveDocHref('../specs/').href).toContain('/tree/main/specs')
     expect(resolveDocHref('../src/lib/env.ts#L10').href).toMatch(

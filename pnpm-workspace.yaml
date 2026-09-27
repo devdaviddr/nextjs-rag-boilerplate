@@ -17,3 +17,6 @@ allowBuilds:
 overrides:
   browserslist: '>=4.28.7'
   baseline-browser-mapping: '>=2.11.0'
+  # mermaid > chevrotain pins 4.17.23: template code injection and prototype
+  # pollution advisories (#129).
+  lodash-es: '>=4.17.24'

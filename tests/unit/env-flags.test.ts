@@ -39,3 +39,45 @@ describe('RAG_PARENT_ASSEMBLY (spec 0033, 1c)', () => {
     expect(env.RAG_PARENT_ASSEMBLY).toBe(false)
   })
 })
+
+describe('PWA_ENABLED and OBSERVABILITY_UI_ENABLED (#140)', () => {
+  it.each(['PWA_ENABLED', 'OBSERVABILITY_UI_ENABLED'] as const)(
+    '%s is on unless it is exactly false',
+    async (key) => {
+      expect((await loadEnv({ [key]: undefined }))[key]).toBe(true)
+      expect((await loadEnv({ [key]: '' }))[key]).toBe(true)
+      expect((await loadEnv({ [key]: 'false' }))[key]).toBe(false)
+    },
+  )
+})
+
+describe('object storage (#137)', () => {
+  const noS3 = {
+    S3_ENDPOINT: undefined,
+    S3_ACCESS_KEY_ID: undefined,
+    S3_SECRET_ACCESS_KEY: undefined,
+    S3_BUCKET: undefined,
+  }
+
+  it('boots without S3, keeping files on disk', async () => {
+    const env = await loadEnv(noS3)
+    expect(env.S3_ENDPOINT).toBeUndefined()
+    expect(env.STORAGE_DIR).toBe('./data/storage')
+  })
+
+  it('treats empty S3 values as unset', async () => {
+    const env = await loadEnv({
+      S3_ENDPOINT: '',
+      S3_ACCESS_KEY_ID: '',
+      S3_SECRET_ACCESS_KEY: '',
+      S3_BUCKET: '',
+    })
+    expect(env.S3_ENDPOINT).toBeUndefined()
+  })
+
+  it('refuses an S3 endpoint without its credentials and bucket', async () => {
+    await expect(
+      loadEnv({ ...noS3, S3_ENDPOINT: 'http://localhost:9000' }),
+    ).rejects.toThrow(/S3_BUCKET is required when S3_ENDPOINT is set/)
+  })
+})

@@ -1,11 +1,15 @@
 import { Activity, BookOpen, FileText, type LucideIcon } from 'lucide-react'
 
+import type { Features } from './features'
+
 export interface NavItem {
   title: string
   href: string
   icon: LucideIcon
   /** Shown to admins only; the page checks the role itself too. */
   adminOnly?: boolean
+  /** Hidden when this optional area is switched off (#140). */
+  feature?: keyof Features
 }
 
 /**
@@ -23,5 +27,6 @@ export const navItems: NavItem[] = [
     href: '/observability',
     icon: Activity,
     adminOnly: true,
+    feature: 'observability',
   },
 ]

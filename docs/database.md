@@ -87,7 +87,8 @@ RAG uses `knowledge_bases`, `documents`, `chunks`, `conversations`, `messages`
 and `conversation_knowledge_bases`. Retrieval queries drive the shape of these
 tables, so they are worth understanding before you read the diagram.
 
-Settings uses `ai_settings`, `ai_connections` and `ai_settings_audit`. `ai_settings` holds AI
+Settings uses `ai_settings`, `ai_connections`, `ai_settings_audit` and
+`mcp_servers`. `ai_settings` holds AI
 settings saved from Settings, one row per environment variable name, with the
 string you would put in `.env`: a row overrides the variable, and no row means
 the environment applies. It also records which connection each job uses
@@ -95,7 +96,10 @@ the environment applies. It also records which connection each job uses
 Settings → AI provider, with the API key encrypted (AES-256-GCM) and its last
 four characters for display. `ai_settings_audit` records every change made
 from Settings: who, when, the setting or connection, and old → new. An API key
-appears there only as its last four characters.
+appears there only as its last four characters. `mcp_servers` holds the MCP
+servers added in Settings → Tools (spec 0048): the URL, the bearer token
+encrypted like an API key, whether it is on a private network, the tools it
+listed at its last test, and which of them are switched on.
 
 Observability uses `app_logs`, `rag_runs` and `rag_spans` (spec 0042).
 `app_logs` holds every log line, with its level, category, request id and
@@ -248,6 +252,8 @@ erDiagram
         int page_count
         text status "pending|extracting|embedding|ready|failed"
         text error "user-readable, only when failed"
+        text source_url "web documents only (spec 0047)"
+        timestamptz fetched_at "when source_url was last fetched"
     }
     chunks {
         text id PK
@@ -308,6 +314,7 @@ on the same row as the text a citation displays.
 | `conversation_knowledge_bases` | Which knowledge bases a thread may search, fixed at creation                         |
 | `ai_settings`                  | AI settings saved from Settings, overriding the matching `RAG_*` env var             |
 | `ai_connections`               | Inference endpoints added in Settings; API key encrypted at rest                     |
+| `mcp_servers`                  | MCP tool servers added in Settings, their tools and which are on; token encrypted    |
 | `app_logs`                     | Log lines for Observability → Logs, pruned after `LOG_RETENTION_DAYS`                |
 | `rag_runs`                     | One row per question or ingestion: outcome, timings, tokens, best match              |
 | `rag_spans`                    | The timed steps of a run (search, plan, draft…), with model, tokens and details      |

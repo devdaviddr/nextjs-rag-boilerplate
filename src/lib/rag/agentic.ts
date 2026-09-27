@@ -90,6 +90,17 @@ export interface LoopFigureReading {
   pageNumber: number
 }
 
+/**
+ * What a registered tool returned (spec 0044), kept for the answer writer and
+ * the verifier. Like a figure reading it is not a retrieved chunk: it has no
+ * similarity and is never cited as a document's words.
+ */
+export interface LoopToolResult {
+  name: string
+  arguments: string
+  text: string
+}
+
 export interface LoopOutcome {
   /** Everything retrieved, deduplicated, best-scoring first. */
   chunks: RetrievedChunk[]
@@ -104,6 +115,8 @@ export interface LoopOutcome {
    */
   textSearches: number
   figureReadings: LoopFigureReading[]
+  /** Results of registered tools the planner called (spec 0044). */
+  toolResults: LoopToolResult[]
   tokensUsed: number
   elapsedMs: number
 }
@@ -129,6 +142,12 @@ export interface LoopDeps {
   plan: (
     history: readonly LoopStep[],
     signal: AbortSignal,
+    /**
+     * Steps spent so far, by the loop's own count (spec 0044 FR8). Not
+     * `history.length`: a search the time budget cut short spends a step
+     * and records none.
+     */
+    spent: number,
   ) => Promise<PlanResult>
   /**
    * Run one search. Owner and permitted knowledge bases are bound by the
@@ -170,6 +189,17 @@ export interface LoopDeps {
    * from a deliberate decision in the logs. It must be reportable.
    */
   onPlanFailure?: (reason: string, error?: unknown) => void
+  /**
+   * Run a registered tool (spec 0044). Optional: absent, a `tool` decision is
+   * a non-decision, as with figures. Scope is bound by the CALLER; the model
+   * supplies a name and arguments. Returns null when the tool failed.
+   */
+  runTool?: (
+    name: string,
+    argumentsJson: string,
+    /** Carries whatever is left of the wall-clock budget. */
+    signal: AbortSignal,
+  ) => Promise<{ text: string; tokens: number } | null>
   /**
    * Query to search with if the planner tries to answer before it has searched
    * even once. Normally the user's question.
@@ -330,6 +360,7 @@ export async function runAgenticLoop(
   let chunks: RetrievedChunk[] = []
   const steps: LoopStep[] = []
   const figureReadings: LoopFigureReading[] = []
+  const toolResults: LoopToolResult[] = []
   let tokensUsed = 0
   let searches = 0
   let textSearches = 0
@@ -374,6 +405,7 @@ export async function runAgenticLoop(
     searches,
     textSearches,
     figureReadings,
+    toolResults,
     tokensUsed,
     elapsedMs: elapsed(),
   })
@@ -477,7 +509,7 @@ export async function runAgenticLoop(
     try {
       const call = callSignal(budget.planCallMs)
       try {
-        result = await deps.plan(steps, call.signal)
+        result = await deps.plan(steps, call.signal, searches)
       } finally {
         call.clear()
       }
@@ -572,6 +604,44 @@ export async function runAgenticLoop(
         found: reading
           ? `    [${reading.documentTitle} p${reading.pageNumber}, figure] ${reading.text.replace(/\s+/g, ' ').slice(0, 400)}`
           : '    (the figure could not be read)',
+        elapsedMs: elapsed(),
+      })
+      continue
+    }
+
+    // A registered tool (spec 0044): one step against the budget, like a
+    // figure read, and never a rise in the floor, which counts text searches.
+    if (decision.action === 'tool') {
+      const tool = decision.tool
+      if (!tool || !deps.runTool) {
+        deps.onPlanFailure?.('tool decision was not usable')
+        return unavailable()
+      }
+      searches += 1
+      const toolCall = callSignal()
+      let output
+      try {
+        output = await deps.runTool(tool.name, tool.arguments, toolCall.signal)
+      } finally {
+        toolCall.clear()
+      }
+      if (output) {
+        tokensUsed += output.tokens
+        toolResults.push({
+          name: tool.name,
+          arguments: tool.arguments,
+          text: output.text,
+        })
+      }
+      steps.push({
+        iteration: searches,
+        query: `${tool.name}(${tool.arguments.replace(/\s+/g, ' ').slice(0, 200)})`,
+        resultCount: output ? 1 : 0,
+        bestSimilarity: null,
+        // Shown to the planner, fenced as data, so it can decide what next.
+        found: output
+          ? `    [tool ${tool.name}] ${output.text.replace(/\s+/g, ' ').slice(0, 600)}`
+          : `    (the tool ${tool.name} failed)`,
         elapsedMs: elapsed(),
       })
       continue
