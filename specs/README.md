@@ -109,6 +109,7 @@ other — one isn't a substitute for the other.
 | [0044](0044-tool-registry.md)                         | Give the agent tools a developer can add                                             | Proposed | —       |
 | [0045](0045-provider-adapters.md)                     | Talk to model providers through adapters, Anthropic included                         | Proposed | —       |
 | [0046](0046-document-loaders.md)                      | Index Markdown, HTML and Word documents, through loaders                             | Proposed | —       |
+| [0047](0047-web-page-sources.md)                      | Add a web page to a knowledge base, fetched safely                                   | Proposed | —       |
 
 <!-- specs:index:end -->
 
