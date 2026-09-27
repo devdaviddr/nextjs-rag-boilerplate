@@ -110,6 +110,7 @@ other — one isn't a substitute for the other.
 | [0045](0045-provider-adapters.md)                     | Talk to model providers through adapters, Anthropic included                         | Proposed | —       |
 | [0046](0046-document-loaders.md)                      | Index Markdown, HTML and Word documents, through loaders                             | Proposed | —       |
 | [0047](0047-web-page-sources.md)                      | Add a web page to a knowledge base, fetched safely                                   | Proposed | —       |
+| [0048](0048-mcp-tools.md)                             | Give the agent tools from MCP servers                                                | Proposed | —       |
 
 <!-- specs:index:end -->
 
