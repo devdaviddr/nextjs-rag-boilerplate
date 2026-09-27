@@ -1,4 +1,5 @@
 import './load-env'
+import { DEFAULT_TOLERANCE, type GateMetrics, gateFailures } from './gate'
 
 import {
   existsSync,
@@ -81,6 +82,10 @@ import { deleteObjectsUnderPrefix, putObject } from '@/lib/storage/client'
  *   pnpm rag:eval                 # run the fixed pipeline, print a report
  *   pnpm rag:eval --label hybrid  # save results under that label for comparison
  *   pnpm rag:eval --no-ingest     # reuse what is already indexed
+ *   pnpm rag:eval --gate          # the release gate (#133): fixed pipeline vs
+ *                                 # eval/results/baseline.json; fails on any
+ *                                 # refusal drop or leak, or hit@1/hit@k/MRR
+ *                                 # down more than --tolerance (default 0.05)
  *   pnpm rag:eval --label X --baseline Y   # gate X's refusal accuracy against
  *                                           # saved eval/results/Y.json (default Y=baseline)
  *   pnpm rag:eval --answers       # ALSO generate answers and assert against
@@ -1421,9 +1426,18 @@ async function main(): Promise<void> {
     )
     process.exit(1)
   }
-  const label = arg('label') ?? 'baseline'
+  // The release gate (#133): the fixed pipeline against the saved baseline,
+  // failing on a quality drop as well as on refusal or leakage.
+  const gate = hasFlag('gate')
+  if (gate && (compare || parentsAb)) {
+    console.error(
+      '--gate runs the fixed pipeline alone; drop --compare/--parents-ab.',
+    )
+    process.exit(1)
+  }
+  const label = arg('label') ?? (gate ? 'gate' : 'baseline')
   const baselineLabel = arg('baseline') ?? 'baseline'
-  const explicitLabel = arg('label') !== undefined
+  const explicitLabel = arg('label') !== undefined || gate
   const { questions } = JSON.parse(
     readFileSync('eval/questions.json', 'utf8'),
   ) as { questions: Question[] }
@@ -1827,7 +1841,37 @@ async function main(): Promise<void> {
   // from before spec 0029) — only meaningful outside --compare, for gating
   // one fixed-pipeline config change against another (e.g. hybrid vs dense).
   let savedLabelGateFailed = false
-  if (!compare && explicitLabel && label !== baselineLabel) {
+  if (gate) {
+    const baselinePath = join(RESULTS_DIR, `${baselineLabel}.json`)
+    if (!existsSync(baselinePath)) {
+      console.error(`\n--gate: no ${baselinePath} to compare against.`)
+      savedLabelGateFailed = true
+    } else {
+      const saved = JSON.parse(readFileSync(baselinePath, 'utf8')) as {
+        metrics: GateMetrics
+      }
+      const tolerance = Number(arg('tolerance') ?? DEFAULT_TOLERANCE)
+      const failures = gateFailures(
+        { ...baselineCore, crossKbLeakage },
+        saved.metrics,
+        tolerance,
+      )
+      if (failures.length > 0) {
+        savedLabelGateFailed = true
+        console.error(
+          `\nRELEASE GATE FAILED against "${baselineLabel}" (tolerance ${tolerance}):`,
+        )
+        for (const f of failures) {
+          console.error(`  ${f.metric}: ${f.current} (baseline ${f.baseline})`)
+        }
+      } else {
+        console.log(
+          `\nRelease gate: hit@1, hit@k, MRR within ${tolerance} of ` +
+            `"${baselineLabel}", refusal and leakage held — OK`,
+        )
+      }
+    }
+  } else if (!compare && explicitLabel && label !== baselineLabel) {
     const baselinePath = join(RESULTS_DIR, `${baselineLabel}.json`)
     if (existsSync(baselinePath)) {
       const saved = JSON.parse(readFileSync(baselinePath, 'utf8')) as {

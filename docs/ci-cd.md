@@ -171,7 +171,16 @@ repository secret of that name has no effect. Run them locally, with the key in
 pnpm test:e2e tests/e2e/rag.spec.ts tests/e2e/knowledge-bases.spec.ts tests/e2e/chat.spec.ts
 ```
 
-Each E2E test uses a unique client IP (via `CF-Connecting-IP`) so rate-limit
+The retrieval gate works the same way, for the same reason. `pnpm rag:gate`
+scores the fixed pipeline against the committed `eval/results/baseline.json`
+and fails on any drop in refusal accuracy, any cross-knowledge-base leak, or
+hit@1, hit@k or MRR down by more than 0.05 (`--tolerance` to change it). It
+takes about a minute with the key in `.env`. The `/ship` routine runs it before
+the release PR whenever the release touches `src/lib/rag` or the eval corpus
+(#133). To accept a deliberate change in retrieval quality, re-record the
+baseline with `pnpm rag:eval --no-ingest` in the same PR and say why.
+
+Each E2E test uses a unique client IP (via `X-Forwarded-For`) so rate-limit
 buckets do not leak between tests. That keeps a parallel suite reproducible, and
 it means the rate-limit tests assert something real. The implementation is in
 `tests/e2e/fixtures.ts`.
