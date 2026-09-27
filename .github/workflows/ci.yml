@@ -226,6 +226,34 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The README's "Getting started", run as written (#152): scripts/quickstart.mjs
+  # reads the commands out of README.md and runs them (docker compose for
+  # Postgres + MinIO included), with a stub model server in place of a real
+  # key, then tests/e2e/quickstart.spec.ts signs in, uploads a PDF and checks
+  # for a cited answer and a refusal. A README step that stops working fails
+  # the release PR here instead of a newcomer's first hour.
+  quickstart:
+    name: README quickstart
+    timeout-minutes: 25
+    needs: [plan]
+    if: needs.plan.outputs.full == 'true' && needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Follow the README
+        run: node scripts/quickstart.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: quickstart-report
+          path: playwright-report/
+          retention-days: 7
+
   # Build each arch on its OWN native runner (no QEMU emulation → fast), push by
   # digest, then `docker-merge` assembles the multi-arch manifest. Only a release
   # merge pushes; the release PR and a manual run build both arches cache-only

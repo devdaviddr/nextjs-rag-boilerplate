@@ -26,6 +26,8 @@ release tags.
 │             critical)                             [all PRs] │
 │   e2e     : Postgres service + MinIO + Mailpit → migrate/seed │
 │             → build → Playwright           [release PR only] │
+│   quickstart : README steps as written + stub model          │
+│             → cited answer + refusal     [release PR only]   │
 │   docker  : per-arch native (amd64 + arm64); cache-only on   │
 │             the release PR, push by digest on release merge  │
 │             · Trivy scan of the app image (critical, fixed)  │
@@ -135,6 +137,23 @@ pnpm audit --prod --audit-level=high   # what ships in the image: blocks on high
 pnpm audit --audit-level=critical      # dev tooling too: blocks on critical only
 pnpm release:check                  # release/* PRs only: the check the tag will run
 ```
+
+### `quickstart` job
+
+Runs the README's _Getting started_ as a newcomer would, on the release PR
+(#152). `scripts/quickstart.mjs` reads the commands out of `README.md` and runs
+them in order, `pnpm docker:db` and `pnpm docker:minio` included, so the check
+and the README cannot drift apart. Two steps are made non-interactive:
+`npx auth secret` (it prompts) becomes a random `AUTH_SECRET`, and `pnpm dev`
+becomes `pnpm build` so Playwright can start the server. The README's "set
+`LLM_API_KEY`" step points `.env` at `tests/stub-llm/server.mjs`, an
+OpenAI-compatible stub with deterministic embeddings and scripted answers, so
+no key is needed. `tests/e2e/quickstart.spec.ts` then signs in as the demo
+user, uploads a PDF, and checks for a cited answer and a refusal.
+
+If you change the README's quickstart, `node scripts/quickstart.mjs --print`
+shows what the job will run. It refuses to run over an existing `.env` outside
+CI, because the README's `cp .env.example .env` would overwrite yours.
 
 ### `e2e` job
 
