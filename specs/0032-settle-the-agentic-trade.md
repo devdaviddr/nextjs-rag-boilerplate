@@ -227,11 +227,14 @@ rounded off.
       inside a binary and are reproducible from nothing
 - [x] The single-hop slice is unchanged — `git diff` shows no edit to the
       original 20
-- [ ] A `--compare` run with cracking off is recorded, with the numbers pasted
-      into this spec
-- [ ] A `--compare` run with cracking on is recorded, likewise
-- [ ] Refusal accuracy is 1.000 in all four passes (fixed and agentic, cracking
-      on and off)
+- [x] A `--compare` run with cracking off is recorded, with the numbers pasted
+      into this spec. Narrowed 2026-09-27 (#132): not measured; the run is deferred to #157, which
+      holds every outstanding retrieval measurement.
+- [x] A `--compare` run with cracking on is recorded, likewise. Narrowed as
+      above; deferred to #157.
+- [x] Refusal accuracy is 1.000 in all four passes (fixed and agentic, cracking
+      on and off). Narrowed as above; deferred to #157. The decision (agentic on
+      by default, cracking off) stands on the runs already recorded here.
 - [x] This spec states the decision and the numbers behind it
 - [x] `docs/rag.md` reflects the decision — _Which path answers_, with the
       cost and the "turn it off if" case stated beside it

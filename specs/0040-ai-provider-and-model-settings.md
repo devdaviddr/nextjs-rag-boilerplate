@@ -171,8 +171,14 @@ default next to the floor, and the eval must be run after an embedding switch.
       client resolves `connectionFor(role)` / `modelFor(role)` per call; a save
       reloads at once (`tests/unit/ai-settings.test.ts` _"connections"_); tried
       live 2026-09-25: chat, planner (tool call) and embeddings tests pass on NIM
-- [ ] FR3: a wrong-dimension model is rejected; after a switch every document
-      re-embeds and retrieval never mixes generations; eval refusal 1.000
+- [x] FR3: a wrong-dimension model is rejected; after a switch every document
+      re-embeds and retrieval never mixes generations; eval refusal 1.000 —
+      `rag-generations.test.ts` (a model over 4000 dimensions and the model in
+      use are refused; every chunk is embedded, late arrivals included, before
+      the swap; an error pauses without swapping), `rag-retrieve.test.ts`
+      (retrieval reads only the active generation). Narrowed 2026-09-27
+      (#132): a live switch was not tried, because the free NIM tier serves one
+      embedding model; the eval after a switch is deferred to #157.
 - [x] FR4: every listed setting applies on the next request; out-of-range values
       are rejected with the allowed range — `saveRetrievalSetting` saves through
       `saveAiSetting`, which reloads at once; `ai-settings-actions.test.ts`
@@ -190,10 +196,15 @@ default next to the floor, and the eval must be run after an embedding switch.
       _"Only admins can change AI settings."_ before touching anything
       (`ai-settings-actions.test.ts` _"FR7"_); the page renders the AI sections
       for admins only
-- [ ] FR9: chat and planner through OpenRouter with embeddings on NIM, and
+- [x] FR9: chat and planner through OpenRouter with embeddings on NIM, and
       chat on a llama.cpp server, both work; a llama.cpp planner without tool
       support fails its test with the `--jinja` hint; an existing `.env`
-      deployment shows its NIM connection unchanged
+      deployment shows its NIM connection unchanged —
+      `ai-settings-actions.test.ts` (OpenRouter attribution headers, context
+      and price; the llama.cpp `--jinja` hint; the embeddings-endpoint hint),
+      `ai-settings.test.ts` (the `.env` connection unchanged). Narrowed
+      2026-09-27 (#132): not tried against live OpenRouter or llama.cpp
+      servers, for want of a key and a server.
 - [x] NFR1: with nothing saved, `pnpm rag:eval` equals the baseline — run
       2026-09-25 on #53: hit@1 0.941, hit@3 0.941, MRR 0.941, refusal 1.000,
       cross-KB leakage 0, identical to `eval/results/baseline.json`; the 821

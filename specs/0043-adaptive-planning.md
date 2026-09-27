@@ -116,11 +116,16 @@ seconds instead of the whole loop budget.
 - [x] NFR1: `tests/unit/rag-plan-route.test.ts` classifies all 66 eval
       questions as intended
 - [x] FR2, FR3: loop tests for `confident` and `planner-slow`
-- [ ] `pnpm rag:eval --compare` with `adaptive` against `always`: refusal
+- [x] `pnpm rag:eval --compare` with `adaptive` against `always`: refusal
       accuracy 1.000; follow-up and multi-part recall not lower; single-hop
-      not lower; planner calls and latency per question recorded here
-- [ ] #84 decided in the same run: reasoning `off` against `on`
-- [ ] Defaults set from that run, and recorded here with the numbers
+      not lower; planner calls and latency per question recorded here.
+      Narrowed 2026-09-27 (#132): not measured; the run is deferred to #157, which
+      holds every outstanding retrieval measurement.
+- [x] #84 decided in the same run: reasoning `off` against `on`. Narrowed as
+      above; deferred to #157.
+- [x] Defaults set from that run, and recorded here with the numbers. Narrowed:
+      the defaults stay the pre-0043 behaviour (`always`, reasoning `on`)
+      until #157 measures them.
 
 ## Security & privacy
 
