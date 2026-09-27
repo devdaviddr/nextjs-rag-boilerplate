@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-09-27
+
 ### Fixed
 
 - **Citation checking no longer splits numbers.** The verifier cut "2.8 degrees"
