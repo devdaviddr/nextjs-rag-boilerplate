@@ -316,6 +316,14 @@ interface QuestionResult {
   adjacentChildren?: number
   assembledFrom?: number
   gating?: boolean
+  /**
+   * #101: the best candidate BEFORE the similarity gate — its cosine
+   * similarity and, with reranking on, the reranker's score. Recorded for
+   * refused questions too, which is the point: whether a reranker score
+   * separates answerable from unanswerable questions better than similarity.
+   */
+  candidateTopSimilarity?: number
+  candidateTopRerankScore?: number
 }
 
 /** One chunk that came back from a knowledge base it should never have. */
@@ -623,6 +631,8 @@ function buildResult(
     latencyMs?: number
     tokensUsed?: number
     termination?: string
+    candidateTopSimilarity?: number
+    candidateTopRerankScore?: number
   } = {},
 ): QuestionResult {
   const { rank, factRanks, passed } = scoreQuestion(q, retrieved, titleById)
@@ -743,18 +753,54 @@ async function baselineRetrieve(
   chunks: RetrievedChunk[]
   latencyMs: number
   mode: 'document' | 'search'
+  candidate?: { similarity: number; rerankScore?: number }
 }> {
   const startedAt = Date.now()
   const scope = resolveScope(q.question, docsInScope)
+  let candidate: { similarity: number; rerankScore?: number } | undefined
   const chunks =
     scope.mode === 'document'
       ? await retrieveDocumentChunks(ownerId, scope.documentId, kbIds)
-      : await retrieveForOwner(ownerId, q.question, kbIds, options)
+      : await retrieveForOwner(ownerId, q.question, kbIds, {
+          ...options,
+          onRanked: (ranked) => {
+            const top = ranked[0]
+            if (!top) return
+            candidate = {
+              similarity: Math.max(...ranked.map((r) => r.similarity)),
+              rerankScore: top.rerankScore,
+            }
+          },
+        })
   return {
     chunks,
     latencyMs: Date.now() - startedAt,
     mode: scope.mode === 'document' ? 'document' : 'search',
+    candidate,
   }
+}
+
+/**
+ * #101: would a gate on X refuse every unanswerable question while admitting
+ * more answerable ones than the cosine floor does? For each threshold that
+ * refuses all the unanswerable questions, how many answerable ones pass.
+ */
+function gateSeparation(
+  results: readonly QuestionResult[],
+  score: (r: QuestionResult) => number | undefined,
+): { threshold: number; admitted: number; answerable: number } | null {
+  const scored = results.filter(
+    (r) =>
+      (r.type === 'single-hop' || r.type === undefined) &&
+      score(r) !== undefined,
+  )
+  const answerable = scored.filter((r) => r.answerable)
+  const refusals = scored.filter((r) => !r.answerable)
+  if (answerable.length === 0 || refusals.length === 0) return null
+  // The lowest threshold that still refuses every unanswerable question.
+  const threshold = Math.max(...refusals.map((r) => score(r)!)) + Number.EPSILON
+  const admitted = answerable.filter((r) => score(r)! >= threshold).length
+  return { threshold, admitted, answerable: answerable.length }
 }
 
 /**
@@ -1465,13 +1511,52 @@ async function main(): Promise<void> {
     retrievedById.set(q.id, chunks)
     // Only `latencyMs`. `searches`, `tokensUsed` and `termination` are left
     // off entirely rather than passed as 0 — see QuestionResult's note.
-    const result = buildResult(q, chunks, titleById, { latencyMs })
+    const result = buildResult(q, chunks, titleById, {
+      latencyMs,
+      ...(outcome.candidate
+        ? {
+            candidateTopSimilarity: Number(
+              outcome.candidate.similarity.toFixed(3),
+            ),
+            ...(outcome.candidate.rerankScore !== undefined
+              ? {
+                  candidateTopRerankScore: Number(
+                    outcome.candidate.rerankScore.toFixed(4),
+                  ),
+                }
+              : {}),
+          }
+        : {}),
+    })
     baselineResults.push(result)
     logResult(result)
   }
   if (parentsAb) {
     console.log('\nFlat (children only, the same retrieval) — per question:')
     for (const result of flatResults) logResult(result)
+  }
+
+  // #101: could the reranker's score be the relevance gate instead?
+  const byRerank = gateSeparation(
+    baselineResults,
+    (r) => r.candidateTopRerankScore,
+  )
+  if (byRerank) {
+    const bySimilarity = gateSeparation(
+      baselineResults,
+      (r) => r.candidateTopSimilarity,
+    )
+    console.log(
+      '\nGate separation (#101), single-hop questions, every refusal kept:',
+    )
+    console.log(
+      `  reranker score >= ${byRerank.threshold.toFixed(4)} admits ${byRerank.admitted}/${byRerank.answerable} answerable`,
+    )
+    if (bySimilarity) {
+      console.log(
+        `  similarity     >= ${bySimilarity.threshold.toFixed(3)} admits ${bySimilarity.admitted}/${bySimilarity.answerable} answerable`,
+      )
+    }
   }
 
   // --- Agentic pass, ONLY under --compare: real NVIDIA calls, several per

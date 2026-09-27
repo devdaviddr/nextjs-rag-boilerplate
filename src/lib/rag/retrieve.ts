@@ -102,6 +102,12 @@ export interface RetrieveOptions {
    * not interruptible and is fast next to it.
    */
   signal?: AbortSignal
+  /**
+   * Evaluation probe (#101): called with the ranked candidate pool BEFORE the
+   * similarity gate, so the harness can see the reranker's score for a
+   * question whose candidates the gate then refuses. Never set by the app.
+   */
+  onRanked?: (ranked: readonly RetrievedChunk[]) => void
 }
 
 /**
@@ -436,6 +442,7 @@ export async function retrieveForOwner(
       })
     : await rerankChunks(question, fused)
 
+  options.onRanked?.(ranked)
   const admitted = ranked.filter(
     // The gate stays on cosine similarity alone.
     //
