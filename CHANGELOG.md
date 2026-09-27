@@ -10,6 +10,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- S3 is optional. Without `S3_ENDPOINT`, uploads are kept on disk under
+  `STORAGE_DIR` (default `./data/storage`), so document chat runs with no
+  storage service. The Docker image has a writable `/app/data` to mount a
+  volume on (#137).
 - `PWA_ENABLED=false` switches the PWA off: no service worker (one a browser
   already has is unregistered) and no install. `OBSERVABILITY_UI_ENABLED=false`
   hides the admin Observability pages; runs and logs are still recorded (#140).

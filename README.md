@@ -115,11 +115,14 @@ table is in [Usage → Environment variables](docs/usage.md#environment-variable
 
 ### Required
 
-| Variable       | Description                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `DATABASE_URL` | PostgreSQL connection string (pgvector extension required)                                   |
-| `AUTH_SECRET`  | Auth.js signing secret; generate with `npx auth secret`                                      |
-| `S3_ENDPOINT`  | S3-compatible endpoint; `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` alongside it |
+| Variable       | Description                                                |
+| -------------- | ---------------------------------------------------------- |
+| `DATABASE_URL` | PostgreSQL connection string (pgvector extension required) |
+| `AUTH_SECRET`  | Auth.js signing secret; generate with `npx auth secret`    |
+
+File storage is S3-compatible (MinIO locally) and optional: without
+`S3_ENDPOINT`, uploads are kept on disk under `STORAGE_DIR`, so you can skip
+`pnpm docker:minio` for a single-instance setup.
 
 In production also set `AUTH_URL` (canonical app URL), `APP_URL` (OpenGraph,
 robots, sitemap) and `AUTH_TRUST_HOST=true` when TLS terminates at a trusted

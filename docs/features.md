@@ -327,6 +327,8 @@ it. Nothing is uploaded straight from a browser to a bucket.
 
 - Storage is self-hosted and S3-compatible, via MinIO. It needs no cloud
   account, and it works unmodified against R2/S3 if you ever want to swap.
+  Without `S3_ENDPOINT`, files are kept on local disk under `STORAGE_DIR`
+  instead, which suits a single instance with no storage service to run.
 - Uploads and downloads are proxied through the app (`src/lib/storage/`)
   instead of using presigned direct URLs, so MinIO itself is never publicly
   exposed and needs no second Cloudflare Tunnel hostname.

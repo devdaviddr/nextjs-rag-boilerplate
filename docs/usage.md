@@ -49,7 +49,9 @@ pnpm dev                   # http://localhost:3000
 `pnpm docker:db` starts a `pgvector/pgvector:pg17` container, which is Postgres
 with the vector extension already compiled in, as the knowledge-base tables
 need. `pnpm docker:minio` starts MinIO, the S3-compatible object store that
-holds uploaded files, plus a one-shot container that creates the bucket.
+holds uploaded files, plus a one-shot container that creates the bucket. It is
+optional: blank the four `S3_*` values in `.env` and skip it, and uploads are
+kept on disk under `./data/storage` instead.
 `pnpm db:migrate` applies the committed migrations under `drizzle/`, and
 `pnpm db:seed` inserts the demo user and the default roles.
 
@@ -87,10 +89,11 @@ variables control stay inert until you set them.
 | Variable                           | Required | Notes                                                                                                                                                                                                                   |
 | ---------------------------------- | :------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                     |    ✅    | Postgres connection string                                                                                                                                                                                              |
-| `S3_ENDPOINT`                      |    ✅    | S3-compatible endpoint (MinIO by default)                                                                                                                                                                               |
-| `S3_ACCESS_KEY_ID`                 |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                                                                                                             |
-| `S3_SECRET_ACCESS_KEY`             |    ✅    | Matches `.env.example` / `docker-compose.yml` for local dev                                                                                                                                                             |
-| `S3_BUCKET`                        |    ✅    | Bucket name — auto-created by `minio-init`                                                                                                                                                                              |
+| `S3_ENDPOINT`                      |    –     | S3-compatible endpoint (MinIO by default). Unset: files are kept on disk under `STORAGE_DIR`, one instance only                                                                                                         |
+| `S3_ACCESS_KEY_ID`                 |    –     | Required with `S3_ENDPOINT`. Matches `.env.example` / `docker-compose.yml` for local dev                                                                                                                                |
+| `S3_SECRET_ACCESS_KEY`             |    –     | Required with `S3_ENDPOINT`. Matches `.env.example` / `docker-compose.yml` for local dev                                                                                                                                |
+| `S3_BUCKET`                        |    –     | Required with `S3_ENDPOINT`. Bucket name — auto-created by `minio-init`                                                                                                                                                 |
+| `STORAGE_DIR`                      |    –     | Where files go without S3. Default `./data/storage`; in Docker mount a volume on `/app/data`                                                                                                                            |
 | `S3_REGION`                        |    –     | Defaults to `us-east-1` (MinIO ignores region)                                                                                                                                                                          |
 | `UPLOAD_MAX_SIZE_MB`               |    –     | Per-file size cap. Default `10`                                                                                                                                                                                         |
 | `MAX_STORAGE_PER_USER_MB`          |    –     | Per-user quota. Default `500`                                                                                                                                                                                           |
