@@ -338,7 +338,11 @@ test('a brand-new user with no knowledge bases cannot send a question', async ({
 }) => {
   await register(page, 'zero-kb')
 
-  await expect(page.getByText('Ready when you are.')).toBeVisible()
+  // The heading, not any text: in production Next's route announcer repeats
+  // the page's heading, so a text match finds two elements.
+  await expect(
+    page.getByRole('heading', { name: 'Ready when you are.' }),
+  ).toBeVisible()
   await expect(
     page.getByText(
       'Create a knowledge base to start asking questions about your documents.',

@@ -235,6 +235,7 @@ test('re-ingesting a document does not duplicate its chunks', async ({
 // fails to parse, which is exactly what makes this worth asserting.
 test('a document can be inspected page by page, and a partial one says so', async ({
   page,
+  browser,
 }) => {
   test.slow()
   const dbUrl = process.env.DATABASE_URL
@@ -303,11 +304,14 @@ test('a document can be inspected page by page, and a partial one says so', asyn
   }
 
   // NFR1: someone else's document is a 404, indistinguishable from one that
-  // does not exist. Cookies first — `/register` redirects a signed-in user
-  // away, so the second account cannot be created while the first is active.
-  await page.context().clearCookies()
-  await register(page, 'inspect-other')
-  const otherKbId = await createKnowledgeBase(page, 'Not mine')
-  const response = await page.goto(`/documents/${otherKbId}/${documentId}`)
+  // does not exist. A separate browser context for the second account:
+  // clearing cookies raced a session refresh still in flight, which signed
+  // the first user back in and left `/register` redirecting to the chat.
+  const other = await browser.newContext()
+  const otherPage = await other.newPage()
+  await register(otherPage, 'inspect-other')
+  const otherKbId = await createKnowledgeBase(otherPage, 'Not mine')
+  const response = await otherPage.goto(`/documents/${otherKbId}/${documentId}`)
   expect(response?.status()).toBe(404)
+  await other.close()
 })
