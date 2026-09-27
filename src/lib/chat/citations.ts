@@ -25,3 +25,27 @@ export function toStoredCitations(
     ...(chunk.unit ? { unit: chunk.unit } : {}),
   }))
 }
+
+/** Citations that point at the same page (or section) of one document. */
+export interface CitationGroup {
+  key: string
+  citations: StoredCitation[]
+}
+
+/**
+ * One chip per document page (#165), in the order each first appears. Several
+ * passages from one page read as one source, not a row of identical chips;
+ * each keeps its own number, which is what the answer's markers refer to.
+ */
+export function groupCitations(
+  citations: readonly StoredCitation[],
+): CitationGroup[] {
+  const groups = new Map<string, StoredCitation[]>()
+  for (const citation of citations) {
+    const key = `${citation.documentId}:${citation.unit ?? 'page'}:${citation.pageNumber}`
+    const group = groups.get(key)
+    if (group) group.push(citation)
+    else groups.set(key, [citation])
+  }
+  return [...groups].map(([key, list]) => ({ key, citations: list }))
+}

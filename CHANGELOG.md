@@ -47,6 +47,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Changed
 
+- Several passages from the same page of a document share one citation chip
+  ("[1][3] handbook — p1 · 2 passages"), and its source panel marks all of
+  them (#165).
 - The inference key is now `LLM_API_KEY`, whatever the provider.
   `NVIDIA_API_KEY` still works and logs a one-time deprecation warning. A
   custom `RAG_LLM_BASE_URL`, such as a local Ollama or llama.cpp server, no

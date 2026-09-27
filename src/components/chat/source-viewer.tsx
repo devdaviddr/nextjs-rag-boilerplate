@@ -51,9 +51,12 @@ type RenderState = 'loading' | 'ready' | 'failed'
 
 export function SourceViewer({
   citation,
+  also = [],
   onClose,
 }: {
   citation: StoredCitation
+  /** Other citations on the same page (#165): their passages are marked too. */
+  also?: readonly StoredCitation[]
   onClose: () => void
 }) {
   const [location, setLocation] = useState<CitationLocation | null>(null)
@@ -75,23 +78,43 @@ export function SourceViewer({
   // persisted, so every conversation answered before this shipped would
   // otherwise be permanently un-highlightable (NFR3 also wants this off the
   // answer's path — nothing here runs until a citation is clicked).
+  const alsoKey = also.map((c) => `${c.chunkId}:${c.parent ? 1 : 0}`).join(',')
   useEffect(() => {
     const controller = new AbortController()
     // A section parent (spec 0033, 1c) highlights every chunk of its run.
-    const query = citation.parent ? '?parent=1' : ''
-    fetch(`/api/citations/${encodeURIComponent(citation.chunkId)}${query}`, {
-      signal: controller.signal,
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: CitationLocation | null) => {
-        if (data) setLocation(data)
-      })
-      .catch(() => {
-        // Aborted, offline, or a chunk that no longer exists. No highlight is
-        // a supported outcome, so there is nothing to report.
-      })
+    const locate = (c: Pick<StoredCitation, 'chunkId' | 'parent'>) =>
+      fetch(
+        `/api/citations/${encodeURIComponent(c.chunkId)}${c.parent ? '?parent=1' : ''}`,
+        { signal: controller.signal },
+      )
+        .then((response) => (response.ok ? response.json() : null))
+        .catch(() => null) as Promise<CitationLocation | null>
+    const others = alsoKey
+      ? alsoKey.split(',').map((k) => {
+          const [chunkId, parent] = k.split(':')
+          return {
+            chunkId: chunkId!,
+            parent: parent === '1' ? (true as const) : undefined,
+          }
+        })
+      : []
+    // Aborted, offline, or a chunk that no longer exists: no highlight is a
+    // supported outcome, so there is nothing to report.
+    void Promise.all([locate(citation), ...others.map(locate)]).then(
+      ([main, ...rest]) => {
+        if (!main || controller.signal.aborted) return
+        // The other passages on this page (#165), drawn with it. Boxes from
+        // another page are never merged in: the rule above still holds.
+        const extra = rest
+          .filter(
+            (l): l is CitationLocation => l?.pageNumber === main.pageNumber,
+          )
+          .flatMap((l) => l.boxes)
+        setLocation({ ...main, boxes: [...main.boxes, ...extra] })
+      },
+    )
     return () => controller.abort()
-  }, [citation.chunkId, citation.parent])
+  }, [citation, alsoKey])
 
   const goTo = useCallback((next: number) => {
     setRender('loading')

@@ -7,6 +7,7 @@ import { ChevronDown, Send } from 'lucide-react'
 import { FormMessage } from '@/components/auth/field-error'
 import { Markdown } from '@/components/chat/markdown'
 import { SourceViewer } from '@/components/chat/source-viewer'
+import { groupCitations } from '@/lib/chat/citations'
 import {
   AgentActivity,
   type LiveActivity,
@@ -165,7 +166,11 @@ export function ChatView({
   // The request still being answered, whose drawer follows it live.
   const [liveRequestId, setLiveRequestId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [source, setSource] = useState<StoredCitation | null>(null)
+  // The chip's first citation, and the others on the same page (#165).
+  const [source, setSource] = useState<{
+    citation: StoredCitation
+    also: StoredCitation[]
+  } | null>(null)
   const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases)
   const [selection, setSelection] = useState<Selection>('all')
   const [createOpen, setCreateOpen] = useState(false)
@@ -708,18 +713,33 @@ export function ChatView({
                             <span className="text-muted-foreground text-xs">
                               Sources
                             </span>
-                            {message.citations.map((citation) => (
-                              <button
-                                key={citation.chunkId}
-                                type="button"
-                                onClick={() => setSource(citation)}
-                                className="bg-muted hover:bg-accent rounded-full px-2.5 py-1 text-xs transition-colors"
-                              >
-                                [{citation.index}] {citation.documentTitle} —{' '}
-                                {citation.unit === 'section' ? '§' : 'p'}
-                                {citation.pageNumber}
-                              </button>
-                            ))}
+                            {groupCitations(message.citations).map(
+                              ({ key, citations }) => {
+                                const [first, ...rest] = citations
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() =>
+                                      setSource({
+                                        citation: first!,
+                                        also: rest,
+                                      })
+                                    }
+                                    className="bg-muted hover:bg-accent rounded-full px-2.5 py-1 text-xs transition-colors"
+                                  >
+                                    {citations
+                                      .map((c) => `[${c.index}]`)
+                                      .join('')}{' '}
+                                    {first!.documentTitle} —{' '}
+                                    {first!.unit === 'section' ? '§' : 'p'}
+                                    {first!.pageNumber}
+                                    {citations.length > 1 &&
+                                      ` · ${citations.length} passages`}
+                                  </button>
+                                )
+                              },
+                            )}
                           </div>
                         )}
                         {message.metrics?.tools?.length ? (
@@ -776,8 +796,9 @@ export function ChatView({
         // Keyed by chunk, so switching citations remounts rather than trying
         // to reconcile a half-loaded page image with a new one's boxes.
         <SourceViewer
-          key={source.chunkId}
-          citation={source}
+          key={source.citation.chunkId}
+          citation={source.citation}
+          also={source.also}
           onClose={closeSource}
         />
       )}
