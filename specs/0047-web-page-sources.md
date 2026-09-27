@@ -1,8 +1,8 @@
 ---
 id: 0047
 title: Add a web page to a knowledge base, fetched safely
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-27
 updated: 2026-09-27
 ---

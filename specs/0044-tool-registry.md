@@ -1,8 +1,8 @@
 ---
 id: 0044
 title: Give the agent tools a developer can add
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-27
 updated: 2026-09-27
 ---

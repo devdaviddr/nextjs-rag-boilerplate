@@ -1,10 +1,10 @@
 ---
 id: 0036
 title: Reranking, without waiting for the account
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-10
-updated: 2026-09-25
+updated: 2026-09-27
 ---
 
 # 0036 — Reranking, without waiting for the account

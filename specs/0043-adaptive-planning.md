@@ -1,10 +1,10 @@
 ---
 id: 0043
 title: Plan only when it pays
-status: Proposed
-release: '—'
+status: Shipped
+release: v0.27.0
 created: 2026-09-26
-updated: 2026-09-26
+updated: 2026-09-27
 ---
 
 # 0043 — Plan only when it pays

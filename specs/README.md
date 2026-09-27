@@ -94,23 +94,23 @@ other — one isn't a substitute for the other.
 | [0029](0029-agentic-retrieval-loop.md)                | Agentic retrieval loop                                                               | Shipped  | v0.20.0 |
 | [0030](0030-invalidate-sessions-for-deleted-users.md) | Invalidate sessions whose user no longer exists                                      | Shipped  | v0.20.1 |
 | [0031](0031-tables-figures-and-complex-layouts.md)    | Index tables, figures and complex layouts                                            | Shipped  | v0.21.0 |
-| [0032](0032-settle-the-agentic-trade.md)              | Settle whether the agentic path should be the default                                | Proposed | —       |
+| [0032](0032-settle-the-agentic-trade.md)              | Settle whether the agentic path should be the default                                | Shipped  | v0.27.0 |
 | [0033](0033-retrieval-fundamentals.md)                | The retrieval fundamentals that were skipped                                         | Shipped  | v0.26.0 |
 | [0034](0034-resumable-ingestion.md)                   | Resumable ingestion                                                                  | Shipped  | v0.21.0 |
 | [0035](0035-span-level-citations.md)                  | Highlight the cited span, not just the page                                          | Shipped  | v0.21.0 |
-| [0036](0036-reranking.md)                             | Reranking, without waiting for the account                                           | Proposed | —       |
+| [0036](0036-reranking.md)                             | Reranking, without waiting for the account                                           | Shipped  | v0.27.0 |
 | [0037](0037-inspect-what-was-indexed.md)              | Let a user inspect what was actually indexed                                         | Shipped  | v0.21.0 |
 | [0038](0038-store-the-search-key.md)                  | Store the search key, and show what the page contributed                             | Shipped  | v0.21.0 |
 | [0039](0039-structure-from-the-text-layer.md)         | Find a document's structure in its text layer                                        | Shipped  | v0.21.0 |
-| [0040](0040-ai-provider-and-model-settings.md)        | Configure the AI provider and models from Settings                                   | Proposed | —       |
+| [0040](0040-ai-provider-and-model-settings.md)        | Configure the AI provider and models from Settings                                   | Shipped  | v0.27.0 |
 | [0041](0041-in-app-documentation.md)                  | Read the platform documentation inside the app                                       | Shipped  | v0.23.0 |
 | [0042](0042-observability.md)                         | See what the RAG pipeline and its agents are doing                                   | Shipped  | v0.23.0 |
-| [0043](0043-adaptive-planning.md)                     | Plan only when it pays                                                               | Proposed | —       |
-| [0044](0044-tool-registry.md)                         | Give the agent tools a developer can add                                             | Proposed | —       |
-| [0045](0045-provider-adapters.md)                     | Talk to model providers through adapters, Anthropic included                         | Proposed | —       |
-| [0046](0046-document-loaders.md)                      | Index Markdown, HTML and Word documents, through loaders                             | Proposed | —       |
-| [0047](0047-web-page-sources.md)                      | Add a web page to a knowledge base, fetched safely                                   | Proposed | —       |
-| [0048](0048-mcp-tools.md)                             | Give the agent tools from MCP servers                                                | Proposed | —       |
+| [0043](0043-adaptive-planning.md)                     | Plan only when it pays                                                               | Shipped  | v0.27.0 |
+| [0044](0044-tool-registry.md)                         | Give the agent tools a developer can add                                             | Shipped  | v0.27.0 |
+| [0045](0045-provider-adapters.md)                     | Talk to model providers through adapters, Anthropic included                         | Shipped  | v0.27.0 |
+| [0046](0046-document-loaders.md)                      | Index Markdown, HTML and Word documents, through loaders                             | Shipped  | v0.27.0 |
+| [0047](0047-web-page-sources.md)                      | Add a web page to a knowledge base, fetched safely                                   | Shipped  | v0.27.0 |
+| [0048](0048-mcp-tools.md)                             | Give the agent tools from MCP servers                                                | Shipped  | v0.27.0 |
 
 <!-- specs:index:end -->
 
