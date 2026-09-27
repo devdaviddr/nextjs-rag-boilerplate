@@ -152,10 +152,49 @@ reimplement that module's functions against it. Keep the owner and
 knowledge-base filter inside every query, as that file does: it is what stops
 one user's question reaching another's documents.
 
+## Add a document format
+
+A knowledge base takes PDF, Word (`.docx`), HTML and Markdown or plain text.
+Each is a **loader** in `src/lib/rag/loaders/`, and a new format is one more
+(spec 0046). A loader says how to recognise its bytes and how to turn them
+into chunks:
+
+```ts
+export const myLoader: DocumentLoader = {
+  label: 'My format',
+  mimeType: 'application/x-my-format',
+  extensions: ['.myf'],
+  unit: 'section',
+  sniff: (bytes) => bytes.subarray(0, 4).toString() === 'MYF1',
+  async toChunks(bytes, options) {
+    const sections: SectionElements[] = parseMyFormat(bytes)
+    return sectionsToChunks(sections, options)
+  },
+}
+```
+
+- **`sniff`** decides whether an upload is your format, from its bytes; the
+  file's name and the browser's claimed type are never trusted. Loaders are
+  tried in the order of `documentLoaders` in `src/lib/rag/loaders/index.ts`,
+  most specific first; Markdown, which accepts any text, is last. Put yours
+  before it, and add its extensions to `DOCUMENT_ACCEPT` in
+  `src/lib/rag/constants.ts` (a test keeps the two equal).
+- **`toChunks`** gets the bytes. For a text format, produce sections of
+  `{ type, text }` elements (`Section-header` for headings, `Text`,
+  `List-item`, `Table` for anything that must stay whole) and hand them to
+  `sectionsToChunks`, which chunks them exactly as the other formats are.
+  `markdown.ts` is the simplest example; `docx.ts` converts to HTML and reuses
+  the HTML loader.
+- **`unit`** is what a citation calls a location. A `section` document's
+  citations show the section's text instead of a page image.
+
+Parse text only: never run a script or macro a document carries, and never
+fetch what it links to.
+
 ## Coming next
 
-Adding a document format beyond PDF (spec 0046) and a model provider that is
-not OpenAI-compatible (spec 0045) will be covered here when they ship.
+A model provider that is not OpenAI-compatible (spec 0045) will be covered
+here when it ships.
 
 **Next:** [Architecture](architecture.md) for how the pieces fit, or
 [RAG](rag.md) for the retrieval reference.

@@ -30,6 +30,7 @@ interface Row extends Record<string, unknown> {
   chunk_id: string
   document_id: string
   document_title: string
+  mime_type: string | null
   content: string
   page_number: number
   kind: ChunkKind
@@ -57,6 +58,7 @@ interface DocumentChunkRow extends Record<string, unknown> {
   chunk_id: string
   document_id: string
   document_title: string
+  mime_type: string | null
   content: string
   page_number: number
   kind: ChunkKind
@@ -88,6 +90,14 @@ function kbIdArray(knowledgeBaseIds: readonly string[]) {
     knowledgeBaseIds.map((id) => sql`${id}`),
     sql`, `,
   )}]::text[]`
+}
+
+/**
+ * A non-PDF document's chunks are sections, not pages (spec 0046 FR7).
+ * Only present then, so a PDF chunk is the shape it always was.
+ */
+function sectionUnit(mimeType: string | null): { unit?: 'section' } {
+  return mimeType && mimeType !== 'application/pdf' ? { unit: 'section' } : {}
 }
 
 /** The hybrid search's inputs; see `retrieveForOwner` for how each is chosen. */
@@ -179,6 +189,7 @@ export async function searchHybrid(q: HybridSearch): Promise<RetrievedChunk[]> {
       c.id            AS chunk_id,
       c.document_id   AS document_id,
       d.title         AS document_title,
+      fl.mime_type    AS mime_type,
       c.content       AS content,
       c.page_number   AS page_number,
       c.kind          AS kind,
@@ -191,6 +202,7 @@ export async function searchHybrid(q: HybridSearch): Promise<RetrievedChunk[]> {
     FROM fused f
     JOIN chunks c ON c.id = f.id
     JOIN documents d ON d.id = c.document_id
+    LEFT JOIN files fl ON fl.id = d.file_id
     LEFT JOIN chunk_embeddings e
       ON e.chunk_id = c.id AND e.generation_id = ${generation}
     WHERE c.owner_id = ${ownerId}
@@ -206,6 +218,7 @@ export async function searchHybrid(q: HybridSearch): Promise<RetrievedChunk[]> {
       chunkId: r.chunk_id,
       documentId: r.document_id,
       documentTitle: r.document_title,
+      ...sectionUnit(r.mime_type),
       content: r.content,
       pageNumber: Number(r.page_number),
       kind: r.kind,
@@ -322,11 +335,13 @@ export async function documentChunks(
     SELECT c.id            AS chunk_id,
            c.document_id   AS document_id,
            d.title         AS document_title,
+           fl.mime_type    AS mime_type,
            c.content       AS content,
            c.page_number   AS page_number,
            c.kind          AS kind
     FROM chunks c
     JOIN documents d ON d.id = c.document_id
+    LEFT JOIN files fl ON fl.id = d.file_id
     WHERE c.owner_id = ${ownerId}
       AND c.document_id = ${documentId}
       AND c.knowledge_base_id = ANY(${kbIdArray(knowledgeBaseIds)})
@@ -344,6 +359,7 @@ export async function documentChunks(
     chunkId: r.chunk_id,
     documentId: r.document_id,
     documentTitle: r.document_title,
+    ...sectionUnit(r.mime_type),
     content: r.content,
     pageNumber: Number(r.page_number),
     similarity: 1,

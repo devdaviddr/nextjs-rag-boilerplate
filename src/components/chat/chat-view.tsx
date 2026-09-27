@@ -715,7 +715,8 @@ export function ChatView({
                                 onClick={() => setSource(citation)}
                                 className="bg-muted hover:bg-accent rounded-full px-2.5 py-1 text-xs transition-colors"
                               >
-                                [{citation.index}] {citation.documentTitle} — p
+                                [{citation.index}] {citation.documentTitle} —{' '}
+                                {citation.unit === 'section' ? '§' : 'p'}
                                 {citation.pageNumber}
                               </button>
                             ))}

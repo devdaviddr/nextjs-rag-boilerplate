@@ -130,7 +130,7 @@ test.describe('with an indexed document', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
     await expect(
       page.getByRole('row', { name: /handbook/i }).getByText('Ready'),
@@ -207,7 +207,7 @@ test.describe('with an indexed document', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
     await expect(
       page.getByRole('row', { name: /handbook/i }).getByText('Ready'),
@@ -252,7 +252,7 @@ test.describe('with an indexed document', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
     await expect(
       page.getByRole('row', { name: /handbook/i }).getByText('Ready'),

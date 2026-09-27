@@ -22,5 +22,6 @@ export function toStoredCitations(
     pageNumber: chunk.pageNumber,
     similarity: Number(chunk.similarity.toFixed(4)),
     ...(chunk.memberChunkIds?.length ? { parent: true as const } : {}),
+    ...(chunk.unit ? { unit: chunk.unit } : {}),
   }))
 }

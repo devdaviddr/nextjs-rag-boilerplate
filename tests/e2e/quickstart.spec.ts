@@ -29,7 +29,7 @@ test('the README quickstart reaches a cited answer and a refusal', async ({
 
   // "upload a text PDF into it and wait for its status to reach ready"
   await page
-    .getByLabel('Upload a PDF')
+    .getByLabel('Upload a document')
     .setInputFiles('tests/e2e/fixtures/handbook.pdf')
   const row = page.getByRole('row', { name: /handbook/i })
   await expect(row.getByText('Ready')).toBeVisible({ timeout: 120_000 })

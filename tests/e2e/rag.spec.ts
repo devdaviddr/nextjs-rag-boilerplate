@@ -65,11 +65,13 @@ test.describe('knowledge base', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await expect(
-      page.getByText('No documents yet. Upload a PDF to get started.'),
+      page.getByText(
+        'No documents yet. Upload a PDF, Word, HTML or Markdown file to get started.',
+      ),
     ).toBeVisible()
 
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/handbook.pdf`)
 
     const row = page.getByRole('row', { name: /handbook/i })
@@ -119,7 +121,9 @@ test.describe('knowledge base', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(
-      page.getByText('No documents yet. Upload a PDF to get started.'),
+      page.getByText(
+        'No documents yet. Upload a PDF, Word, HTML or Markdown file to get started.',
+      ),
     ).toBeVisible()
   })
 
@@ -131,7 +135,7 @@ test.describe('knowledge base', () => {
     const kbId = await createKnowledgeBase(page, 'My documents')
     await page.goto(`/documents/${kbId}`)
     await page
-      .getByLabel('Upload a PDF')
+      .getByLabel('Upload a document')
       .setInputFiles(`${FIXTURES}/no-text-layer.pdf`)
 
     const row = page.getByRole('row', { name: /no-text-layer/i })
@@ -196,7 +200,7 @@ test('re-ingesting a document does not duplicate its chunks', async ({
   const kbId = await createKnowledgeBase(page, 'My documents')
   await page.goto(`/documents/${kbId}`)
   await page
-    .getByLabel('Upload a PDF')
+    .getByLabel('Upload a document')
     .setInputFiles(`${FIXTURES}/handbook.pdf`)
 
   const row = page.getByRole('row', { name: /handbook/i })
@@ -245,7 +249,7 @@ test('a document can be inspected page by page, and a partial one says so', asyn
   const kbId = await createKnowledgeBase(page, 'My documents')
   await page.goto(`/documents/${kbId}`)
   await page
-    .getByLabel('Upload a PDF')
+    .getByLabel('Upload a document')
     .setInputFiles(`${FIXTURES}/handbook.pdf`)
 
   const row = page.getByRole('row', { name: /handbook/i })

@@ -669,6 +669,11 @@ export interface StoredCitation {
    * written before this keeps single-chunk behaviour.
    */
   parent?: true
+  /**
+   * `section` when the document is not a PDF (spec 0046 FR7): `pageNumber`
+   * is then a section number, and there is no page image to show.
+   */
+  unit?: 'section'
 }
 
 /** Mirrors MessageMetrics in lib/chat/metrics.ts. */

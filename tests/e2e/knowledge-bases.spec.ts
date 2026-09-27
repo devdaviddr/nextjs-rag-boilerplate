@@ -64,7 +64,7 @@ async function uploadAndWaitReady(
   rowName: RegExp,
 ) {
   await page.goto(`/documents/${knowledgeBaseId}`)
-  await page.getByLabel('Upload a PDF').setInputFiles(fixtureFile)
+  await page.getByLabel('Upload a document').setInputFiles(fixtureFile)
   const row = page.getByRole('row', { name: rowName })
   await expect(row.getByText('Ready')).toBeVisible({ timeout: INGEST_TIMEOUT })
 }
@@ -216,7 +216,9 @@ test.describe('cross-knowledge-base isolation', () => {
 
         // Gone from the old KB's page…
         await expect(
-          page.getByText('No documents yet. Upload a PDF to get started.'),
+          page.getByText(
+            'No documents yet. Upload a PDF, Word, HTML or Markdown file to get started.',
+          ),
         ).toBeVisible()
         // …and present, already Ready (no re-ingestion), on the new one.
         await page.goto(`/documents/${facilitiesKbId}`)

@@ -699,6 +699,7 @@ sends over the wire, and what a free-tier rate limit costs you per question.
 | Content question vs whole-document request  | `src/lib/rag/scope.ts`           |
 | Owner- and KB-scoped retrieval              | `src/lib/rag/retrieve.ts`        |
 | All retrieval SQL (swap for another store)  | `src/lib/rag/retrieval-store.ts` |
+| Document formats: one loader each           | `src/lib/rag/loaders/`           |
 | Section runs and parent assembly (pure)     | `src/lib/rag/parents.ts`         |
 | Prompt construction and fencing             | `src/lib/rag/prompt.ts`          |
 | Upload / list / delete / retry actions      | `src/lib/rag/actions.ts`         |

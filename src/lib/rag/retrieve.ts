@@ -68,6 +68,11 @@ export interface RetrievedChunk {
    */
   rerankScore?: number
   /**
+   * `section` for a chunk of a non-PDF document (spec 0046 FR7), whose
+   * `pageNumber` is a section number. Absent for a PDF.
+   */
+  unit?: 'section'
+  /**
    * The section heading the chunk was indexed under, and where it sits on the
    * page (spec 0033, 1c). Together they are the SECTION KEY that parent
    * assembly groups by — see `parents.ts`. Present only when the row has one,

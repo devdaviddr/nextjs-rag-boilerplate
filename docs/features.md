@@ -51,7 +51,9 @@ there is no answer, and you can only ever retrieve your own documents.
 
 - Keep multiple independent knowledge bases per user: create, rename, delete,
   and move a document between them without re-ingesting it.
-- Upload PDFs into a chosen knowledge base. This reuses the MinIO storage, quota
+- Upload PDFs, Word (`.docx`), HTML and Markdown or text files into a chosen
+  knowledge base, recognised by their bytes, not their name. A non-PDF is split
+  into sections at its headings, and its citations show the section's text. This reuses the MinIO storage, quota
   and rate limits from [file uploads](#file-uploads).
 - Hold conversations scoped to a set of knowledge bases. The scope is fixed when
   the thread is created, so every message in it has one auditable scope.

@@ -91,7 +91,8 @@ export function buildContextBlock(
   const sources = chunks
     .map((chunk, i) => {
       const title = neutraliseFence(chunk.documentTitle, fenceId)
-      const header = `[${i + 1}] ${title} — page ${chunk.pageNumber}`
+      const where = chunk.unit === 'section' ? 'section' : 'page'
+      const header = `[${i + 1}] ${title} — ${where} ${chunk.pageNumber}`
       return `${header}\n${neutraliseFence(chunk.content, fenceId)}`
     })
     .join('\n\n---\n\n')

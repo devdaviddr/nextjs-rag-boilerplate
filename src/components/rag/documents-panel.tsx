@@ -52,6 +52,7 @@ import {
   type DocumentSummary,
 } from '@/lib/rag/actions'
 import { moveDocument, type KnowledgeBaseSummary } from '@/lib/rag/kb-actions'
+import { DOCUMENT_ACCEPT } from '@/lib/rag/constants'
 
 const IN_FLIGHT = new Set(['pending', 'extracting', 'embedding'])
 
@@ -197,8 +198,8 @@ export function DocumentsPanel({
         <CardTitle>Your documents</CardTitle>
         <CardDescription>
           {cracking
-            ? 'PDFs, including scanned ones. Pages with tables, figures or an unusual layout are read page by page, which takes longer than a plain text PDF.'
-            : "PDFs with selectable text. Scanned documents aren't supported yet — they have no text layer to index."}
+            ? 'PDFs, including scanned ones, and Word, HTML and Markdown files. PDF pages with tables, figures or an unusual layout are read page by page, which takes longer.'
+            : "PDFs with selectable text, and Word, HTML and Markdown files. Scanned PDFs aren't supported yet — they have no text layer to index."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -211,8 +212,8 @@ export function DocumentsPanel({
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf"
-            aria-label="Upload a PDF"
+            accept={DOCUMENT_ACCEPT}
+            aria-label="Upload a document"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
@@ -225,14 +226,17 @@ export function DocumentsPanel({
             onClick={() => inputRef.current?.click()}
           >
             <Upload className="mr-2 size-4" />
-            {isUploading ? 'Uploading…' : 'Upload PDF'}
+            {isUploading ? 'Uploading…' : 'Upload'}
           </Button>
         </div>
 
         {documents.length === 0 ? (
           <div className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-sm">
             <FileText className="size-8 opacity-50" />
-            <p>No documents yet. Upload a PDF to get started.</p>
+            <p>
+              No documents yet. Upload a PDF, Word, HTML or Markdown file to get
+              started.
+            </p>
           </div>
         ) : (
           <Table>

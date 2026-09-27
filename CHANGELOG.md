@@ -10,6 +10,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Word, HTML and Markdown documents.** A knowledge base takes `.docx`,
+  `.html`, `.md` and `.txt` files as well as PDFs. Each is split into sections
+  at its headings and answers with a citation that shows the section's text.
+  Uploads are recognised by their bytes, not their name, and each format is a
+  loader in `src/lib/rag/loaders/` (spec 0046, #160).
 - Observability shows what questions and uploads cost. Set model prices in
   Settings → Configuration → Cost (or `RAG_MODEL_PRICES`), in dollars per
   million tokens; the overview totals the window by model and each run shows

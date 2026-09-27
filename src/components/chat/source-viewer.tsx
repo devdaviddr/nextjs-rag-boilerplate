@@ -104,13 +104,16 @@ export function SourceViewer({
   // page number copied into the citation when the answer was written — if the
   // two ever disagree, nothing is drawn, which is the safe direction.
   const boxes = location && location.pageNumber === page ? location.boxes : []
-  const canPage = render !== 'failed' && pageCount !== null && pageCount > 1
+  // Not a PDF (spec 0046 FR7): a section of text, with no page to render.
+  const isSection = citation.unit === 'section' || location?.unit === 'section'
+  const canPage =
+    !isSection && render !== 'failed' && pageCount !== null && pageCount > 1
 
   const sourceHref = `/api/documents/${citation.documentId}/source#page=${page}`
 
   return (
     <aside
-      aria-label={`Source: ${citation.documentTitle}, page ${citation.pageNumber}`}
+      aria-label={`Source: ${citation.documentTitle}, ${isSection ? 'section' : 'page'} ${citation.pageNumber}`}
       className={cn(
         'bg-background flex w-full max-w-full flex-col border-l',
         'fixed inset-0 z-40 md:static md:z-auto md:w-[45%] md:max-w-[720px]',
@@ -120,19 +123,21 @@ export function SourceViewer({
         <p className="min-w-0 flex-1 truncate text-sm font-medium">
           {citation.documentTitle}{' '}
           <span className="text-muted-foreground font-normal">
-            — page {page}
+            — {isSection ? 'section' : 'page'} {page}
           </span>
         </p>
-        <Button asChild size="icon" variant="ghost" className="size-8">
-          <a
-            href={sourceHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Open in new tab"
-          >
-            <ExternalLink className="size-4" />
-          </a>
-        </Button>
+        {!isSection && (
+          <Button asChild size="icon" variant="ghost" className="size-8">
+            <a
+              href={sourceHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open in new tab"
+            >
+              <ExternalLink className="size-4" />
+            </a>
+          </Button>
+        )}
         <Button
           size="icon"
           variant="ghost"
@@ -159,7 +164,13 @@ export function SourceViewer({
         </p>
       )}
 
-      {render === 'failed' ? (
+      {isSection ? (
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <p className="max-w-prose text-sm leading-relaxed whitespace-pre-wrap">
+            {location?.text ?? 'Loading…'}
+          </p>
+        </div>
+      ) : render === 'failed' ? (
         /* The pre-0035 panel, unchanged, as the floor this can fall back to.
            No `sandbox` attribute: a fully-restrictive sandbox prevents the
            browser's PDF viewer from initialising, and the permissive

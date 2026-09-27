@@ -20,8 +20,13 @@ import { deleteObject, putObject } from '@/lib/storage/client'
 import type { ActionResult } from '@/lib/storage/actions'
 import { buildBucketKey, validateUpload } from '@/lib/storage/validation'
 import { isRagConfigured } from './client'
-import { DOCUMENT_MIME_TYPES } from './constants'
 import { ingestDocument } from './ingest'
+import {
+  DOCUMENT_TYPES,
+  documentLoaders,
+  loaderForBytes,
+  loaderForMimeType,
+} from './loaders'
 import { redirect } from 'next/navigation'
 
 export interface DocumentSummary {
@@ -87,7 +92,8 @@ export async function ragStatus(): Promise<{
 }
 
 /**
- * Upload a PDF into the signed-in user's knowledge base.
+ * Upload a document (PDF, Word, HTML or Markdown) into the signed-in user's
+ * knowledge base.
  *
  * Reuses spec 0007's quota, rate limit and object storage wholesale; only the
  * MIME allow-list is narrowed. Ingestion is scheduled with `after()` so the
@@ -141,17 +147,27 @@ export async function uploadDocument(
     return { ok: false, error: 'Knowledge base not found.' }
   }
 
-  const mimeType = file.type || 'application/octet-stream'
+  // The bytes decide the format, not the name or the browser's claimed type
+  // (spec 0046 FR6): a renamed file cannot choose which parser reads it.
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const loader = loaderForBytes(bytes)
+  if (!loader) {
+    return {
+      ok: false,
+      error: `That file is not a ${documentLoaders.map((l) => l.label).join(', ')}.`,
+    }
+  }
+  const mimeType = loader.mimeType
   const usage = await currentUsageBytes(userId)
   const validation = validateUpload({ sizeBytes: file.size, mimeType }, usage, {
-    allowedMimeTypes: DOCUMENT_MIME_TYPES,
+    allowedMimeTypes: DOCUMENT_TYPES,
   })
   if (!validation.ok) {
     return { ok: false, error: validation.error }
   }
 
   const bucketKey = buildBucketKey(userId, file.name)
-  await putObject(bucketKey, Buffer.from(await file.arrayBuffer()), mimeType)
+  await putObject(bucketKey, bytes, mimeType)
 
   const [fileRow] = await db
     .insert(files)
@@ -171,7 +187,8 @@ export async function uploadDocument(
       ownerId: userId,
       knowledgeBaseId: kb.id,
       fileId: fileRow.id,
-      title: file.name.replace(/\.pdf$/i, ''),
+      // Any extension, not just .pdf (spec 0046 FR8).
+      title: file.name.replace(/\.[a-z0-9]{1,8}$/i, '') || file.name,
       status: 'pending',
     })
     .returning()
@@ -327,9 +344,15 @@ export async function inspectDocument(documentId: string): Promise<{
       pageCount: true,
       knowledgeBaseId: true,
       extraction: true,
+      fileId: true,
     },
   })
   if (!doc) return null
+  const file = await db.query.files.findFirst({
+    where: eq(files.id, doc.fileId),
+    columns: { mimeType: true },
+  })
+  const unit = loaderForMimeType(file?.mimeType).unit
 
   const rows = await db
     .select({
@@ -356,6 +379,7 @@ export async function inspectDocument(documentId: string): Promise<{
     pageCount: doc.pageCount,
     knowledgeBaseId: doc.knowledgeBaseId,
     inspection: buildInspection({
+      unit,
       parentMaxTokens: parentMaxTokens(aiSettings().RAG_CHUNK_TOKENS),
       pageCount: doc.pageCount,
       extraction: doc.extraction ?? null,

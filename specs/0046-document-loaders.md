@@ -52,10 +52,13 @@ That is the seam.
 
 ### Functional
 
-- **FR1** — A `DocumentLoader` has the MIME types and extensions it accepts, a
-  `sniff(bytes)` that says whether bytes are its format, and
-  `load(bytes, fileName)` returning `{ pages: { pageNumber, elements }[],
-pageCount, unit: 'page' | 'section' }`, `elements` being `ParsedElement[]`.
+- **FR1** — A `DocumentLoader` has the MIME type and extensions it accepts, a
+  `sniff(bytes)` that says whether bytes are its format, its `unit`
+  (`'page' | 'section'`), and `toChunks(bytes, options)` returning the same
+  `DocumentChunks` the PDF pipeline returns. Text formats build sections of
+  elements and share `sectionsToChunks` (normalise, then `chunkElements`).
+  Amended while building: returning chunks rather than elements lets PDF keep
+  its own path (cracking, figures, boxes) untouched.
 - **FR2** — A loader registry maps an upload to its loader. The PDF loader is
   today's `chunksFromPdf` path, unchanged, cracking included.
 - **FR3** — The Markdown loader splits a document into sections at headings
@@ -101,16 +104,14 @@ pageCount, unit: 'page' | 'section' }`, `elements` being `ParsedElement[]`.
 
 ## Acceptance criteria
 
-- [ ] FR1, FR2: PDF goes through the registry unchanged
-- [ ] FR3: a Markdown file is sectioned at headings and answers with a citation
-- [ ] FR4: an HTML file drops script, style and nav, and answers with a citation
-- [ ] FR5: a `.docx` file keeps its headings and tables, and answers with a
-      citation
-- [ ] FR6: a renamed file whose bytes are not an accepted format is refused
-- [ ] FR7: a non-PDF citation says "section" and shows the passage text
-- [ ] FR8: titles drop any extension
-- [ ] NFR1: the existing ingestion, chunking, citation and inspector tests pass
-      unmodified
+- [x] FR1, FR2: PDF goes through the registry unchanged — `rag-loaders.test.ts` _"picks each format from its content"_; PDF ingests through `pdfLoader` (`chunksFromPdf`) in the RAG e2e suite
+- [x] FR3: a Markdown file is sectioned at headings and answers with a citation — `rag-loaders.test.ts` _"Markdown"_ and _"turning a document into chunks"_; e2e `loaders.spec.ts` (`leave-policy.md`)
+- [x] FR4: an HTML file drops script, style and nav, and answers with a citation — `rag-loaders.test.ts` _"drops script, style, nav and footer"_; e2e `loaders.spec.ts` (`leave-policy.html`)
+- [x] FR5: a `.docx` file keeps its headings and tables, and answers with a citation — `rag-loaders.test.ts` (`leave-policy.docx`: headings from styles, the table); e2e `loaders.spec.ts`
+- [x] FR6: a renamed file whose bytes are not an accepted format is refused — `rag-loaders.test.ts` _"refuses bytes no format recognises"_; `uploadDocument` sniffs before storing
+- [x] FR7: a non-PDF citation says "section" and shows the passage text — e2e `loaders.spec.ts`: the chip reads `§2` and the source panel shows the section's text with no page image; the inspector labels sections and skips page images
+- [x] FR8: titles drop any extension — `actions.ts` strips any extension
+- [x] NFR1: the existing ingestion, chunking, citation and inspector tests pass unmodified — the existing unit suite and the RAG, chat, knowledge-base, quickstart and isolation e2e suites pass (17 e2e) with only upload-label strings updated
 
 ## Security & privacy
 
