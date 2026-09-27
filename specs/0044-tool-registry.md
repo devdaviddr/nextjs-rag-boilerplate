@@ -136,23 +136,17 @@ short adds no step, so it can be told it has more than it does.
 
 ## Acceptance criteria
 
-- [ ] FR1: `defineTool` produces a tool whose `parameters` is the schema's JSON
-      Schema without `$schema`
-- [ ] FR2: registered tools are offered after the built-ins; a duplicate or
-      shadowing name throws
-- [ ] FR3: a call to a registered tool parses to a `tool` decision; invalid
-      arguments come back to the planner as the step's result
-- [ ] FR4: `run` receives the user's id and permitted knowledge bases from the
-      server, whatever the arguments say
-- [ ] FR5: a tool call spends one step and does not raise the floor
-- [ ] FR6: tool results reach the planner, the writer and the verifier, fenced
-- [ ] FR7: each tool call is logged with name, arguments and a result preview
-- [ ] FR8: the planner's "steps left" counts a search the time budget cut short
-- [ ] NFR1: with no tools registered, the request, prompts and decisions are
-      unchanged (existing agentic tests pass unmodified)
-- [ ] FR9: a tool result with no passage produces an answer; no tool output
-      and no passage is still refused without a model call
-- [ ] NFR2: a tool that throws ends as a failed step and the answer still comes
+- [x] FR1: `defineTool` produces a tool whose `parameters` is the schema's JSON Schema without `$schema` — `tests/unit/rag-tools.test.ts` _"shows the model the Zod schema"_
+- [x] FR2: registered tools are offered after the built-ins; a duplicate or shadowing name throws — `rag-tools.test.ts` _"duplicate name"_, _"ships empty"_; `rag-answer.test.ts` _"plans a standalone question under adaptive routing"_
+- [x] FR3: a call to a registered tool parses to a `tool` decision; invalid arguments come back to the planner as the step's result — `rag-tools.test.ts` _"reads a call to a registered tool"_, _"reports bad arguments back"_
+- [x] FR4: `run` receives the user's id and permitted knowledge bases from the server, whatever the arguments say — `rag-tools.test.ts` _"runs with the scope the server bound"_
+- [x] FR5: a tool call spends one step and does not raise the floor — `rag-tools.test.ts` _"spends a step on a tool call … does not raise the floor"_
+- [x] FR6: tool results reach the planner, the writer and the verifier, fenced — `rag-tools.test.ts` _"fences tool results"_; `rag-answer.test.ts` _"answers from a tool result"_ (writer and verifier)
+- [x] FR7: each tool call is logged with name, arguments and a result preview — `rag-tools.test.ts` _"logs each call"_
+- [x] FR8: the planner's "steps left" counts a search the time budget cut short — `rag-tools.test.ts` _"counts steps left from the loop"_ and the `spent` values in the loop test
+- [x] NFR1: with no tools registered, the request, prompts and decisions are unchanged (existing agentic tests pass unmodified) — the existing agentic, planner, prompt and answer tests pass unmodified, bar the loop outcome gaining a `toolResults` key; `rag-tools.test.ts` _"leaves the writer and verifier prompts unchanged"_
+- [x] FR9: a tool result with no passage produces an answer; no tool output and no passage is still refused without a model call — `rag-answer.test.ts` _"answers from a tool result"_, _"still refuses with neither"_; tried live 2026-09-27 with `list_documents` registered: the documents question answered from the tool, an unrelated one refused, the leave question cited as before
+- [x] NFR2: a tool that throws ends as a failed step and the answer still comes — `rag-tools.test.ts` _"turns a tool that throws into a failed step"_, _"records a failed tool as a step and carries on"_
 
 ## Security & privacy
 
