@@ -123,6 +123,11 @@ Admins get a **Configuration** section in **Settings** (spec 0040):
   `--jinja` is told so), or one embedding of the size the index needs (a
   llama.cpp server without `--embeddings` is told so). **Use .env** removes
   the change.
+- **Tools** connects Model Context Protocol servers (Streamable HTTP). A test
+  lists a server's tools, each off until an admin switches it on; switched-on
+  tools are offered to the agentic planner. Tokens are encrypted like API
+  keys, and every change is in Recent changes
+  ([Extending](extending.md#or-connect-an-mcp-server)).
 - **Retrieval & answering** holds the switches and limits behind search:
   passages per answer, the relevance floor, agentic search and its limits,
   reranking, and how documents are processed. Each is saved on its own,

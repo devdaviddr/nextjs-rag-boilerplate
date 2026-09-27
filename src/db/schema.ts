@@ -965,6 +965,48 @@ export const aiSettingsAudit = pgTable(
   (table) => [index('ai_settings_audit_at_idx').on(table.at.desc())],
 )
 
+/** One tool as an MCP server's `tools/list` describes it (spec 0048). */
+export interface McpToolInfo {
+  name: string
+  description: string
+  /** The tool's arguments, as JSON Schema. */
+  inputSchema: Record<string, unknown>
+}
+
+/**
+ * An MCP server whose tools the agent may call (spec 0048). Added by an
+ * admin in Settings → Tools. The bearer token is encrypted like an API key
+ * (spec 0040) and never sent back to the browser. `tools` is the list as of
+ * the last test; only the names in `enabled_tools` are offered to the
+ * planner, and none are until an admin switches them on.
+ */
+export const mcpServers = pgTable('mcp_servers', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull().unique(),
+  url: text('url').notNull(),
+  tokenCiphertext: text('token_ciphertext'),
+  /** Last four characters of the token, so the page can show `••••1a2b`. */
+  tokenHint: text('token_hint'),
+  /**
+   * On a private network: fetched without spec 0047's public-address rules.
+   * An admin's explicit choice, logged when used (NFR2).
+   */
+  internal: boolean('internal').notNull().default(false),
+  tools: jsonb('tools').$type<McpToolInfo[]>().notNull().default([]),
+  enabledTools: jsonb('enabled_tools').$type<string[]>().notNull().default([]),
+  toolsFetchedAt: timestamp('tools_fetched_at', {
+    mode: 'date',
+    withTimezone: true,
+  }),
+  createdBy: text('created_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+})
+
 /**
  * Every log line, kept for the Logs page (spec 0042 FR3). Written in batches
  * by `src/lib/observability/log-store.ts` and pruned after

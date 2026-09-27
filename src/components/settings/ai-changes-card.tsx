@@ -8,6 +8,11 @@ const ACTION_TEXT: Record<string, string> = {
   'connection-add': 'added connection',
   'connection-edit': 'edited connection',
   'connection-remove': 'removed connection',
+  'mcp-add': 'added tool server',
+  'mcp-edit': 'edited tool server',
+  'mcp-remove': 'removed tool server',
+  'mcp-tool-on': 'switched on tool',
+  'mcp-tool-off': 'switched off tool',
 }
 
 /** `connection:chat` → `Chat connection`; a setting keeps its variable name. */

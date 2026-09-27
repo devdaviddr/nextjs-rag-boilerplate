@@ -18,7 +18,7 @@ import type {
 } from './retrieve'
 import type { RewriteTurn } from './rewrite'
 import { resolveScope } from './scope'
-import { toolRegistry } from './tools'
+import { allAgentTools } from './tools'
 import { draftFailureMessage, draftRetryDelayMs, parseStreamFrame } from './sse'
 import { stripUnsupported } from './verify'
 
@@ -72,7 +72,7 @@ export interface EvidenceDeps {
    * agentic path, so with any registered every question is planned.
    * Defaults to the registry.
    */
-  hasTools?: () => boolean
+  hasTools?: () => boolean | Promise<boolean>
 }
 
 /**
@@ -109,7 +109,9 @@ export async function gatherEvidence(
   // Plan only when it pays (spec 0043): follow-ups and multi-part
   // questions. A standalone question takes the fixed pipeline below.
   const route = planRoute(question, turns)
-  const hasTools = (deps.hasTools ?? (() => toolRegistry().size > 0))()
+  const hasTools = await (
+    deps.hasTools ?? (async () => (await allAgentTools()).length > 0)
+  )()
   const plan =
     settings.RAG_AGENTIC_ENABLED &&
     (settings.RAG_AGENTIC_ROUTE === 'always' || route.plan || hasTools)

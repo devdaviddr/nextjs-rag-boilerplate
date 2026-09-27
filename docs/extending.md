@@ -124,6 +124,33 @@ const out = await runRegisteredTool(
 
 `tests/unit/rag-tools.test.ts` has more, including a tool that throws.
 
+### Or connect an MCP server
+
+A tool that already exists as a [Model Context Protocol](https://modelcontextprotocol.io)
+server needs no code. In **Settings → Configuration → Tools**, an admin adds
+the server's URL (Streamable HTTP) and a bearer token if it needs one. The
+app lists the server's tools, each **off** until switched on (spec 0048).
+A switched-on tool joins the registry as `mcp_<server>_<tool>`, with the
+server's JSON Schema as its parameters, and behaves like a tool in code: the
+arguments are validated before the call, the call has the loop's budget and
+its own 20-second cap, the result is fenced and capped, and a server that is
+down makes a failed step, not a failed answer.
+
+Three things differ from a tool you write:
+
+- **The server does not know who is asking.** The app sends the tool's
+  arguments and nothing else, so an MCP tool cannot be scoped to a user or a
+  knowledge base. Switch on only tools whose results any user may see.
+- **Its descriptions are the server's words.** They go to the planner as the
+  tool's description, like yours do, so only connect servers you trust.
+- **Private addresses need saying so.** A server's URL is fetched with the
+  same rules as [a web page by URL](rag.md#web-pages-by-url): public
+  addresses on ports 80 and 443 only. For a server on your own network, tick
+  **On a private network**; that skips the checks and is logged.
+
+Local (stdio) servers are not supported: starting a process from a Settings
+page would be remote code execution for whoever can reach it.
+
 ## Change how documents are split
 
 Documents are split into passages of about `RAG_CHUNK_TOKENS` tokens (512)

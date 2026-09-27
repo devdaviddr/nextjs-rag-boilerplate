@@ -147,10 +147,11 @@ describe('safeFetch (NFR2, NFR3)', () => {
               bytes: Buffer.from('<p>hi</p>'),
             },
     })
-    expect(page).toEqual({
+    expect(page).toMatchObject({
       url: 'http://public.example/end',
       contentType: 'text/html',
       bytes: Buffer.from('<p>hi</p>'),
+      status: 200,
     })
   })
 })

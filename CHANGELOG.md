@@ -10,6 +10,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Tools from MCP servers.** Settings → Configuration → Tools connects a
+  Model Context Protocol server over Streamable HTTP. Its tools are listed,
+  each off until an admin switches it on, and switched-on tools are offered to
+  the agentic planner like tools in code: validated against the server's
+  schema, budgeted, fenced and logged. Tokens are encrypted at rest, changes
+  are audited, and a server's URL gets the web-page fetch rules unless it is
+  marked as on a private network (spec 0048, #162).
 - **Anthropic as a provider.** Settings → AI provider has an Anthropic preset,
   and Claude models can be the chat, planner and vision models. Requests go
   through provider adapters (`src/lib/rag/providers/`), so a provider that is

@@ -183,6 +183,13 @@
       "when": 1790474147757,
       "tag": "0025_web_page_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790475051352,
+      "tag": "0026_mcp_servers",
+      "breakpoints": true
     }
   ]
 }

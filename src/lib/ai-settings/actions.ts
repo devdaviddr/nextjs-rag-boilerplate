@@ -117,6 +117,20 @@ export interface AiSettingsView {
   /** `AI_SETTINGS_LOCKED`: shown, never changed (FR5). */
   locked: boolean
   recentChanges: ChangeView[]
+  /** MCP servers and their tools (spec 0048). Never the token. */
+  mcpServers: McpServerView[]
+}
+
+export interface McpServerView {
+  id: string
+  name: string
+  url: string
+  /** Last four characters of the token, or null. */
+  tokenHint: string | null
+  hasToken: boolean
+  internal: boolean
+  tools: Array<{ name: string; description: string; enabled: boolean }>
+  toolsFetchedAt: string | null
 }
 
 export interface TestResult {
@@ -235,7 +249,26 @@ function view(): AiSettingsView {
     reindex,
     locked: Boolean(appEnv.AI_SETTINGS_LOCKED),
     recentChanges: changes,
+    mcpServers: [],
   }
+}
+
+async function loadMcpServerViews(): Promise<McpServerView[]> {
+  const { readMcpServers } = await import('./mcp-store')
+  return (await readMcpServers()).map((row) => ({
+    id: row.id,
+    name: row.name,
+    url: row.url,
+    tokenHint: row.tokenHint,
+    hasToken: Boolean(row.tokenCiphertext),
+    internal: row.internal,
+    tools: row.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      enabled: row.enabledTools.includes(t.name),
+    })),
+    toolsFetchedAt: row.toolsFetchedAt?.toISOString() ?? null,
+  }))
 }
 
 /** The embedding index's state, refreshed with the view. */
@@ -278,7 +311,10 @@ export async function getAiSettingsView(): Promise<
     await loadHints()
     await loadChanges()
     await loadReindex()
-    return { ok: true, data: view() }
+    return {
+      ok: true,
+      data: { ...view(), mcpServers: await loadMcpServerViews() },
+    }
   })
 }
 
@@ -862,6 +898,248 @@ export async function cancelReindex(): Promise<ActionResult> {
       },
       userId,
     )
+    revalidatePath('/settings')
+    return { ok: true, data: null }
+  })
+}
+
+const mcpServerInput = z.object({
+  id: z.string().min(1).optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Give the server a name')
+    .max(40)
+    .regex(/[A-Za-z0-9]/, 'The name needs a letter or a digit'),
+  url: z
+    .string()
+    .trim()
+    .url('Enter the server’s full URL, e.g. https://mcp.example.com/mcp')
+    .refine(
+      (u) => /^https?:\/\//.test(u),
+      'The URL must start with http(s)://',
+    ),
+  /** Blank on an edit keeps the saved token. */
+  token: z.string().trim().max(4000).optional(),
+  clearToken: z.boolean().optional(),
+  /** On a private network: skip the public-address checks (NFR2). */
+  internal: z.boolean().optional(),
+})
+
+export type McpServerInput = z.input<typeof mcpServerInput>
+
+/** A server as the audit log records it: never the token, only its hint. */
+function describeMcpServer(s: {
+  url: string
+  internal: boolean
+  tokenHint: string | null
+  hasToken: boolean
+}): string {
+  const token = s.hasToken
+    ? s.tokenHint
+      ? `token ••••${s.tokenHint}`
+      : 'token'
+    : 'no token'
+  return `${s.url} · ${token}${s.internal ? ' · internal' : ''}`
+}
+
+/** Add or edit an MCP server (spec 0048 FR1, FR6). Admin only, audited. */
+export async function saveMcpServer(
+  input: McpServerInput,
+): Promise<ActionResult<{ id: string }>> {
+  return asAdminWrite(async (userId) => {
+    const parsed = mcpServerInput.safeParse(input)
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? 'Check the form',
+      }
+    }
+    const { id, name, url, token, clearToken } = parsed.data
+    const internal = Boolean(parsed.data.internal)
+    const store = await import('./mcp-store')
+    const all = await store.readMcpServers()
+    if (all.some((s) => s.name === name && s.id !== id)) {
+      return { ok: false, error: 'A tool server already has that name' }
+    }
+    const saved = token
+      ? { ciphertext: encryptSecret(token), hint: secretHint(token) }
+      : clearToken
+        ? null
+        : undefined
+    const previous = id ? all.find((s) => s.id === id) : undefined
+    if (id && !previous) {
+      return { ok: false, error: 'That tool server no longer exists' }
+    }
+    let savedId: string
+    if (id) {
+      await store.updateMcpServer(id, { name, url, internal, token: saved })
+      savedId = id
+    } else {
+      savedId = await store.insertMcpServer(
+        { name, url, internal, token: saved ?? null },
+        userId,
+      )
+    }
+    const after = describeMcpServer({
+      url,
+      internal,
+      tokenHint:
+        saved === undefined
+          ? (previous?.tokenHint ?? null)
+          : (saved?.hint ?? null),
+      hasToken:
+        saved === undefined ? Boolean(previous?.tokenCiphertext) : !!saved,
+    })
+    const before = previous
+      ? describeMcpServer({
+          url: previous.url,
+          internal: previous.internal,
+          tokenHint: previous.tokenHint,
+          hasToken: Boolean(previous.tokenCiphertext),
+        })
+      : null
+    if (before !== after || previous?.name !== name) {
+      await auditChange(
+        {
+          action: id ? 'mcp-edit' : 'mcp-add',
+          key: name,
+          oldValue: before,
+          newValue: after,
+        },
+        userId,
+      )
+    }
+    if (internal) {
+      logger.warn(
+        'MCP server marked internal: fetched without address checks',
+        {
+          server: name,
+        },
+      )
+    }
+    logger.info('ai-settings: MCP server saved', { id: savedId })
+    revalidatePath('/settings')
+    return { ok: true, data: { id: savedId } }
+  })
+}
+
+/**
+ * Connect to a server and refresh its list of tools (FR1, FR5). A tool that
+ * is no longer listed is switched off. Only the tools' names and
+ * descriptions come back to the browser.
+ */
+export async function testMcpServer(
+  id: string,
+): Promise<ActionResult<{ latencyMs: number; tools: number }>> {
+  return asAdmin(async () => {
+    const store = await import('./mcp-store')
+    const server = await store.readMcpServer(id)
+    if (!server)
+      return { ok: false, error: 'That tool server no longer exists' }
+    const { decryptSecret } = await import('./crypto')
+    const token = server.tokenCiphertext
+      ? decryptSecret(server.tokenCiphertext)
+      : undefined
+    if (token === null) {
+      return {
+        ok: false,
+        error: `The token saved for "${server.name}" can no longer be read; enter it again.`,
+      }
+    }
+    const { McpError, listMcpTools } =
+      await import('@/lib/rag/tools/mcp-client')
+    const started = Date.now()
+    let tools
+    try {
+      tools = await listMcpTools({
+        name: server.name,
+        url: server.url,
+        token,
+        internal: server.internal,
+      })
+    } catch (error) {
+      if (error instanceof McpError) return { ok: false, error: error.message }
+      logger.warn('MCP test failed', {
+        server: server.name,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return { ok: false, error: `${server.name} could not be reached.` }
+    }
+    const names = new Set(tools.map((t) => t.name))
+    await store.updateMcpServer(id, {
+      tools,
+      enabledTools: server.enabledTools.filter((n) => names.has(n)),
+      toolsFetchedAt: new Date(),
+    })
+    revalidatePath('/settings')
+    return {
+      ok: true,
+      data: { latencyMs: Date.now() - started, tools: tools.length },
+    }
+  })
+}
+
+/** Switch one of a server's tools on or off (FR2, FR6). Audited. */
+export async function setMcpToolEnabled(
+  id: string,
+  toolName: string,
+  enabled: boolean,
+): Promise<ActionResult> {
+  return asAdminWrite(async (userId) => {
+    const store = await import('./mcp-store')
+    const server = await store.readMcpServer(id)
+    if (!server)
+      return { ok: false, error: 'That tool server no longer exists' }
+    if (!server.tools.some((t) => t.name === toolName)) {
+      return { ok: false, error: `${server.name} does not list ${toolName}` }
+    }
+    const current = new Set(server.enabledTools)
+    if (current.has(toolName) === enabled) return { ok: true, data: null }
+    if (enabled) current.add(toolName)
+    else current.delete(toolName)
+    await store.updateMcpServer(id, { enabledTools: [...current] })
+    await auditChange(
+      {
+        action: enabled ? 'mcp-tool-on' : 'mcp-tool-off',
+        key: `${server.name} · ${toolName}`,
+        oldValue: enabled ? 'off' : 'on',
+        newValue: enabled ? 'on' : 'off',
+      },
+      userId,
+    )
+    logger.info('ai-settings: MCP tool switched', {
+      server: server.name,
+      tool: toolName,
+      enabled,
+    })
+    revalidatePath('/settings')
+    return { ok: true, data: null }
+  })
+}
+
+/** Remove a server and its tools (FR6). Audited. */
+export async function removeMcpServer(id: string): Promise<ActionResult> {
+  return asAdminWrite(async (userId) => {
+    const store = await import('./mcp-store')
+    const previous = await store.readMcpServer(id)
+    if (!previous) return { ok: true, data: null }
+    await store.deleteMcpServer(id)
+    await auditChange(
+      {
+        action: 'mcp-remove',
+        key: previous.name,
+        oldValue: describeMcpServer({
+          url: previous.url,
+          internal: previous.internal,
+          tokenHint: previous.tokenHint,
+          hasToken: Boolean(previous.tokenCiphertext),
+        }),
+        newValue: null,
+      },
+      userId,
+    )
+    logger.info('ai-settings: MCP server removed', { id })
     revalidatePath('/settings')
     return { ok: true, data: null }
   })

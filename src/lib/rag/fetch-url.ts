@@ -111,6 +111,16 @@ export interface FetchedPage {
   url: string
   contentType: string
   bytes: Buffer
+  status: number
+  /** Response headers, names lower-cased. */
+  headers: Record<string, string>
+}
+
+/** A request other than a plain GET, e.g. an MCP call (spec 0048 NFR2). */
+export interface RequestInit {
+  method?: 'GET' | 'POST' | 'DELETE'
+  headers?: Record<string, string>
+  body?: string
 }
 
 export interface SafeFetchOptions {
@@ -122,6 +132,12 @@ export interface SafeFetchOptions {
   resolve?: (host: string) => Promise<{ address: string; family: number }[]>
   /** For tests: make the request to the checked address. */
   transport?: typeof requestPinned
+  /** Method, headers and body. Only a GET follows redirects. */
+  request?: RequestInit
+  /** Return a non-2xx response instead of refusing it. */
+  anyStatus?: boolean
+  /** The caller's own deadline, e.g. the agentic loop's, besides `timeoutMs`. */
+  signal?: AbortSignal
 }
 
 const MAX_REDIRECTS = 3
@@ -183,22 +199,25 @@ export function requestPinned(
   pinned: { address: string; family: number },
   signal: AbortSignal,
   maxBytes: number,
+  init: RequestInit = {},
 ): Promise<{
   status: number
   location?: string
   contentType: string
   bytes: Buffer
+  headers?: Record<string, string>
 }> {
   const client = url.protocol === 'https:' ? https : http
   return new Promise((resolve, reject) => {
     const req = client.request(
       url,
       {
-        method: 'GET',
+        method: init.method ?? 'GET',
         signal,
         headers: {
           'user-agent': 'rag-boilerplate/1 (+document fetch)',
           accept: 'text/html, application/pdf;q=0.9',
+          ...init.headers,
         },
         // Connect to the address that was checked; Host and SNI stay the name.
         // Node asks for every address (`all`) when it races address families.
@@ -213,6 +232,12 @@ export function requestPinned(
       },
       (res) => {
         const status = res.statusCode ?? 0
+        const headers = Object.fromEntries(
+          Object.entries(res.headers).map(([k, v]) => [
+            k.toLowerCase(),
+            Array.isArray(v) ? v.join(', ') : String(v ?? ''),
+          ]),
+        )
         if (status >= 300 && status < 400) {
           res.resume()
           return resolve({
@@ -220,6 +245,7 @@ export function requestPinned(
             location: res.headers.location,
             contentType: '',
             bytes: Buffer.alloc(0),
+            headers,
           })
         }
         const chunks: Buffer[] = []
@@ -240,13 +266,14 @@ export function requestPinned(
             status,
             contentType: String(res.headers['content-type'] ?? ''),
             bytes: Buffer.concat(chunks),
+            headers,
           }),
         )
         res.on('error', reject)
       },
     )
     req.on('error', reject)
-    req.end()
+    req.end(init.body)
   })
 }
 
@@ -258,7 +285,10 @@ export async function safeFetch(
   const resolve =
     options.resolve ??
     ((host: string) => lookup(host, { all: true, verbatim: true }))
-  const signal = AbortSignal.timeout(options.timeoutMs ?? 15_000)
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? 15_000)
+  const signal = options.signal
+    ? AbortSignal.any([deadline, options.signal])
+    : deadline
   let url = checkUrl(raw, options.allowedHosts)
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const pinned = await resolvePublic(url, resolve)
@@ -269,6 +299,7 @@ export async function safeFetch(
         pinned,
         signal,
         options.maxBytes,
+        options.request,
       )
     } catch (error) {
       if (error instanceof UnsafeUrlError) throw error
@@ -277,6 +308,11 @@ export async function safeFetch(
       throw new UnsafeUrlError('That page could not be fetched.')
     }
     if (res.location !== undefined) {
+      // A redirect would replay a POST's body somewhere else; only GETs follow.
+      if ((options.request?.method ?? 'GET') !== 'GET')
+        throw new UnsafeUrlError(
+          'That address redirects, which is not followed.',
+        )
       if (hop === MAX_REDIRECTS)
         throw new UnsafeUrlError('That address redirects too many times.')
       url = checkUrl(
@@ -285,7 +321,7 @@ export async function safeFetch(
       )
       continue
     }
-    if (res.status < 200 || res.status >= 300) {
+    if (!options.anyStatus && (res.status < 200 || res.status >= 300)) {
       throw new UnsafeUrlError(
         `That page could not be fetched (HTTP ${res.status}).`,
       )
@@ -294,6 +330,8 @@ export async function safeFetch(
       url: url.toString(),
       contentType: res.contentType,
       bytes: res.bytes,
+      status: res.status,
+      headers: res.headers ?? {},
     }
   }
   throw new UnsafeUrlError('That address redirects too many times.')

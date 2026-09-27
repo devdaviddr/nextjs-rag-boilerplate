@@ -732,6 +732,7 @@ sends over the wire, and what a free-tier rate limit costs you per question.
 | All retrieval SQL (swap for another store)  | `src/lib/rag/retrieval-store.ts` |
 | Document formats: one loader each           | `src/lib/rag/loaders/`           |
 | Fetching a URL safely (SSRF rules)          | `src/lib/rag/fetch-url.ts`       |
+| MCP client and MCP tools                    | `src/lib/rag/tools/mcp*.ts`      |
 | Section runs and parent assembly (pure)     | `src/lib/rag/parents.ts`         |
 | Prompt construction and fencing             | `src/lib/rag/prompt.ts`          |
 | Upload / URL / list / delete / retry        | `src/lib/rag/actions.ts`         |

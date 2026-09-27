@@ -9,7 +9,12 @@ import {
   neutraliseFence,
   newFenceId,
 } from './prompt'
-import { runRegisteredTool, toolDefinition, toolRegistry } from './tools'
+import {
+  allAgentTools,
+  runRegisteredTool,
+  toolDefinition,
+  toolRegistry,
+} from './tools'
 import { span } from '@/lib/observability/runs'
 import {
   type LoopFigureReading,
@@ -265,7 +270,7 @@ export async function runAgenticRetrieval(input: {
   const multiPart = planRoute(question, turns).reason === 'multi-part'
   const confident = aiSettings().RAG_AGENTIC_CONFIDENT_SIMILARITY
   const maxSearches = aiSettings().RAG_MAX_SEARCHES
-  const registry = toolRegistry()
+  const registry = toolRegistry(await allAgentTools())
   const toolNames = new Set(registry.keys())
   const outcome = await runAgenticLoop(
     {

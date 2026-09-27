@@ -80,14 +80,31 @@ and connecting one should not need a code change and a deploy (#141).
 
 ## Acceptance criteria
 
-- [ ] FR1: a server is added, tested and its tools listed
-- [ ] FR2: only switched-on tools reach the planner
-- [ ] FR3, FR4: a call is validated, sent with `tools/call`, and its text is
-      the result (against a stub MCP server in tests)
-- [ ] FR5: a down server makes a failed step, not a failed answer
-- [ ] FR6: changes are audited and admin-only
-- [ ] NFR1: the token is encrypted and never reaches the browser
-- [ ] NFR2: an MCP URL is fetched with spec 0047's protections
+- [x] FR1: a server is added, tested and its tools listed — e2e
+      `mcp-tools.spec.ts` (Settings → Configuration → Tools, against a stub
+      server); `mcp-tools.test.ts` (initialize, session, every page of
+      `tools/list`, JSON and event-stream replies)
+- [x] FR2: only switched-on tools reach the planner — `mcp-tools.test.ts`
+      _"offers only the switched-on tools"_; `ai-settings-actions.test.ts`
+      (listed off, switched on one at a time); live: the NIM planner called a
+      switched-on stub tool with `tools/call` and answered from it
+- [x] FR3, FR4: a call is validated, sent with `tools/call`, and its text is
+      the result (against a stub MCP server in tests) — `mcp-tools.test.ts`
+      _"validates arguments against the server schema, then calls it"_
+- [x] FR5: a down server makes a failed step, not a failed answer —
+      `mcp-tools.test.ts` _"a server that is down makes a failed step"_; a
+      failure to load MCP tools leaves the agent its own tools
+- [x] FR6: changes are audited and admin-only — `ai-settings-actions.test.ts`
+      (every action refused to a non-admin; add, switch on and remove
+      audited; the lock refuses changes); e2e: the switch appears in Recent
+      changes
+- [x] NFR1: the token is encrypted and never reaches the browser —
+      `ai-settings-actions.test.ts` (stored `v1:` ciphertext, absent from the
+      view and the audit); e2e: no response the page received contains it
+- [x] NFR2: an MCP URL is fetched with spec 0047's protections —
+      `mcp-tools.test.ts` (a local and a metadata address refused unless
+      marked internal); e2e: a local server is refused until marked as on a
+      private network
 
 ## Security & privacy
 

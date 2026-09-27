@@ -39,6 +39,31 @@ export function toolRegistry(
   return registry
 }
 
+/**
+ * The tools in code plus the switched-on MCP tools (spec 0048), read fresh
+ * for each question. An MCP tool whose name a tool in code already has is
+ * left out rather than failing the question.
+ */
+export async function allAgentTools(): Promise<AnyAgentTool[]> {
+  let loaded: AnyAgentTool[] = []
+  try {
+    const { mcpTools } = await import('./mcp')
+    loaded = await mcpTools()
+  } catch (error) {
+    // No MCP tools is a safe answer; a failed question is not.
+    logger.warn('MCP tools could not be loaded', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  const taken = new Set([...BUILT_IN, ...agentTools.map((t) => t.name)])
+  const fromMcp = loaded.filter((t) => {
+    if (!taken.has(t.name)) return true
+    logger.warn('MCP tool skipped: its name is taken', { tool: t.name })
+    return false
+  })
+  return [...agentTools, ...fromMcp]
+}
+
 /** A tool as the planner's request advertises it. */
 export function toolDefinition(tool: AnyAgentTool) {
   return {
