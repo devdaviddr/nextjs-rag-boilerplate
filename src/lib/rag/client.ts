@@ -9,16 +9,23 @@ import {
 } from '@/lib/ai-settings'
 import { DEFAULT_LLM_BASE_URL, inferenceKey } from '@/lib/ai-env'
 import { APP_NAME } from '@/lib/brand'
-import { presetHeaders } from '@/lib/ai-settings/presets'
+import { presetById, presetHeaders } from '@/lib/ai-settings/presets'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { annotateSpan } from '@/lib/observability/runs'
 import type { EmbeddingInputType } from './constants'
+import {
+  type OpenAiChatBody,
+  type ProviderAdapter,
+  adapterFor,
+} from './providers'
 
 /**
- * Client for an OpenAI-compatible inference endpoint — NVIDIA NIM by default,
- * but `RAG_LLM_BASE_URL` accepts any compatible server, so pointing it at a
+ * Client for the inference endpoints — NVIDIA NIM by default, but
+ * `RAG_LLM_BASE_URL` accepts any OpenAI-compatible server, so pointing it at a
  * local Ollama or llama.cpp gives a fully offline deployment (spec 0025).
+ * Requests are built in OpenAI's format; a connection's provider adapter
+ * translates them where its API differs, e.g. Anthropic (spec 0045).
  *
  * `server-only` so the API key can never be bundled into client JS.
  */
@@ -44,6 +51,8 @@ function keyFor(role: AiRole): {
   url: string
   key: string | undefined
   headers: Record<string, string>
+  preset: string
+  adapter: ProviderAdapter
 } {
   const connection = connectionFor(role)
   const url = connection.baseUrl.replace(/\/$/, '')
@@ -51,8 +60,10 @@ function keyFor(role: AiRole): {
     url: env.APP_URL,
     name: APP_NAME,
   })
+  const preset = connection.preset
+  const adapter = adapterFor(preset)
   if (connection.id === ENV_CONNECTION_ID) {
-    return { url, key: requireKey(), headers }
+    return { url, key: requireKey(), headers, preset, adapter }
   }
   if (connection.keyUnreadable) {
     throw new RagUpstreamError(
@@ -60,7 +71,7 @@ function keyFor(role: AiRole): {
       `the API key saved for "${connection.name}" can no longer be read; enter it again in Settings`,
     )
   }
-  return { url, key: connection.apiKey, headers }
+  return { url, key: connection.apiKey, headers, preset, adapter }
 }
 
 export class RagNotConfiguredError extends Error {
@@ -182,10 +193,9 @@ async function post(
     timeoutMs?: number
     maxAttempts?: number
   },
+  endpoint: ReturnType<typeof keyFor> = keyFor(role),
 ): Promise<Response> {
   const attempts = Math.min(MAX_ATTEMPTS, Math.max(1, Math.floor(maxAttempts)))
-  const endpoint = keyFor(role)
-  const key = endpoint.key
   const url = `${endpoint.url}${path}`
 
   let lastDetail = 'no response'
@@ -197,7 +207,7 @@ async function post(
         method: 'POST',
         headers: {
           ...endpoint.headers,
-          ...(key ? { Authorization: `Bearer ${key}` } : {}),
+          ...endpoint.adapter.authHeaders(endpoint.key),
           'Content-Type': 'application/json',
           Accept: stream ? 'text/event-stream' : 'application/json',
         },
@@ -287,10 +297,22 @@ export async function createEmbeddings(
 ): Promise<number[][]> {
   if (input.length === 0) return []
 
+  const endpoint = keyFor('embed')
+  const preset = presetById(endpoint.preset)
+  if (!endpoint.adapter.embeddings) {
+    throw new RagUpstreamError(
+      400,
+      `${preset.label} has no embeddings API; point RAG_LLM_BASE_URL at an endpoint that does`,
+    )
+  }
+  // `input_type` only where it is understood (spec 0045 FR5).
   const response = await post(
     '/embeddings',
-    { input, model, input_type: inputType },
+    preset.embedInputType
+      ? { input, model, input_type: inputType }
+      : { input, model },
     { role: 'embed', signal },
+    endpoint,
   )
 
   const json = (await response.json()) as EmbeddingsResponse
@@ -334,25 +356,29 @@ export async function createChatStream(
   messages: ChatMessage[],
   signal?: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
+  const endpoint = keyFor('chat')
+  const request = endpoint.adapter.chatRequest({
+    model: modelFor('chat'),
+    messages,
+    stream: true,
+    temperature: 0.2,
+    // Ask for a final usage frame so token counts are the provider's own
+    // rather than inferred by counting stream deltas, which is not the same
+    // thing as counting tokens.
+    stream_options: { include_usage: true },
+  })
   const response = await post(
-    '/chat/completions',
-    {
-      model: modelFor('chat'),
-      messages,
-      stream: true,
-      temperature: 0.2,
-      // Ask for a final usage frame so token counts are the provider's own
-      // rather than inferred by counting stream deltas, which is not the same
-      // thing as counting tokens.
-      stream_options: { include_usage: true },
-    },
+    request.path,
+    request.body,
     { role: 'chat', stream: true, signal },
+    endpoint,
   )
 
   if (!response.body) {
     throw new RagUpstreamError(response.status, 'upstream returned no body')
   }
-  return response.body
+  // As OpenAI SSE frames, whatever the provider streams.
+  return endpoint.adapter.chatStream(response.body)
 }
 
 /** The chat model in use, for display alongside an answer. */
@@ -421,8 +447,10 @@ export async function createChatCompletion(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<{ choice: CompletionChoice; tokens: number }> {
-  const body: Record<string, unknown> = {
-    model: options.model ?? modelFor(options.role ?? 'chat'),
+  const role = options.role ?? 'chat'
+  const endpoint = keyFor(role)
+  const body: OpenAiChatBody = {
+    model: options.model ?? modelFor(role),
     messages,
     stream: false,
     temperature: options.temperature ?? 0.2,
@@ -434,24 +462,29 @@ export async function createChatCompletion(
   }
   // Skip the planner's hidden reasoning when asked (#84). Planner-role calls
   // only: the field is a chat-template option some providers reject.
-  if (
-    (options.role ?? 'chat') === 'planner' &&
-    aiSettings().RAG_PLANNER_REASONING === 'off'
-  ) {
+  if (role === 'planner' && aiSettings().RAG_PLANNER_REASONING === 'off') {
     body.chat_template_kwargs = { enable_thinking: false }
   }
 
-  const response = await post('/chat/completions', body, {
-    role: options.role ?? 'chat',
-    signal: options.signal,
-    ...(options.timeoutMs !== undefined
-      ? { timeoutMs: options.timeoutMs }
-      : {}),
-    ...(options.maxAttempts !== undefined
-      ? { maxAttempts: options.maxAttempts }
-      : {}),
-  })
-  const json = (await response.json()) as CompletionResponse
+  const request = endpoint.adapter.chatRequest(body)
+  const response = await post(
+    request.path,
+    request.body,
+    {
+      role,
+      signal: options.signal,
+      ...(options.timeoutMs !== undefined
+        ? { timeoutMs: options.timeoutMs }
+        : {}),
+      ...(options.maxAttempts !== undefined
+        ? { maxAttempts: options.maxAttempts }
+        : {}),
+    },
+    endpoint,
+  )
+  const json = endpoint.adapter.chatResponse(
+    await response.json(),
+  ) as CompletionResponse
   const tokens = json.usage?.total_tokens ?? 0
   // Credit the model and tokens to whichever run step made this call.
   annotateSpan({ model: String(body.model), tokens })

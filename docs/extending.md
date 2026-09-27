@@ -199,10 +199,29 @@ export const myLoader: DocumentLoader = {
 Parse text only: never run a script or macro a document carries, and never
 fetch what it links to.
 
-## Coming next
+## Add a model provider
 
-A model provider that is not OpenAI-compatible (spec 0045) will be covered
-here when it ships.
+The app builds every model request in OpenAI's chat-completions format. A
+provider whose API differs gets an **adapter** in `src/lib/rag/providers/`
+that translates to and from that format, and the RAG code never sees the
+difference (spec 0045). Anthropic's is the worked example
+(`providers/anthropic.ts`). An adapter has four parts:
+
+- **`authHeaders(key)`**: how the key is sent (`x-api-key` and
+  `anthropic-version` for Anthropic, a bearer token for OpenAI).
+- **`chatRequest(body)`**: the path and the provider's body for an OpenAI
+  body: system prompt, messages, image parts, tools.
+- **`chatResponse(json)`**: the provider's reply as an OpenAI response, with
+  tool calls as `tool_calls` and the token counts as `usage`.
+- **`chatStream(body)`**: the provider's stream as OpenAI SSE frames, so the
+  answer path's `parseStreamFrame` reads it unchanged.
+
+Then add a preset in `src/lib/ai-settings/presets.ts` (its URL, whether it
+needs a key, whether it has embeddings) and map it in `adapterFor`
+(`providers/index.ts`). Retries, deadlines and error messages stay in the
+client's one transport, so a new adapter gets them for free. Test the
+translation against the provider's documented payloads, as
+`tests/unit/rag-providers.test.ts` does for Anthropic.
 
 **Next:** [Architecture](architecture.md) for how the pieces fit, or
 [RAG](rag.md) for the retrieval reference.

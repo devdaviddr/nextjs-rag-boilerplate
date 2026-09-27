@@ -725,6 +725,7 @@ sends over the wire, and what a free-tier rate limit costs you per question.
 | Token-aware, page-bounded chunking (pure)   | `src/lib/rag/chunk.ts`           |
 | `embedPassages()` / `embedQuery()`          | `src/lib/rag/embed.ts`           |
 | NIM client: retries, backoff, usage frame   | `src/lib/rag/client.ts`          |
+| Provider adapters (OpenAI, Anthropic)       | `src/lib/rag/providers/`         |
 | Ingestion state machine                     | `src/lib/rag/ingest.ts`          |
 | Content question vs whole-document request  | `src/lib/rag/scope.ts`           |
 | Owner- and KB-scoped retrieval              | `src/lib/rag/retrieve.ts`        |

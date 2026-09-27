@@ -47,6 +47,7 @@ import {
   presetForUrl,
   presetHeaders,
 } from './presets'
+import { type OpenAiChatBody, adapterFor } from '@/lib/rag/providers'
 import {
   RETRIEVAL_FIELDS,
   describeRange,
@@ -425,7 +426,7 @@ function authHeaders(
 ): Record<string, string> {
   return {
     ...presetHeaders(preset, { url: appEnv.APP_URL, name: APP_NAME }),
-    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    ...adapterFor(preset).authHeaders(apiKey),
   }
 }
 
@@ -632,11 +633,20 @@ export async function testRole(
     }
     const model = modelFor(role)
     const base = connection.baseUrl.replace(/\/$/, '')
+    const adapter = adapterFor(connection.preset)
+    if (role === 'embed' && !adapter.embeddings) {
+      return {
+        ok: false,
+        error: `${presetById(connection.preset).label} has no embeddings API; embeddings need another connection.`,
+      }
+    }
     // The planner is tested the way the app calls it: its own prompt, the
     // search tool, and room to think first (it is a reasoning model).
     const body =
       role === 'embed'
-        ? { input: ['test'], model, input_type: 'query' }
+        ? presetById(connection.preset).embedInputType
+          ? { input: ['test'], model, input_type: 'query' }
+          : { input: ['test'], model }
         : role === 'planner'
           ? {
               model,
@@ -660,7 +670,13 @@ export async function testRole(
               // Chat answers are streamed, so its test streams too (FR9).
               stream: role === 'chat',
             }
-    const url = `${base}${role === 'embed' ? '/embeddings' : '/chat/completions'}`
+    // Chat jobs go through the connection's adapter (spec 0045); for an
+    // OpenAI-compatible one that is the body above, unchanged.
+    const request =
+      role === 'embed'
+        ? { path: '/embeddings', body }
+        : adapter.chatRequest(body as OpenAiChatBody)
+    const url = `${base}${request.path}`
     const started = Date.now()
     let response: Response | null = null
     // One retry on a rate limit or a transient upstream error, as the app's
@@ -673,7 +689,7 @@ export async function testRole(
             ...authHeaders(connection.apiKey, connection.preset),
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(request.body),
           signal: AbortSignal.timeout(ROLE_TEST_TIMEOUT_MS),
           cache: 'no-store',
         })
@@ -701,7 +717,11 @@ export async function testRole(
       }
     }
     if (role === 'chat') {
-      const text = await response.text().catch(() => '')
+      const text = response.body
+        ? await new Response(adapter.chatStream(response.body))
+            .text()
+            .catch(() => '')
+        : ''
       if (!/^data:/m.test(text)) {
         return {
           ok: false,
@@ -711,7 +731,10 @@ export async function testRole(
       }
       return { ok: true, data: { latencyMs, detail: 'streamed an answer' } }
     }
-    const json = (await response.json().catch(() => null)) as {
+    const raw = await response.json().catch(() => null)
+    const json = (
+      role === 'embed' || raw === null ? raw : adapter.chatResponse(raw)
+    ) as {
       data?: { embedding?: unknown[] }[]
       choices?: { message?: { tool_calls?: unknown[] } }[]
     } | null

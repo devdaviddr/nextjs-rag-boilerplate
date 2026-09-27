@@ -10,6 +10,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Anthropic as a provider.** Settings → AI provider has an Anthropic preset,
+  and Claude models can be the chat, planner and vision models. Requests go
+  through provider adapters (`src/lib/rag/providers/`), so a provider that is
+  not OpenAI-compatible is one module; Anthropic has no embeddings API, so
+  embeddings stay on another connection (spec 0045, #159).
 - **Web pages by URL.** "Add URL" on a knowledge base fetches a web page or
   an online PDF, indexes it like an upload and links its citations back to the
   page; refresh fetches it again. The fetch refuses private, loopback,
@@ -63,6 +68,9 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- Embeddings requests send NVIDIA's `input_type` only where it is understood:
+  not to OpenAI or OpenRouter, which reject it. The OpenAI preset no longer
+  says its embeddings are unusable; they index at their own size (#159).
 - The production build no longer copies the whole repository into its
   standalone output (186 MB down to 119 MB): the local-disk storage paths are
   marked for the bundler. Following the extending guide no longer fails

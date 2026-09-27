@@ -108,8 +108,10 @@ Admins get a **Configuration** section in **Settings** (spec 0040):
 
 - **AI provider** lists the endpoints the app can send questions to. The
   `.env` endpoint is always there. Add more with a preset (NVIDIA NIM,
-  OpenRouter, a llama.cpp server, OpenAI, Ollama, vLLM / LM Studio) or any
-  OpenAI-compatible URL. API keys are encrypted at rest (AES-256-GCM) and never
+  OpenRouter, a llama.cpp server, OpenAI, Anthropic, Ollama, vLLM / LM Studio)
+  or any OpenAI-compatible URL. Anthropic is spoken natively through its own
+  adapter, for chat, the planner and vision; it has no embeddings API, so
+  embeddings stay on the `.env` endpoint. API keys are encrypted at rest (AES-256-GCM) and never
   sent back to the browser; the page shows the last four characters at most.
   **Test** lists the endpoint's models; for OpenRouter the model picker also
   shows each model's context length and price, and requests carry its

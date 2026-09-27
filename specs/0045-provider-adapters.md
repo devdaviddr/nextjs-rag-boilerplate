@@ -59,7 +59,12 @@ Two smaller defects share the cause:
 - **FR1** — A `ChatAdapter` interface: `complete(messages, options)` returns a
   normalised choice (content, tool calls, finish reason) and token usage;
   `stream(messages, signal)` returns the answer as OpenAI-style SSE frames, so
-  `parseStreamFrame` and the answer path are unchanged.
+  `parseStreamFrame` and the answer path are unchanged. Amended while
+  building: the adapter (`ProviderAdapter`) translates rather than calls —
+  `chatRequest`, `chatResponse`, `chatStream`, `authHeaders` — with OpenAI's
+  format as the common one. The transport stays the client's one `post()`, so
+  retries and deadlines are shared by construction (NFR2), and the
+  OpenAI-compatible adapter is the identity (NFR1).
 - **FR2** — The OpenAI-compatible adapter is today's code moved behind that
   interface, request for request.
 - **FR3** — An Anthropic adapter for the `anthropic` preset: Messages API
@@ -71,7 +76,10 @@ Two smaller defects share the cause:
   An `anthropic` connection may serve the chat, planner, vision and parse roles;
   Settings refuses it for the embed role with a plain message.
 - **FR5** — Embeddings requests send `input_type` only for presets that accept
-  it (NVIDIA NIM); others get the plain OpenAI request.
+  it (NVIDIA NIM); others get the plain OpenAI request. Amended while
+  building: "others" means providers known to reject unknown fields (OpenAI,
+  OpenRouter). Custom and local servers keep it, since a self-hosted NIM behind
+  the Custom preset needs it and llama.cpp, Ollama and vLLM ignore it.
 - **FR6** — The OpenAI preset's stale note is removed: its embeddings work at
   their own size, like any generation.
 
@@ -99,15 +107,24 @@ Two smaller defects share the cause:
 
 ## Acceptance criteria
 
-- [ ] FR1, FR2: the OpenAI-compatible adapter passes the existing client tests
-      unmodified (`rag-client-*.test.ts`)
-- [ ] FR3: request and stream translation unit-tested against recorded
-      Anthropic payloads, tool calls included
-- [ ] FR4: an Anthropic connection serves chat and planner; Settings refuses it
-      for embeddings
-- [ ] FR5: `input_type` is sent to NIM and not to other presets
-- [ ] FR6: the OpenAI preset's note is gone
-- [ ] NFR1: an OpenAI-compatible deployment's requests are unchanged
+- [x] FR1, FR2: the OpenAI-compatible adapter passes the existing client tests
+      unmodified (`rag-client-*.test.ts`) — unchanged and passing; the adapter
+      is the identity (`providers/openai.ts`)
+- [x] FR3: request and stream translation unit-tested against recorded
+      Anthropic payloads, tool calls included — `rag-providers.test.ts`
+      (system, merged turns, images, tools; `tool_use` back as tool calls;
+      the event stream as frames `parseStreamFrame` reads; error events)
+- [x] FR4: an Anthropic connection serves chat and planner; Settings refuses it
+      for embeddings — `rag-providers.test.ts` _"the client with an Anthropic
+      endpoint"_ (planner to `/messages` with its headers, chat streamed,
+      embeddings refused); embeddings cannot be moved to a saved connection,
+      and Settings' job test says Anthropic has no embeddings API. Not yet run
+      against the live API (no key in this environment)
+- [x] FR5: `input_type` is sent to NIM and not to other presets —
+      `rag-providers.test.ts` _"input_type on embeddings"_
+- [x] FR6: the OpenAI preset's note is gone — `presets.ts`
+- [x] NFR1: an OpenAI-compatible deployment's requests are unchanged — the
+      client tests, and the chat, RAG and Settings e2e suites against NIM
 
 ## Security & privacy
 
