@@ -203,7 +203,7 @@ export function DocumentsPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         {!configured && (
-          <FormMessage message="Document chat isn't configured on this deployment. Set NVIDIA_API_KEY to enable uploads and chat." />
+          <FormMessage message="Document chat isn't configured on this deployment. Set LLM_API_KEY to enable uploads and chat." />
         )}
         {error && <FormMessage message={error} />}
 

@@ -413,7 +413,7 @@ walks, and the RAG suites skip themselves when there is no API key.
 - Playwright for E2E (full auth flow, protected-route redirects, PWA
   manifest/SW/offline).
 - RAG suites covering chunking, retrieval scoping, the agentic loop's budgets,
-  and the product end to end. They self-skip without `NVIDIA_API_KEY`.
+  and the product end to end. They self-skip without `LLM_API_KEY`.
 - Runs locally against a real Postgres.
 
 The full scope of each suite, and the `--workers=1` rule for the agentic path,

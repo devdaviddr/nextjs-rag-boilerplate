@@ -7,6 +7,7 @@ import {
   connectionFor,
   modelFor,
 } from '@/lib/ai-settings'
+import { DEFAULT_LLM_BASE_URL, inferenceKey } from '@/lib/ai-env'
 import { APP_NAME } from '@/lib/brand'
 import { presetHeaders } from '@/lib/ai-settings/presets'
 import { env } from '@/lib/env'
@@ -22,11 +23,16 @@ import type { EmbeddingInputType } from './constants'
  * `server-only` so the API key can never be bundled into client JS.
  */
 
-/** True when a key is configured. The RAG features report themselves as
- * unavailable rather than throwing at boot, so builds and CI work without
- * secrets — same posture as OAuth/email/push in this boilerplate. */
+/**
+ * True when the `.env` endpoint can be called: it has a key, or it is a
+ * custom endpoint, which may need none — a local Ollama or llama.cpp server
+ * (#136). Only the default, NVIDIA NIM, always needs one. The RAG features
+ * report themselves as unavailable rather than throwing at boot, so builds
+ * and CI work without secrets — same posture as OAuth/email/push.
+ */
 export function isRagConfigured(): boolean {
-  return Boolean(aiSettings().NVIDIA_API_KEY)
+  const s = aiSettings()
+  return Boolean(inferenceKey(s)) || s.RAG_LLM_BASE_URL !== DEFAULT_LLM_BASE_URL
 }
 
 /**
@@ -60,7 +66,7 @@ function keyFor(role: AiRole): {
 export class RagNotConfiguredError extends Error {
   constructor() {
     super(
-      'Document chat is not configured. Set NVIDIA_API_KEY to enable it — a free key is available at build.nvidia.com.',
+      'Document chat is not configured. Set LLM_API_KEY to enable it — a free NVIDIA NIM key is available at build.nvidia.com.',
     )
     this.name = 'RagNotConfiguredError'
   }
@@ -75,10 +81,17 @@ export class RagUpstreamError extends Error {
   }
 }
 
-function requireKey(): string {
-  const key = aiSettings().NVIDIA_API_KEY
-  if (!key) throw new RagNotConfiguredError()
-  return key
+let warnedLegacyKey = false
+
+/** The `.env` endpoint's key; `undefined` for a custom endpoint without one. */
+function requireKey(): string | undefined {
+  const s = aiSettings()
+  if (!s.LLM_API_KEY && s.NVIDIA_API_KEY && !warnedLegacyKey) {
+    warnedLegacyKey = true
+    logger.warn('NVIDIA_API_KEY is deprecated; rename it to LLM_API_KEY')
+  }
+  if (!isRagConfigured()) throw new RagNotConfiguredError()
+  return inferenceKey(s)
 }
 
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504])

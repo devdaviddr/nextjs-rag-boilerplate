@@ -104,7 +104,7 @@ export async function uploadDocument(
     return {
       ok: false,
       error:
-        'Document chat is not configured on this deployment (NVIDIA_API_KEY is unset).',
+        'Document chat is not configured on this deployment (LLM_API_KEY is unset).',
     }
   }
 

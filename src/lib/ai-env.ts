@@ -9,6 +9,20 @@ import { z } from 'zod'
  * zod only, like env.ts, so it is safe in any runtime.
  */
 
+/** NVIDIA NIM, the endpoint used when `RAG_LLM_BASE_URL` is not set. */
+export const DEFAULT_LLM_BASE_URL = 'https://integrate.api.nvidia.com/v1'
+
+/**
+ * The `.env` endpoint's key: `LLM_API_KEY`, else the deprecated
+ * `NVIDIA_API_KEY` (#136).
+ */
+export function inferenceKey(s: {
+  LLM_API_KEY?: string
+  NVIDIA_API_KEY?: string
+}): string | undefined {
+  return s.LLM_API_KEY ?? s.NVIDIA_API_KEY
+}
+
 /** Treat unset AND empty-string env vars as "not provided". */
 const optionalStr = z
   .string()
@@ -23,12 +37,17 @@ export const aiEnvShape = {
   //
   // The base URL is any OpenAI-compatible endpoint, so pointing it at a
   // local Ollama or llama.cpp gives a fully offline deployment.
+  //
+  // LLM_API_KEY is the endpoint's key, whatever the provider (#136).
+  // NVIDIA_API_KEY is the name it had while NIM was the only provider, and
+  // still works as a deprecated alias; read both through `inferenceKey`.
+  LLM_API_KEY: optionalStr,
   NVIDIA_API_KEY: optionalStr,
   RAG_LLM_BASE_URL: z
     .string()
     .url('RAG_LLM_BASE_URL must be a valid URL')
     .optional()
-    .default('https://integrate.api.nvidia.com/v1'),
+    .default(DEFAULT_LLM_BASE_URL),
   // Measured 2026-09-07: this is the only embedding model reachable on a
   // free NIM account, and it is fixed at 2048 dimensions (`dimensions: 1024`
   // is rejected). It names the model of the first embedding generation; a

@@ -77,7 +77,7 @@ pnpm install
 # 2. Configure the environment
 cp .env.example .env
 npx auth secret            # writes AUTH_SECRET into .env
-# then set NVIDIA_API_KEY in .env
+# then set LLM_API_KEY in .env
 
 # 3. Start Postgres + MinIO, apply the schema, seed a demo user
 pnpm docker:db
@@ -96,7 +96,7 @@ and ask a question the document answers. Every answer cites the page it came
 from. Now ask something the document does not cover. You get a refusal instead
 of a guess, which is what the app is designed to do.
 
-Without `NVIDIA_API_KEY` the app still boots. `/chat` and `/documents` report
+Without `LLM_API_KEY` the app still boots. `/chat` and `/documents` report
 themselves as unconfigured and the RAG test suites self-skip, so you can
 evaluate the rest of the template first.
 
@@ -127,12 +127,12 @@ proxy.
 
 ### Models and endpoint
 
-| Variable           | Default                               | Description                                                                                  |
-| ------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `NVIDIA_API_KEY`   | —                                     | API key for the inference endpoint; unset disables chat + documents                          |
-| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline         |
-| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                      |
-| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes |
+| Variable           | Default                               | Description                                                                                              |
+| ------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `LLM_API_KEY`      | —                                     | API key for the inference endpoint; unset disables chat + documents (old name `LLM_API_KEY` still works) |
+| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline                     |
+| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                                  |
+| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes             |
 
 Running offline has two constraints: the embedding model must emit at most
 4000 numbers per passage, and the planner model must emit native tool calls

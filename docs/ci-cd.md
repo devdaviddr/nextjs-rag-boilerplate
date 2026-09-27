@@ -161,7 +161,8 @@ CI value.
 
 The RAG suites always skip in CI. `rag.spec.ts`, `knowledge-bases.spec.ts`
 and the inference-dependent tests in `chat.spec.ts` self-skip without
-`NVIDIA_API_KEY`, and the E2E step sets it to an empty string on purpose: they
+`LLM_API_KEY`, and the E2E step sets it (and its old name, `NVIDIA_API_KEY`)
+to an empty string on purpose: they
 call the rate-limited NIM endpoint, so they are not run on every PR. A
 repository secret of that name has no effect. Run them locally, with the key in
 `.env`, before merging a change to retrieval, ingestion or chat:

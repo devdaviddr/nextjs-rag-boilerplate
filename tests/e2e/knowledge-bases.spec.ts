@@ -1,7 +1,7 @@
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import postgres from 'postgres'
 
-import { expect, test } from './fixtures'
+import { expect, hasInferenceKey, test } from './fixtures'
 
 // Independent knowledge bases (spec 0028), end to end through the UI.
 //
@@ -16,8 +16,8 @@ import { expect, test } from './fixtures'
 // self-skip rather than fail when one isn't configured.
 test.beforeEach(() => {
   test.skip(
-    !process.env.NVIDIA_API_KEY,
-    'NVIDIA_API_KEY is not set — RAG end-to-end tests skipped',
+    !hasInferenceKey,
+    'No inference key (LLM_API_KEY) — RAG end-to-end tests skipped',
   )
 })
 

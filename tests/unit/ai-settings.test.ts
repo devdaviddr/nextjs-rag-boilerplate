@@ -204,6 +204,7 @@ describe('saveAiSetting / resetAiSetting', () => {
 
   it('never saves an API key or endpoint as a plain setting', async () => {
     expect(SAVABLE_KEYS).not.toContain('NVIDIA_API_KEY')
+    expect(SAVABLE_KEYS).not.toContain('LLM_API_KEY')
     expect(SAVABLE_KEYS).not.toContain('RAG_LLM_BASE_URL')
     const result = await saveAiSetting('NVIDIA_API_KEY', 'sk-123', null)
     expect(result.ok).toBe(false)

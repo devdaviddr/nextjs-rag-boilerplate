@@ -8,6 +8,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- The inference key is now `LLM_API_KEY`, whatever the provider.
+  `NVIDIA_API_KEY` still works and logs a one-time deprecation warning. A
+  custom `RAG_LLM_BASE_URL`, such as a local Ollama or llama.cpp server, no
+  longer needs a key at all (#136).
+
 ### Fixed
 
 - Every grounded answer is now checked against its sources, not only answers

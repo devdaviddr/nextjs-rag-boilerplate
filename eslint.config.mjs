@@ -42,7 +42,7 @@ const eslintConfig = [
         'error',
         {
           selector:
-            "MemberExpression[object.name='env'][property.name=/^(RAG_|NVIDIA_API_KEY$)/]",
+            "MemberExpression[object.name='env'][property.name=/^(RAG_|NVIDIA_API_KEY$|LLM_API_KEY$)/]",
           message:
             'Read AI settings with aiSettings() from @/lib/ai-settings, so a value saved in Settings applies (spec 0040 FR6).',
         },

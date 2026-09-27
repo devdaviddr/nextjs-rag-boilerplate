@@ -83,7 +83,7 @@ pnpm install
 # 2. Configure the environment
 cp .env.example .env
 npx auth secret            # writes AUTH_SECRET into .env
-# then set NVIDIA_API_KEY in .env
+# then set LLM_API_KEY in .env
 
 # 3. Start Postgres + MinIO, apply the schema, seed a demo user
 pnpm docker:db
@@ -101,7 +101,7 @@ and leaves you a `demo@example.com` / `Password123` login. `pnpm dev` serves
 the app on `http://localhost:3000`.
 
 If you skipped the API key, the app still boots. The documents panel shows
-_"Document chat isn't configured on this deployment. Set NVIDIA_API_KEY to
+_"Document chat isn't configured on this deployment. Set LLM_API_KEY to
 enable uploads and chat."_ and the upload button stays disabled. You can read
 the rest of the template, but this tutorial needs the key from stage 3 onwards.
 

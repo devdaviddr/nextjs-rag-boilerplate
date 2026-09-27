@@ -514,8 +514,9 @@ export function ChatView({
         <div className="max-w-md text-center">
           <h1 className="text-lg font-semibold">Not configured</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Set <code>NVIDIA_API_KEY</code> to enable document chat. A free key
-            is available at build.nvidia.com.
+            Set <code>LLM_API_KEY</code> to enable document chat. A free NVIDIA
+            NIM key is available at build.nvidia.com, or point{' '}
+            <code>RAG_LLM_BASE_URL</code> at a local model server.
           </p>
         </div>
       </div>

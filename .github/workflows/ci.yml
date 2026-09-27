@@ -215,7 +215,9 @@ jobs:
           # The RAG suites (rag, knowledge-bases, the inference parts of chat)
           # always skip in CI: they call the rate-limited NIM endpoint, so they
           # run locally only. Set empty on purpose, so a repository secret of
-          # the same name can never switch them on here (#22).
+          # the same name can never switch them on here (#22). Both names:
+          # LLM_API_KEY, and its deprecated alias NVIDIA_API_KEY (#136).
+          LLM_API_KEY:
           NVIDIA_API_KEY:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

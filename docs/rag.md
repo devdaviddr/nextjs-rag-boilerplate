@@ -584,7 +584,7 @@ Get a free NVIDIA NIM key from [build.nvidia.com](https://build.nvidia.com). It
 is rate-limited, not token-billed.
 
 ```bash
-NVIDIA_API_KEY=nvapi-...
+LLM_API_KEY=nvapi-...
 ```
 
 Without it the app still boots; `/chat` and `/documents` report themselves as

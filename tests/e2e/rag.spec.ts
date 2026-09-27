@@ -1,6 +1,6 @@
 import postgres from 'postgres'
 
-import { expect, test } from './fixtures'
+import { expect, hasInferenceKey, test } from './fixtures'
 
 // RAG knowledge base + document chat (spec 0025), end to end through the UI.
 //
@@ -13,8 +13,8 @@ import { expect, test } from './fixtures'
 // when one is configured; with none set, this whole file skips.
 test.beforeEach(() => {
   test.skip(
-    !process.env.NVIDIA_API_KEY,
-    'NVIDIA_API_KEY is not set — RAG end-to-end tests skipped',
+    !hasInferenceKey,
+    'No inference key (LLM_API_KEY) — RAG end-to-end tests skipped',
   )
 })
 

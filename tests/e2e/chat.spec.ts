@@ -1,6 +1,6 @@
 import postgres from 'postgres'
 
-import { expect, test } from './fixtures'
+import { expect, hasInferenceKey, test } from './fixtures'
 
 // Chat-first UX and conversation history (spec 0026).
 //
@@ -56,8 +56,8 @@ test('signing in lands on the chat, and there is no dashboard', async ({
 
 test('an empty chat is a centred greeting and composer', async ({ page }) => {
   test.skip(
-    !process.env.NVIDIA_API_KEY,
-    'NVIDIA_API_KEY is not set — the chat renders its unconfigured state',
+    !hasInferenceKey,
+    'No inference key (LLM_API_KEY) — the chat renders its unconfigured state',
   )
   await register(page, 'greeting')
 
@@ -117,8 +117,8 @@ test.describe('with an indexed document', () => {
   test.slow()
   test.beforeEach(() => {
     test.skip(
-      !process.env.NVIDIA_API_KEY,
-      'NVIDIA_API_KEY is not set — chat end-to-end tests skipped',
+      !hasInferenceKey,
+      'No inference key (LLM_API_KEY) — chat end-to-end tests skipped',
     )
   })
 
@@ -332,7 +332,7 @@ test.describe('with an indexed document', () => {
 test('a second question sent immediately is not swallowed by the post-answer refresh', async ({
   page,
 }) => {
-  test.skip(!process.env.NVIDIA_API_KEY, 'NVIDIA_API_KEY is not set')
+  test.skip(!hasInferenceKey, 'No inference key (LLM_API_KEY)')
   await register(page, 'refresh-race')
   // No knowledge base, so both questions take the instant refusal path with no
   // model streaming — which is the tightest version of the race.

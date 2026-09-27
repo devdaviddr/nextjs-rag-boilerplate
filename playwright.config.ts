@@ -1,4 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
+import { config as loadEnv } from 'dotenv'
+
+// The test process reads .env too, so the RAG suites run locally when the
+// inference key is there (#136). It never overrides a variable already set:
+// CI sets the keys empty on purpose, and has no .env file anyway.
+loadEnv({ path: '.env', quiet: true })
 
 const PORT = process.env.PORT ?? '3000'
 const baseURL = `http://localhost:${PORT}`
