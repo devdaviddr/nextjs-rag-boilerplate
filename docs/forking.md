@@ -63,6 +63,47 @@ lint-staged, the CI quality gate (`.github/workflows/ci.yml` publishes images to
 your own repository's registry), Renovate, `specs/TEMPLATE.md`, `pnpm docs:check`
 and `pnpm release:next` / `pnpm release:check`.
 
+## Taking fixes from upstream
+
+Your project and this repository diverge from the first commit, but fixes
+keep landing here, security fixes included. Keep this repository as a second
+remote and merge its releases when you want them:
+
+```bash
+git remote add upstream https://github.com/devdaviddr/nextjs-rag-boilerplate.git
+git fetch upstream --tags
+git merge vX.Y.Z           # a release tag, not upstream's main
+```
+
+A repository made with **Use this template** starts with its own history, so
+the first merge needs `git merge --allow-unrelated-histories vX.Y.Z`, and
+conflicts everywhere you changed a file. Take upstream's version of files you
+never touched; later merges are ordinary.
+
+Merge release tags rather than `main`: a tag is a version whose CHANGELOG
+section says what changed. Read that section first. Each release's notes are
+the GitHub Release, and a release whose title starts with **Security:** has a
+`### Security` section you should take soon. Pull the release's migrations
+with the code, then run `pnpm db:migrate`.
+
+Merges stay small if you leave upstream's files alone where you can:
+
+- **Add, don't edit.** Put your own pages, components and actions in new
+  files and folders. Wire them in with the smallest possible change to
+  upstream's files (a nav entry in `src/lib/shell/nav.ts`, a route prefix in
+  `src/proxy.ts`).
+- **Most-changed upstream:** `src/lib/rag/`, `src/lib/auth/`,
+  `src/lib/ai-settings/`, `src/app/api/chat/`, `eval/` and `docs/`. Changes
+  there are the ones most likely to conflict, so keep yours there small, or
+  expect to resolve them by hand.
+- **Migrations:** never edit an upstream migration in `drizzle/`. Add your
+  own with `pnpm db:generate` after upstream's, and after a merge regenerate
+  if both sides added one.
+
+If you'd rather not merge at all, cherry-pick the commits a release lists
+(`git cherry-pick <sha>`). That suits a security fix in a project that has
+moved far from upstream.
+
 ## Switch off what you don't need
 
 Everything optional is off until configured, or can be switched off, from

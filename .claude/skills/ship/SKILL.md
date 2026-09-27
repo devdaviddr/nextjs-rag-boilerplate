@@ -164,7 +164,10 @@ git push origin vX.Y.Z
 ```
 
 The annotated tag's message becomes the GitHub Release title
-("vX.Y.Z — short title").
+("vX.Y.Z — short title"). If the release's CHANGELOG section has a
+`### Security` heading, start the title with **"Security:"**, so projects
+started from this template see at a glance that they should take it
+(`docs/forking.md` → _Taking fixes from upstream_ tells them to look).
 
 ## 6 — Confirm it shipped
 
