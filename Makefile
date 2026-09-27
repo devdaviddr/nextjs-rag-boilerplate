@@ -5,11 +5,14 @@ TF      := terraform -chdir=infra/cloudflare
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup deploy deploy-timer autostart tunnel-quick tunnel-provision tunnel-token tunnel-up tunnel-down tunnel-verify tunnel-destroy
+.PHONY: help init setup deploy deploy-timer autostart tunnel-quick tunnel-provision tunnel-token tunnel-up tunnel-down tunnel-verify tunnel-destroy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+init: ## Rename a new project started from this template (asks for name, repo URL, colour)
+	@node scripts/init-project.mjs
 
 setup: ## Guided one-click self-hosting (secrets → tunnel → seed → verify)
 	@./scripts/setup.sh

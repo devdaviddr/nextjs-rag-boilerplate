@@ -61,8 +61,9 @@ which this project is built on. `pnpm rag:eval` scores how well the search is wo
 
 ---
 
-Making it your own project? [Starting your own project](docs/forking.md) covers
-what to rename, what not to, and what to switch off.
+Making it your own project? `make init` renames it in one step, and
+[Starting your own project](docs/forking.md) covers the rest: what not to
+rename, what to delete and what to switch off.
 
 ## Getting started
 

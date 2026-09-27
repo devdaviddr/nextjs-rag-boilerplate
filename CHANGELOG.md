@@ -10,6 +10,10 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- `make init` (`pnpm init:project`) renames a project started from this
+  template in one step: name, description, repository URL and theme colour,
+  with the share image and icons regenerated. It never touches the settings
+  encryption salt and is safe to run again (#151).
 - S3 is optional. Without `S3_ENDPOINT`, uploads are kept on disk under
   `STORAGE_DIR` (default `./data/storage`), so document chat runs with no
   storage service. The Docker image has a writable `/app/data` to mount a

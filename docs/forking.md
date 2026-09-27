@@ -12,6 +12,18 @@ answer. This page is for when the project becomes yours.
 
 ## Rename it
 
+One command does most of it:
+
+```bash
+make init        # or: pnpm init:project
+```
+
+It asks for the name, a short name, a one-line description, your repository's
+URL and, optionally, a theme colour; or pass them as `--name`, `--short-name`,
+`--description`, `--repo` and `--theme`. It updates the files below that it
+can, regenerates the share image (and the icons, with a new colour), leaves the
+salt below alone, and prints what is left. Safe to run again.
+
 The product's name and description live in one file, and most of the app
 reads them from there. The rest is a short list.
 
