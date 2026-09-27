@@ -36,13 +36,53 @@ export interface VerifiedAnswer {
  *
  * Deliberately simple. A full sentence tokeniser is a dependency and a
  * behaviour change; this only needs to be good enough to remove a claim without
- * mangling the ones around it. Abbreviations that end in a period will
- * occasionally split early — the cost is a slightly short strip, not a wrong
- * one, because each fragment is still judged on its own citations.
+ * mangling the ones around it. A stop inside a number ("2.8") does not end a
+ * sentence, and a citation after a stop ("...fourteen. [1]") stays with the
+ * sentence it cites (#172). An abbreviation followed by a space ("e.g. the")
+ * still splits early; each fragment is then judged on its own. The pieces
+ * join back to the text, so `stripUnsupported` keeps what it does not remove
+ * exactly as written.
  */
 export function splitSentences(text: string): string[] {
-  const parts = text.match(/[^.!?\n]+(?:[.!?]+|\n+|$)/g)
-  return parts ? parts.filter((s) => s.trim().length > 0) : []
+  const out: string[] = []
+  let start = 0
+  let i = 0
+  // A piece that is only whitespace (a paragraph break) joins the sentence
+  // before it, so stripping a sentence keeps the layout around it.
+  const push = (end: number) => {
+    const piece = text.slice(start, end)
+    if (piece.trim() === '' && out.length > 0) out[out.length - 1] += piece
+    else out.push(piece)
+    start = i = end
+  }
+  while (i < text.length) {
+    const ch = text[i]!
+    if (ch === '\n') {
+      let j = i
+      while (text[j] === '\n') j++
+      push(j)
+      continue
+    }
+    if (ch === '.' || ch === '!' || ch === '?') {
+      let j = i
+      while (j < text.length && '.!?'.includes(text[j]!)) j++
+      while (j < text.length && `"')”’*`.includes(text[j]!)) j++
+      const next = text[j]
+      // A stop ends a sentence only before whitespace, a citation or the end:
+      // "2.8" and "v1.2" stay whole (#172).
+      if (next === undefined || /\s/.test(next) || next === '[') {
+        // A citation after the stop belongs to the sentence it cites.
+        const cite = /^(?:[ \t]*\[\d+\])+/.exec(text.slice(j))
+        push(j + (cite ? cite[0].length : 0))
+        continue
+      }
+      i = j
+      continue
+    }
+    i++
+  }
+  if (start < text.length) push(text.length)
+  return out.filter((s) => s.trim().length > 0)
 }
 
 /** Citation markers a sentence carries, as 1-based indices: "[1]", "[2][3]". */
