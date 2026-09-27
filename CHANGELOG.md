@@ -10,6 +10,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Web pages by URL.** "Add URL" on a knowledge base fetches a web page or
+  an online PDF, indexes it like an upload and links its citations back to the
+  page; refresh fetches it again. The fetch refuses private, loopback,
+  link-local and metadata addresses, directly or through a redirect, connects
+  only to the address it checked, and has time and size limits.
+  `URL_ALLOWED_HOSTS` limits it to named sites (spec 0047, #161).
 - An answer that used a registered tool says so ("Answered with …"), kept with
   the message, and the Agent activity drawer shows each tool call and what it
   returned (#164).

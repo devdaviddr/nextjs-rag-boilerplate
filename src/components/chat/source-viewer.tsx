@@ -133,6 +133,8 @@ export function SourceViewer({
     !isSection && render !== 'failed' && pageCount !== null && pageCount > 1
 
   const sourceHref = `/api/documents/${citation.documentId}/source#page=${page}`
+  // A web document (spec 0047 FR4) links to the page it was fetched from.
+  const webHref = location?.sourceUrl
 
   return (
     <aside
@@ -149,17 +151,31 @@ export function SourceViewer({
             — {isSection ? 'section' : 'page'} {page}
           </span>
         </p>
-        {!isSection && (
+        {webHref ? (
           <Button asChild size="icon" variant="ghost" className="size-8">
             <a
-              href={sourceHref}
+              href={webHref}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Open in new tab"
+              aria-label="Open the web page"
+              title={webHref}
             >
               <ExternalLink className="size-4" />
             </a>
           </Button>
+        ) : (
+          !isSection && (
+            <Button asChild size="icon" variant="ghost" className="size-8">
+              <a
+                href={sourceHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open in new tab"
+              >
+                <ExternalLink className="size-4" />
+              </a>
+            </Button>
+          )
         )}
         <Button
           size="icon"

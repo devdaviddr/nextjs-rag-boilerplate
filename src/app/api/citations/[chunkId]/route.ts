@@ -67,6 +67,7 @@ export async function GET(
       bbox: chunks.bbox,
       boxes: chunks.boxes,
       mimeType: files.mimeType,
+      sourceUrl: documents.sourceUrl,
     })
     .from(chunks)
     .innerJoin(documents, eq(documents.id, chunks.documentId))
@@ -122,6 +123,7 @@ export async function GET(
     pageCount: row.pageCount,
     kind: row.kind,
     boxes,
+    ...(row.sourceUrl ? { sourceUrl: row.sourceUrl } : {}),
   }
 
   // Not a PDF (spec 0046 FR7): no page to draw, so the whole section's text,

@@ -107,6 +107,9 @@ const envSchema = z
     S3_SECRET_ACCESS_KEY: optionalNonEmpty,
     S3_BUCKET: optionalNonEmpty,
     STORAGE_DIR: z.string().min(1).optional().default('./data/storage'),
+    // Hosts a web page may be added from (spec 0047), comma-separated; their
+    // subdomains too. Unset: any public host.
+    URL_ALLOWED_HOSTS: optionalStr,
     S3_REGION: z.string().min(1).optional().default('us-east-1'),
     UPLOAD_MAX_SIZE_MB: z.coerce
       .number()

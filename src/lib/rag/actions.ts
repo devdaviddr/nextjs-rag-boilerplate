@@ -5,11 +5,18 @@ import { after } from 'next/server'
 import { headers } from 'next/headers'
 
 import { db } from '@/db'
-import { chunks, documents, files, knowledgeBases } from '@/db/schema'
+import {
+  chunks,
+  documents,
+  files,
+  knowledgeBases,
+  parsedPages,
+} from '@/db/schema'
 import type { DocumentStatus, ExtractionSummary } from '@/db/schema'
 import { getCurrentSession } from '@/lib/auth/session'
 import { aiSettings, refreshAiSettings } from '@/lib/ai-settings'
 import { toCitationBoxes } from '@/lib/citations/boxes'
+import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { buildEmbeddingText } from './chunk'
 import { type InspectedDocument, buildInspection } from './inspect'
@@ -23,10 +30,13 @@ import { isRagConfigured } from './client'
 import { ingestDocument } from './ingest'
 import {
   DOCUMENT_TYPES,
+  type DocumentLoader,
   documentLoaders,
   loaderForBytes,
   loaderForMimeType,
 } from './loaders'
+import { htmlTitle } from './loaders/html'
+import { UnsafeUrlError, safeFetch } from './fetch-url'
 import { redirect } from 'next/navigation'
 
 export interface DocumentSummary {
@@ -37,6 +47,8 @@ export interface DocumentSummary {
   chunkCount: number
   error: string | null
   createdAt: Date
+  /** Where a web document was fetched from (spec 0047); null for an upload. */
+  sourceUrl: string | null
   /**
    * Some of this document is not searchable (spec 0037 FR7).
    *
@@ -157,16 +169,43 @@ export async function uploadDocument(
       error: `That file is not a ${documentLoaders.map((l) => l.label).join(', ')}.`,
     }
   }
+  return storeAndQueue({
+    userId,
+    knowledgeBaseId: kb.id,
+    bytes,
+    loader,
+    fileName: file.name,
+    // Any extension, not just .pdf (spec 0046 FR8).
+    title: file.name.replace(/\.[a-z0-9]{1,8}$/i, '') || file.name,
+  })
+}
+
+/**
+ * Store a document's bytes, record it and queue its ingestion: the part of
+ * adding a document every source shares, an upload or a URL (spec 0047).
+ */
+async function storeAndQueue(input: {
+  userId: string
+  knowledgeBaseId: string
+  bytes: Buffer
+  loader: DocumentLoader
+  fileName: string
+  title: string
+  sourceUrl?: string
+}): Promise<ActionResult<DocumentSummary>> {
+  const { userId, bytes, loader } = input
   const mimeType = loader.mimeType
   const usage = await currentUsageBytes(userId)
-  const validation = validateUpload({ sizeBytes: file.size, mimeType }, usage, {
-    allowedMimeTypes: DOCUMENT_TYPES,
-  })
+  const validation = validateUpload(
+    { sizeBytes: bytes.length, mimeType },
+    usage,
+    { allowedMimeTypes: DOCUMENT_TYPES },
+  )
   if (!validation.ok) {
     return { ok: false, error: validation.error }
   }
 
-  const bucketKey = buildBucketKey(userId, file.name)
+  const bucketKey = buildBucketKey(userId, input.fileName)
   await putObject(bucketKey, bytes, mimeType)
 
   const [fileRow] = await db
@@ -174,9 +213,9 @@ export async function uploadDocument(
     .values({
       ownerId: userId,
       bucketKey,
-      originalName: file.name,
+      originalName: input.fileName,
       mimeType,
-      sizeBytes: file.size,
+      sizeBytes: bytes.length,
     })
     .returning()
   if (!fileRow) throw new Error('Failed to record the uploaded file.')
@@ -185,11 +224,13 @@ export async function uploadDocument(
     .insert(documents)
     .values({
       ownerId: userId,
-      knowledgeBaseId: kb.id,
+      knowledgeBaseId: input.knowledgeBaseId,
       fileId: fileRow.id,
-      // Any extension, not just .pdf (spec 0046 FR8).
-      title: file.name.replace(/\.[a-z0-9]{1,8}$/i, '') || file.name,
+      title: input.title,
       status: 'pending',
+      ...(input.sourceUrl
+        ? { sourceUrl: input.sourceUrl, fetchedAt: new Date() }
+        : {}),
     })
     .returning()
   if (!doc) throw new Error('Failed to record the document.')
@@ -211,8 +252,144 @@ export async function uploadDocument(
       chunkCount: 0,
       error: doc.error,
       createdAt: doc.createdAt,
+      sourceUrl: doc.sourceUrl,
     },
   }
+}
+
+/** Fetch a URL for a knowledge base, as an HTML or PDF document (spec 0047). */
+async function fetchDocument(
+  url: string,
+): Promise<
+  | { ok: true; bytes: Buffer; loader: DocumentLoader; finalUrl: string }
+  | { ok: false; error: string }
+> {
+  let page
+  try {
+    page = await safeFetch(url, {
+      maxBytes: env.UPLOAD_MAX_SIZE_MB * 1024 * 1024,
+      allowedHosts: env.URL_ALLOWED_HOSTS?.split(',')
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean),
+    })
+  } catch (error) {
+    if (error instanceof UnsafeUrlError)
+      return { ok: false, error: error.message }
+    throw error
+  }
+  // HTML or PDF only (FR2), by the bytes as for an upload, whatever the
+  // server said it was sending.
+  const loader = loaderForBytes(page.bytes)
+  if (
+    !loader ||
+    (loader.mimeType !== 'text/html' && loader.mimeType !== 'application/pdf')
+  ) {
+    return { ok: false, error: 'That address is not a web page or a PDF.' }
+  }
+  return { ok: true, bytes: page.bytes, loader, finalUrl: page.url }
+}
+
+/**
+ * Add a web page to a knowledge base by its URL (spec 0047 FR1). The server
+ * fetches it once under `safeFetch`'s rules and keeps what it fetched.
+ */
+export async function addDocumentFromUrl(
+  knowledgeBaseId: string,
+  url: string,
+): Promise<ActionResult<DocumentSummary>> {
+  await refreshAiSettings()
+  const userId = await requireUserId()
+  if (!isRagConfigured()) {
+    return {
+      ok: false,
+      error: 'Document chat is not configured on this deployment.',
+    }
+  }
+  const h = await headers()
+  const limited = rateLimit(
+    `rag-upload:${userId}:${clientIpFromHeaders(h)}`,
+    UPLOAD_LIMITS.upload.limit,
+    UPLOAD_LIMITS.upload.windowMs,
+  )
+  if (!limited.success) {
+    return { ok: false, error: 'Too many uploads. Please wait a moment.' }
+  }
+  const kb = await db.query.knowledgeBases.findFirst({
+    where: eq(knowledgeBases.id, knowledgeBaseId),
+    columns: { id: true, ownerId: true },
+  })
+  if (!kb || kb.ownerId !== userId) {
+    return { ok: false, error: 'Knowledge base not found.' }
+  }
+
+  const fetched = await fetchDocument(url.trim())
+  if (!fetched.ok) return fetched
+  const host = new URL(fetched.finalUrl).hostname
+  const title =
+    (fetched.loader.mimeType === 'text/html'
+      ? htmlTitle(fetched.bytes.toString('utf8'))
+      : undefined) ?? host
+  return storeAndQueue({
+    userId,
+    knowledgeBaseId: kb.id,
+    bytes: fetched.bytes,
+    loader: fetched.loader,
+    fileName: `${host}${fetched.loader.mimeType === 'application/pdf' ? '.pdf' : '.html'}`,
+    title: title.slice(0, 200),
+    sourceUrl: fetched.finalUrl,
+  })
+}
+
+/**
+ * Fetch a web document again and re-index it from the new bytes, keeping its
+ * knowledge base and its id (spec 0047 FR3).
+ */
+export async function refreshDocument(
+  documentId: string,
+): Promise<ActionResult<null>> {
+  await refreshAiSettings()
+  const userId = await requireUserId()
+  const doc = await db.query.documents.findFirst({
+    where: eq(documents.id, documentId),
+  })
+  // Same response whether missing, someone else's or not a web page.
+  if (!doc || doc.ownerId !== userId || !doc.sourceUrl) {
+    return { ok: false, error: 'Document not found.' }
+  }
+  if (doc.status === 'extracting' || doc.status === 'embedding') {
+    return { ok: false, error: 'This document is already being processed.' }
+  }
+  const fetched = await fetchDocument(doc.sourceUrl)
+  if (!fetched.ok) return fetched
+  const file = await db.query.files.findFirst({
+    where: eq(files.id, doc.fileId),
+    columns: { bucketKey: true, sizeBytes: true },
+  })
+  if (!file) return { ok: false, error: 'Document not found.' }
+  const usage = (await currentUsageBytes(userId)) - file.sizeBytes
+  const validation = validateUpload(
+    { sizeBytes: fetched.bytes.length, mimeType: fetched.loader.mimeType },
+    usage,
+    { allowedMimeTypes: DOCUMENT_TYPES },
+  )
+  if (!validation.ok) return { ok: false, error: validation.error }
+
+  await putObject(file.bucketKey, fetched.bytes, fetched.loader.mimeType)
+  await db
+    .update(files)
+    .set({ sizeBytes: fetched.bytes.length, mimeType: fetched.loader.mimeType })
+    .where(eq(files.id, doc.fileId))
+  // Pages parsed from the old bytes must not be reused for the new ones.
+  await db.delete(parsedPages).where(eq(parsedPages.fileId, doc.fileId))
+  await db
+    .update(documents)
+    .set({ status: 'pending', error: null, fetchedAt: new Date() })
+    .where(eq(documents.id, documentId))
+  logger.info('Web document refreshed', { userId, documentId })
+  after(async () => {
+    await ingestDocument(documentId)
+  })
+  return { ok: true, data: null }
 }
 
 /**
@@ -240,6 +417,7 @@ export async function listMyDocuments(
       pageCount: documents.pageCount,
       error: documents.error,
       createdAt: documents.createdAt,
+      sourceUrl: documents.sourceUrl,
       extraction: documents.extraction,
       chunkCount: count(chunks.id),
       // FR7's third condition needs to know whether every recorded page

@@ -55,6 +55,10 @@ there is no answer, and you can only ever retrieve your own documents.
   knowledge base, recognised by their bytes, not their name. A non-PDF is split
   into sections at its headings, and its citations show the section's text. This reuses the MinIO storage, quota
   and rate limits from [file uploads](#file-uploads).
+- Add a web page or an online PDF by its URL. The server fetches it once,
+  under rules that stop it reaching private or internal addresses, and
+  citations link back to the page. Refresh fetches it again
+  ([Web pages by URL](rag.md#web-pages-by-url)).
 - Hold conversations scoped to a set of knowledge bases. The scope is fixed when
   the thread is created, so every message in it has one auditable scope.
 - Read streamed Markdown answers with clickable page-level citations that open

@@ -299,6 +299,10 @@ export const documents = pgTable(
       .notNull()
       .references(() => files.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
+    // A web page added by its URL (spec 0047): where it came from and when it
+    // was last fetched. Null for an upload.
+    sourceUrl: text('source_url'),
+    fetchedAt: timestamp('fetched_at', { mode: 'date', withTimezone: true }),
     pageCount: integer('page_count'),
     // Per-page progress (spec 0031 FR13). `status` alone is too coarse once a
     // page can cost an API call: an ingestion that takes minutes and reports

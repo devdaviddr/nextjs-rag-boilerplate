@@ -248,6 +248,8 @@ erDiagram
         int page_count
         text status "pending|extracting|embedding|ready|failed"
         text error "user-readable, only when failed"
+        text source_url "web documents only (spec 0047)"
+        timestamptz fetched_at "when source_url was last fetched"
     }
     chunks {
         text id PK

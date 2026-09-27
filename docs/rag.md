@@ -337,6 +337,36 @@ That is the status you watch in the documents list after an upload. Chunks are
 written **delete-then-insert inside one transaction**, so re-ingesting a failed
 document can never double up its chunks.
 
+### Web pages by URL
+
+"Add URL" on a knowledge base's documents page takes an `http` or `https`
+address. The server fetches it once, keeps the bytes like an upload, and
+indexes them through the HTML loader, or the PDF loader when the address
+serves a PDF; anything else is refused. The document is titled from the page's
+`<title>`, remembers its URL and when it was fetched, and its citations link to
+that URL. The refresh button fetches it again and re-indexes the same document.
+There is no crawling and no scheduled refresh (spec 0047).
+
+Letting a server fetch an address a user typed is the classic server-side
+request forgery hole: the server can reach `localhost`, the database, the
+storage service and the cloud metadata endpoint, which the user cannot.
+`safeFetch` (`src/lib/rag/fetch-url.ts`) closes it:
+
+- only `http` and `https` on ports 80 and 443, with no user name or password
+  in the address;
+- the name is resolved once and **every** address it has must be public
+  (loopback, private, link-local, carrier-grade NAT, multicast, documentation
+  and reserved ranges are refused, including their IPv4-mapped and NAT64
+  IPv6 forms). The connection then goes to the address that was checked, not
+  to a second lookup that rebinding DNS could answer differently;
+- redirects are followed by hand, at most 3, each checked the same way;
+- 15 seconds for the whole fetch, and the body stops at the upload size limit.
+
+Set `URL_ALLOWED_HOSTS` (comma-separated) to allow only those sites and their
+subdomains. Adding a URL is rate-limited like an upload and counts against the
+same storage quota. Fetched text is untrusted and reaches models fenced, like
+any document.
+
 ---
 
 ## Search
@@ -700,9 +730,10 @@ sends over the wire, and what a free-tier rate limit costs you per question.
 | Owner- and KB-scoped retrieval              | `src/lib/rag/retrieve.ts`        |
 | All retrieval SQL (swap for another store)  | `src/lib/rag/retrieval-store.ts` |
 | Document formats: one loader each           | `src/lib/rag/loaders/`           |
+| Fetching a URL safely (SSRF rules)          | `src/lib/rag/fetch-url.ts`       |
 | Section runs and parent assembly (pure)     | `src/lib/rag/parents.ts`         |
 | Prompt construction and fencing             | `src/lib/rag/prompt.ts`          |
-| Upload / list / delete / retry actions      | `src/lib/rag/actions.ts`         |
+| Upload / URL / list / delete / retry        | `src/lib/rag/actions.ts`         |
 | Knowledge base CRUD and `moveDocument`      | `src/lib/rag/kb-actions.ts`      |
 | Permitted-KB resolution (`server-only`)     | `src/lib/rag/kb-scope.ts`        |
 | Answering: evidence, refusal, draft, verify | `src/lib/rag/answer.ts`          |

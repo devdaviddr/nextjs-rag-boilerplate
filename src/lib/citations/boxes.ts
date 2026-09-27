@@ -63,6 +63,8 @@ export interface CitationLocation {
    */
   unit?: 'section'
   text?: string
+  /** The page a web document was fetched from (spec 0047 FR4). */
+  sourceUrl?: string
 }
 
 /**

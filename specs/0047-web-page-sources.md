@@ -82,15 +82,25 @@ host's private network.
 
 ## Acceptance criteria
 
-- [ ] FR1, FR2: a public HTML page and a public PDF URL become documents that
-      answer with citations
-- [ ] FR3: refresh re-indexes from a new fetch, same document
-- [ ] FR4: a web document's citation links to its URL
-- [ ] NFR1–NFR3: loopback, private, link-local, metadata and IPv4-mapped
-      addresses are refused, directly, by name and through a redirect (unit
-      tests against each range)
-- [ ] NFR4: a slow or oversized response is refused
-- [ ] NFR5: with an allow-list, other hosts are refused
+- [x] FR1, FR2: a public HTML page and a public PDF URL become documents that
+      answer with citations — e2e `web-pages.spec.ts` (example.com: Ready, titled
+      from `<title>`, answers with a citation); `rag-url-actions.test.ts` (stored
+      with its URL and fetch time, a non-HTML/PDF response refused); a public PDF
+      URL fetched live and identified as PDF by its bytes
+- [x] FR3: refresh re-indexes from a new fetch, same document — e2e
+      `web-pages.spec.ts` (same row and link after refresh);
+      `rag-url-actions.test.ts` _"refetches into the same file"_
+- [x] FR4: a web document's citation links to its URL — e2e `web-pages.spec.ts`
+      ("Open the web page" links to https://example.com/)
+- [x] NFR1–NFR3: loopback, private, link-local, metadata and IPv4-mapped
+      addresses are refused, directly, by name and through a redirect —
+      `fetch-url.test.ts` (every range, by name, via redirect, redirect cap);
+      e2e: the metadata address is refused with its reason
+- [x] NFR4: a slow or oversized response is refused — `fetch-url.test.ts`
+      (timeout, body over the cap)
+- [x] NFR5: with an allow-list, other hosts are refused — `fetch-url.test.ts`
+      (allow-list, subdomains); `rag-url-actions.test.ts` (read from
+      `URL_ALLOWED_HOSTS`)
 
 ## Security & privacy
 
