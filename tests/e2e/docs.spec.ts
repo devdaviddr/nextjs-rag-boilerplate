@@ -19,7 +19,7 @@ async function signIn(page: Page) {
 test('signed-out visitors are sent to sign in', async ({ page, request }) => {
   await page.goto('/docs')
   await expect(page).toHaveURL(/\/login/)
-  const image = await request.get('/docs-assets/answer.png')
+  const image = await request.get('/docs-assets/answer.webp')
   expect(image.status()).toBe(401)
   const index = await request.get('/docs/search-index', { maxRedirects: 0 })
   expect(index.status()).not.toBe(200)

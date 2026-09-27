@@ -25,10 +25,34 @@ with an optional agentic retrieval loop.**
 
 <div align="center">
 
-|                                               Ask                                               |                                                     Get a grounded answer                                                     |                                                See what was indexed                                                |
-| :---------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------: |
-| <img src="docs/images/ask.png" alt="The chat composer, scoped to a knowledge base" width="320"> | <img src="docs/images/answer.png" alt="An answer with a citation, and the cited passage highlighted on the page" width="320"> | <img src="docs/images/inspect.png" alt="A document inspector showing what was indexed from each page" width="320"> |
-|                      Answers come only from the documents you have indexed                      |                             Every claim carries a citation, highlighted on the page it came from                              |                                Page by page: what was read, how, and what it became                                |
+<img src="docs/images/answer.webp" alt="A cited answer to &quot;Which Azure regions in Australia support fine-tuning, and what models?&quot;, with the cited passage highlighted on the source page" width="100%">
+
+<sub><b>Grounded answers.</b> Every claim cites its source; click a citation and the passage lights up on the page it came from.</sub>
+
+<br><br>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/agent-activity.webp" alt="The Agent activity drawer: the planner's searches, their timings and what each one found">
+      <p align="center"><b>Agent activity</b><br><sub>What the planner searched for, what it found, and how long each step took.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/cracking.webp" alt="The document inspector: each page read by the parsing model, with the passages it indexed boxed on the page">
+      <p align="center"><b>Document cracking</b><br><sub>Tables, figures and scans read page by page, with every indexed passage boxed.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/observability.webp" alt="The Observability overview: questions over time, answer times, how questions were searched and documents processed">
+      <p align="center"><b>Observability</b><br><sub>Questions, answer times, searches and ingestion, for admins.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/docs.webp" alt="The in-app Docs: searchable guides to using, running and extending the template">
+      <p align="center"><b>Built-in docs</b><br><sub>Every guide in this repo, searchable inside the app.</sub></p>
+    </td>
+  </tr>
+</table>
 
 </div>
 
