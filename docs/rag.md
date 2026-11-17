@@ -1264,8 +1264,15 @@ pnpm rag:sample --from answers --per-slice 6           # draw up to 6 per slice 
 `rag:sample` never overwrites a file already in `eval/graded/`, so a second
 draw adds to the sample. A drawn file has `grade: null` until graded; a grade
 records who gave it and whether a person has reviewed it (`reviewed`).
-The first sample, 29 answers across every slice, was drafted by Claude; only
-grades a person has reviewed count as the reference.
+The first sample, 29 answers across every slice, was drafted by Claude. A
+person's review is stored as `personGrade` and is the reference; the draft
+stays in `grade`. Only a review counts. The sheet and the import are in
+[Person review](person-review.md):
+
+```bash
+pnpm rag:review:export    # blank CSV and HTML for the unreviewed Claude drafts
+pnpm rag:review:import    # check the filled CSV, write personGrade, report agreement
+```
 
 ### A model judge
 
@@ -1287,8 +1294,10 @@ pnpm rag:judge --include-drafts   # a first look, drafts included
 
 It prints each answer's human and judge grades side by side and exact
 agreement on faithfulness (rounded to a grade) and completeness, against a
-target of **0.8** for each. Cost: three judge calls per answer, about 80
-answers a pass, so roughly 240 calls, about 7 seconds each on NIM's free tier
+target of **0.8** for each, plus Cohen's kappa and a confusion table. The
+human grade is `personGrade` once a review has been imported. Cost: three
+judge calls per answer, about 80 answers a pass, so roughly 240 calls, about
+7 seconds each on NIM's free tier
 with the three samples in parallel: some 10 extra minutes per pass.
 `EVAL_JUDGE_MODEL` is read by the eval only; the app never uses it.
 

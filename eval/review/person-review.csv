@@ -1,0 +1,639 @@
+﻿id,type,question,sources,answer,draft_grade,draft_rationale,draft_claims,draft_completeness,person_faithfulness,person_completeness,agree,notes
+followup-hot-work-fire-watch,followup,How long does the fire watch stay afterwards?,"[1] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.",The fire watch stays for 60 minutes after hot work ends. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2",S1 (2): The fire watch stays for 60 minutes after hot work ends. [1],S1:2,2,,,,
+layout-condenser-approach-building-b,layout,What is Building B's condenser approach?,"[1] plant-services-manual, page 1 (d0366c90-ac77-4d1e-9884-23dd435ae0ce)
+Building A was recommissioned in Building B was recommissioned in
+March by Hartley Mechanical. August by Hartley Mechanical.
+Its chilled water setpoint is Its chilled water setpoint is
+6.5 degrees. 9.0 degrees.
+Its condenser approach is Its condenser approach is
+1.2 degrees. 2.8 degrees.",Building B's condenser approach is 2.8 degrees [1].,"faithfulness: 2.00 (S1=2)
+completeness: 2","S1 (2): Building B's condenser approach is 2.8 degrees [1].
+  note: The source's two columns are interleaved; Building B is the second value, 2.8.",S1:2,2,,,,
+layout-downtime-spike-quarter,layout,Which quarter had the spike in unplanned downtime?,"[1] site-operations-report, page 3 (22ad0883-6d3d-4f1a-931d-ba4de4ac1f2c)
+Figure 3.2 - Unplanned downtime trend
+
+Q1 Q2 Q3 Q4 Q5
+
+Figure 3.2: Unplanned downtime by quarter across all sites.
+
+The Q3 spike corresponds to the Geelong furnace outage.
+Quarterly totals are held in the operations data warehouse.",Q3 [1],"faithfulness: 2.00 (S1=2)
+completeness: 2","S1 (2): Q3 [1]
+  note: 'The Q3 spike corresponds to...'",S1:2,2,,,,
+layout-figure-lowest-quarter,layout,"In Figure 3.2, which quarter had the lowest unplanned downtime?","[1] site-operations-report, page 3 (22ad0883-6d3d-4f1a-931d-ba4de4ac1f2c)
+Figure 3.2 - Unplanned downtime trend
+
+Q1 Q2 Q3 Q4 Q5
+
+Figure 3.2: Unplanned downtime by quarter across all sites.
+
+The Q3 spike corresponds to the Geelong furnace outage.
+Quarterly totals are held in the operations data warehouse.","The context does not provide the specific unplanned downtime values for each quarter, so it is not possible to determine which quarter had the lowest unplanned downtime from the information given.","faithfulness: n/a (no factual claims)
+completeness: 2","completeness: Correctly declines: the values exist only as bar heights, not in the text.",,2,,,,
+layout-figure-q1-vs-q4,layout,"In the unplanned downtime chart, which was higher: Q1 or Q4?","[1] site-operations-report, page 3 (5ad7eabb-097c-47ad-83a2-d080a965282c)
+Figure 3.2: Unplanned downtime by quarter across all sites.","The provided context only mentions that Figure 3.2 shows unplanned downtime by quarter, but it does not give the actual values for Q1 or Q4. Therefore, I cannot determine which quarter had higher unplanned downtime from the information given.","faithfulness: n/a (no factual claims)
+completeness: 2","completeness: Correctly declines; S1 is about what the source lacks, S2 connects.",,2,,,,
+layout-lift-capacity-north,layout,What is the rated capacity of the north wing lift?,"[1] site-operations-report, page 1 (40dc1d88-3bac-49a5-ab89-5ce89ad687f9)
+The north wing lift was upgraded in The south wing lift remains on the
+February by Hartley Mechanical. original controller.
+Its new rated capacity is 1600 Its rated capacity is unchanged at
+kilograms. 1000 kilograms.
+The upgrade was funded from the A replacement is scheduled for the
+capital reserve. next financial year.
+The north wing lift is certified The south wing lift is certified
+until 2031. until 2027.",The north wing lift’s rated capacity is 1600 kilograms. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2","S1 (2): The north wing lift’s rated capacity is 1600 kilograms. [1]
+  note: Interleaved columns: the north wing's new capacity is 1600 kilograms.",S1:2,2,,,,
+layout-q2-downtime-hours,layout,How many hours of unplanned downtime were recorded in Q2?,"[1] site-operations-report, page 3 (5ad7eabb-097c-47ad-83a2-d080a965282c)
+Figure 3.2: Unplanned downtime by quarter across all sites.",The context does not provide the specific number of hours of unplanned downtime recorded in Q2.,"faithfulness: n/a (no factual claims)
+completeness: 2",completeness: Correctly declines; no text gives Q2 hours.,,2,,,,
+multi-hop-breach-and-audit,multi-hop,"What happens after a second breach, and how quickly must high audit findings be closed?","[1] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.",The context does not specify what occurs after a second breach. It only states that audit findings rated high must be closed within 7 days【1】.,"faithfulness: 2.00 (S2=2)
+completeness: 2","completeness: The breach half is not in the retrieved sources (section 28 was not retrieved), so saying so is complete against them.
+S2 (2): It only states that audit findings rated high must be closed within 7 days【1】.
+  note: Cites with 【1】 (full-width brackets), which citedIndices does not read.",S2:2,2,,,,
+multi-hop-hartley-setpoint-and-lift,multi-hop,"Hartley Mechanical recommissioned Building A — what chilled water setpoint did they leave it at, and what rated capacity did the same contractor give the north wing lift?","[1] plant-services-manual, page 1 (d0366c90-ac77-4d1e-9884-23dd435ae0ce)
+Building A was recommissioned in Building B was recommissioned in
+March by Hartley Mechanical. August by Hartley Mechanical.
+Its chilled water setpoint is Its chilled water setpoint is
+6.5 degrees. 9.0 degrees.
+Its condenser approach is Its condenser approach is
+1.2 degrees. 2.8 degrees.
+
+[2] site-operations-report, page 1 (40dc1d88-3bac-49a5-ab89-5ce89ad687f9)
+The north wing lift was upgraded in The south wing lift remains on the
+February by Hartley Mechanical. original controller.
+Its new rated capacity is 1600 Its rated capacity is unchanged at
+kilograms. 1000 kilograms.
+The upgrade was funded from the A replacement is scheduled for the
+capital reserve. next financial year.
+The north wing lift is certified The south wing lift is certified
+until 2031. until 2027.",Hartley Mechanical left Building A with a chilled‑water setpoint of **6.5 degrees** [1] and gave the north‑wing lift a rated capacity of **1600 kilograms** [2].,"faithfulness: 2.00 (S1=2)
+completeness: 2","S1 (2): Hartley Mechanical left Building A with a chilled‑water setpoint of **6.5 degrees** [1] and gave the north‑wing lift a rated capacity of **1600 kilograms** [2].
+  note: Both values are right once the interleaved columns are read in order (Building A 6.5; north wing 1600).",S1:2,2,,,,
+multi-hop-induction-and-leave,multi-hop,"How long does the contractor site induction take, and how far in advance must staff book annual leave?","[1] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[2] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[3] staff-handbook, page 1 (06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e)
+STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+Policy reference POL-HR-014.
+The annual leave entitlement is 20 working days per calendar year.
+Unused leave does not carry over into the following year.
+Leave must be approved by your manager at least two weeks in advance.
+Leave requests during the December shutdown are not accepted.
+
+[4] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[5] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.",The contractor site induction takes **90 minutes** [1]. Staff must book annual leave **at least two weeks in advance** [3].,"faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2","S1 (2): The contractor site induction takes **90 minutes** [1].
+S2 (2): Staff must book annual leave **at least two weeks in advance** [3].
+  note: Source: leave 'must be approved by your manager at least two weeks in advance'; 'book' is a fair paraphrase.","S1:2,S2:2",2,,,,
+multi-hop-inspection-intervals,multi-hop,"How often are harnesses inspected, and how often are scaffolds inspected?","[1] contractor-safety-manual, page 8 (1449212d-38ee-4e3e-8602-93b245939a27)
+CONTRACTOR SAFETY MANUAL - SECTION 8 - SCAFFOLDING
+Only licensed scaffolders may erect or alter scaffolding.
+Scaffolds are inspected every 30 days and after storms.
+A green scaffold tag means the scaffold is safe to use.
+
+[2] contractor-safety-manual, page 7 (a7f24062-f56f-42ee-b435-b31250e738fd)
+CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS
+A harness is required for any work above 2 metres without edge protection.
+Harnesses are inspected every six months and tagged.
+Working at heights permits are signed off by the rigging coordinator.",Harnesses are inspected every six months [2]. Scaffolds are inspected every 30 days and after storms [1].,"faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2","S1 (2): Harnesses are inspected every six months [2].
+S2 (2): Scaffolds are inspected every 30 days and after storms [1].","S1:2,S2:2",2,,,,
+multi-hop-leave-payout-vs-carryover,multi-hop,My contract says untaken leave is paid out when I leave — does the handbook let me carry it into next year while I am still employed?,"[1] staff-handbook, page 1 (06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e)
+STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+Policy reference POL-HR-014.
+The annual leave entitlement is 20 working days per calendar year.
+Unused leave does not carry over into the following year.
+Leave must be approved by your manager at least two weeks in advance.
+Leave requests during the December shutdown are not accepted.
+
+[2] employment-contract, page 2 (d9653863-abe4-4a7b-9c24-603141bc77c8)
+EMPLOYMENT CONTRACT - PART B - NOTICE AND TERMINATION
+After probation the notice period is four weeks in writing.
+Accrued but untaken leave is paid out on termination.
+Summary dismissal applies only in cases of serious misconduct.",No. The staff handbook states that unused leave does **not** carry over into the following year [1].,"faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2","S1 (2): No.
+  note: 'No.' is the answer, supported by [1].
+S2 (2): The staff handbook states that unused leave does **not** carry over into the following year [1].","S1:2,S2:2",2,,,,
+multi-hop-no-answer-boardroom-av,multi-hop,"Who maintains the boardroom's video conferencing, and what does that contract cost?","[1] facilities-guide, page 3 (f14e5dcd-3620-49c5-89c5-6a71085273c5)
+FACILITIES GUIDE - MEETING ROOMS
+Rooms are booked through the calendar system.
+The boardroom seats fourteen and has video conferencing.
+Catering must be ordered two business days in advance.",The provided context does not contain information about who maintains the boardroom’s video conferencing system or the cost of any related contract.,"faithfulness: n/a (no factual claims)
+completeness: 2",completeness: Correctly declines.,,2,,,,
+refusal-handbook-dress-code,refusal,What is the dress code in the staff handbook?,"[1] staff-handbook, page 3 (a224ddbc-0b59-4266-b40d-48aedfb53477)
+STAFF HANDBOOK - SECTION 3 - WORKPLACE SAFETY
+The fire assembly point is the grassed area on Wellington Street.
+Wardens wear high visibility vests and take a roll call.
+Incidents must be reported to the safety officer within 24 hours.
+
+[2] staff-handbook, page 2 (0878b922-08a2-45f9-ba56-064bfbb79f38)
+STAFF HANDBOOK - SECTION 2 - EXPENSES
+Policy reference POL-FIN-022.
+Reimbursement for travel must be submitted within 30 days of the trip.
+Original receipts must be attached to every claim.
+Claims over 500 dollars require director approval before payment.
+Mileage is reimbursed at 78 cents per kilometre.
+
+[3] staff-handbook, page 4 (f2b03cb7-3a87-438e-90fb-d793114417ca)
+STAFF HANDBOOK - SECTION 4 - INFORMATION TECHNOLOGY
+Passwords must be at least 14 characters and are rotated annually.
+Personal devices may access email but not the finance system.
+Report suspected phishing to the service desk immediately.",The staff handbook does not provide a general dress‑code policy. It only notes that wardens must wear high‑visibility vests during safety duties [1]. No other clothing requirements are mentioned.,"faithfulness: 2.00 (S2=2)
+completeness: 2","completeness: S1 and S3 say what the handbook lacks; not claims.
+S2 (2): It only notes that wardens must wear high‑visibility vests during safety duties [1].
+  note: 'during safety duties' is a fair reading of the workplace-safety section.",S2:2,2,,,,
+refusal-hot-work-cost,refusal,How much does a hot work permit cost?,"[1] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.",The provided context does not contain any information about the cost of a hot work permit.,"faithfulness: n/a (no factual claims)
+completeness: 2",completeness: Correctly declines.,,2,,,,
+refusal-manual-drones,refusal,What does the contractor safety manual say about flying drones on site?,"[1] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[2] contractor-safety-manual, page 30 (a19caed4-a188-41c5-ba3b-22054abcaf63)
+CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL
+This manual was last revised in March 2026.
+Feedback on the manual goes to the Site Safety Office.
+
+[3] contractor-safety-manual, page 28 (b511f6cd-7be5-45d2-81e9-2e5d499893a0)
+CONTRACTOR SAFETY MANUAL - SECTION 28 - NON-COMPLIANCE
+A first breach of this manual results in a written warning.
+A second breach within twelve months removes the contractor from site for 14 days.
+A serious breach ends the contract.
+
+[4] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[5] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[6] contractor-safety-manual, page 3 (68ac9866-fa78-47c1-8870-b7ac51f94515)
+CONTRACTOR SAFETY MANUAL - SECTION 3 - PERSONAL PROTECTIVE EQUIPMENT
+Steel capped boots, a hard hat and safety glasses are required in all work zones.
+Hearing protection is required where noise exceeds 85 decibels.
+Contractors supply their own protective equipment unless the work order says otherwise.
+
+[7] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.
+
+[8] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.",The contractor safety manual does not contain any information about flying drones on site.,"faithfulness: n/a (no factual claims)
+completeness: 2",completeness: Correctly declines.,,2,,,,
+refusal-records-email,refusal,What does the records policy say about archiving email?,"[1] records-policy, page 1 (80b53cac-bc8a-41db-942d-8355996d615f)
+Before any record is disposed of, the records officer confirms that it is
+listed in the records register and that its disposal date has passed.
+
+Disposal needs written custodian sign-off. The custodian named in the
+register approves each batch before it leaves the office.
+
+Paper records are destroyed by cross-cut shredding on site. Electronic
+records are erased from every server and every backup copy.
+
+When a batch has been destroyed, the records officer completes a
+destruction certificate and files it against the register entry.",The records policy excerpt provided does not mention anything about archiving email.,"faithfulness: n/a (no factual claims)
+completeness: 2",completeness: Correctly declines.,,2,,,,
+refusal-sick-leave,refusal,How many days of sick leave do I get?,"[1] staff-handbook, page 1 (06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e)
+STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+Policy reference POL-HR-014.
+The annual leave entitlement is 20 working days per calendar year.
+Unused leave does not carry over into the following year.
+Leave must be approved by your manager at least two weeks in advance.
+Leave requests during the December shutdown are not accepted.","The provided context does not contain any information about sick leave entitlement. It only describes the annual leave policy (20 working days per calendar year, no carryover, etc.). Therefore, I cannot answer how many days of sick leave you get from the given sources.","faithfulness: 2.00 (S2=2)
+completeness: 2","completeness: Declines sick leave correctly; S1 and S3 are not claims.
+S2 (2): It only describes the annual leave policy (20 working days per calendar year, no carryover, etc.).",S2:2,2,,,,
+section-records-disposal,section,What is the process for disposing of records?,"[1] records-policy, page 1 (80b53cac-bc8a-41db-942d-8355996d615f)
+Before any record is disposed of, the records officer confirms that it is
+listed in the records register and that its disposal date has passed.
+
+Disposal needs written custodian sign-off. The custodian named in the
+register approves each batch before it leaves the office.
+
+Paper records are destroyed by cross-cut shredding on site. Electronic
+records are erased from every server and every backup copy.
+
+When a batch has been destroyed, the records officer completes a
+destruction certificate and files it against the register entry.","The disposal process is: the records officer first verifies that the record is in the records register and its disposal date has passed; then the custodian listed in the register provides written sign‑off for the batch. Once approved, paper records are destroyed by cross‑cut shredding on site, while electronic records are erased from all servers and backup copies. After destruction, the records officer completes a destruction certificate and files it against the register entry. [1]","faithfulness: 2.00 (S1=2, S2=2, S3=2)
+completeness: 2","S1 (2): The disposal process is: the records officer first verifies that the record is in the records register and its disposal date has passed; then the custodian listed in the register provides written sign‑off for the batch.
+S2 (2): Once approved, paper records are destroyed by cross‑cut shredding on site, while electronic records are erased from all servers and backup copies.
+S3 (2): After destruction, the records officer completes a destruction certificate and files it against the register entry. [1]","S1:2,S2:2,S3:2",2,,,,
+section-records-retention,section,What are the retention periods for records?,"[1] records-policy, page 1 (b3e4d934-cb57-4c69-86b3-f1366f0d9321)
+Financial and tax records are kept for seven years from the end of the
+financial year they relate to.
+
+Board minutes, company registers and title deeds are kept permanently
+and are never destroyed.","Financial and tax records are retained for seven years from the end of the financial year they relate to. Board minutes, company registers, and title deeds are kept permanently and are never destroyed. [1]","faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2","S1 (2): Financial and tax records are retained for seven years from the end of the financial year they relate to.
+S2 (2): Board minutes, company registers, and title deeds are kept permanently and are never destroyed. [1]","S1:2,S2:2",2,,,,
+boardroom-capacity,single-hop,How many people does the boardroom seat?,"[1] facilities-guide, page 3 (f14e5dcd-3620-49c5-89c5-6a71085273c5)
+FACILITIES GUIDE - MEETING ROOMS
+Rooms are booked through the calendar system.
+The boardroom seats fourteen and has video conferencing.
+Catering must be ordered two business days in advance.",The boardroom seats fourteen people. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2",S1 (2): The boardroom seats fourteen people. [1],S1:2,2,,,,
+building-hours,single-hop,What time does the building open?,"[1] facilities-guide, page 1 (9d1f20cb-09b4-4b81-931b-071764662029)
+FACILITIES GUIDE - BUILDING ACCESS
+Access cards are issued by reception on the ground floor.
+The building is open from 6am to 8pm on weekdays.
+After hours entry requires a card and a PIN.",The building opens at 6 am on weekdays. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2","completeness: Gives the opening time; the closing time was not asked.
+S1 (2): The building opens at 6 am on weekdays. [1]",S1:2,2,,,,
+catering-notice,single-hop,How far ahead must catering be ordered?,"[1] facilities-guide, page 3 (f14e5dcd-3620-49c5-89c5-6a71085273c5)
+FACILITIES GUIDE - MEETING ROOMS
+Rooms are booked through the calendar system.
+The boardroom seats fourteen and has video conferencing.
+Catering must be ordered two business days in advance.",Catering must be ordered two business days in advance. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2",S1 (2): Catering must be ordered two business days in advance. [1],S1:2,2,,,,
+expense-approval,single-hop,Who approves a claim over 500 dollars?,"[1] staff-handbook, page 2 (0878b922-08a2-45f9-ba56-064bfbb79f38)
+STAFF HANDBOOK - SECTION 2 - EXPENSES
+Policy reference POL-FIN-022.
+Reimbursement for travel must be submitted within 30 days of the trip.
+Original receipts must be attached to every claim.
+Claims over 500 dollars require director approval before payment.
+Mileage is reimbursed at 78 cents per kilometre.",The claim must be approved by the director before payment. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2",S1 (2): The claim must be approved by the director before payment. [1],S1:2,2,,,,
+expense-deadline,single-hop,What is the deadline for submitting travel expenses?,"[1] staff-handbook, page 2 (0878b922-08a2-45f9-ba56-064bfbb79f38)
+STAFF HANDBOOK - SECTION 2 - EXPENSES
+Policy reference POL-FIN-022.
+Reimbursement for travel must be submitted within 30 days of the trip.
+Original receipts must be attached to every claim.
+Claims over 500 dollars require director approval before payment.
+Mileage is reimbursed at 78 cents per kilometre.",Travel expense reimbursement must be submitted within 30 days of the trip. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2",S1 (2): Travel expense reimbursement must be submitted within 30 days of the trip. [1],S1:2,2,,,,
+fire-assembly,single-hop,Where is the fire assembly point?,"[1] staff-handbook, page 3 (a224ddbc-0b59-4266-b40d-48aedfb53477)
+STAFF HANDBOOK - SECTION 3 - WORKPLACE SAFETY
+The fire assembly point is the grassed area on Wellington Street.
+Wardens wear high visibility vests and take a roll call.
+Incidents must be reported to the safety officer within 24 hours.",The fire assembly point is the grassed area on Wellington Street. [1],"faithfulness: 2.00 (S1=2)
+completeness: 2",S1 (2): The fire assembly point is the grassed area on Wellington Street. [1],S1:2,2,,,,
+summary-contractor-manual,summary,Give me an overview of the contractor safety manual.,"[1] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[2] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[3] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.
+
+[4] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.
+
+[5] contractor-safety-manual, page 6 (9f3dab27-931a-485f-a804-a6758cce2669)
+CONTRACTOR SAFETY MANUAL - SECTION 6 - CONFINED SPACES
+Entry to a tank, pit or vault requires a confined space permit.
+The atmosphere is tested for oxygen and gas before every entry.
+Confined space permits are signed off by the entry supervisor.
+A confined space permit is valid for 4 hours.
+
+[6] contractor-safety-manual, page 7 (a7f24062-f56f-42ee-b435-b31250e738fd)
+CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS
+A harness is required for any work above 2 metres without edge protection.
+Harnesses are inspected every six months and tagged.
+Working at heights permits are signed off by the rigging coordinator.
+
+[7] contractor-safety-manual, page 9 (55588e71-35e2-42e5-b02b-5526159ebc76)
+CONTRACTOR SAFETY MANUAL - SECTION 9 - ELECTRICAL ISOLATION
+Equipment is isolated and locked out before maintenance.
+Each worker applies a personal danger lock and tag.
+Only the person who applied a lock may remove it.
+
+[8] contractor-safety-manual, page 10 (8a2177eb-3944-4441-a425-43a1021f24b3)
+CONTRACTOR SAFETY MANUAL - SECTION 10 - PORTABLE ELECTRICAL EQUIPMENT
+Portable tools and leads are tested and tagged every three months.
+Untagged equipment is removed from site.
+
+[9] contractor-safety-manual, page 11 (7506f428-c0b1-4390-a834-a310378931e2)
+CONTRACTOR SAFETY MANUAL - SECTION 11 - HAZARDOUS CHEMICALS
+A safety data sheet must be on site for every chemical brought in.
+Chemicals are stored in the bunded store behind Building C.
+
+[10] contractor-safety-manual, page 12 (0c3e7a0c-531d-4aab-b1f7-9f31ddfdea51)
+CONTRACTOR SAFETY MANUAL - SECTION 12 - ASBESTOS
+The asbestos register is held by the Site Safety Office.
+Check the register before drilling or cutting any wall or ceiling.
+Suspected asbestos stops work immediately.
+
+[11] contractor-safety-manual, page 14 (1672f5a4-3129-4e85-bc20-07d42ec80ecc)
+CONTRACTOR SAFETY MANUAL - SECTION 14 - CRANE LIFTS
+Every crane lift needs a lift plan approved the day before.
+Lifts stop when wind gusts exceed 40 kilometres per hour.
+
+[12] contractor-safety-manual, page 15 (4cad8e8f-66d4-4d99-8dd3-e9404bab176d)
+CONTRACTOR SAFETY MANUAL - SECTION 15 - MOBILE PLANT
+Forklifts and elevated work platforms are operated only by licence holders.
+Plant is pre-start checked at the beginning of each shift.
+The site speed limit for plant is 10 kilometres per hour.
+
+[13] contractor-safety-manual, page 16 (d41f73ba-77e2-4832-910d-cb7892b75ef1)
+CONTRACTOR SAFETY MANUAL - SECTION 16 - TRAFFIC MANAGEMENT
+Pedestrian walkways are marked in yellow and must be kept clear.
+Reversing plant requires a spotter.
+
+[14] contractor-safety-manual, page 17 (4292a291-35e0-46b4-91ee-1ef36b58608e)
+CONTRACTOR SAFETY MANUAL - SECTION 17 - NOISE AND VIBRATION
+Noisy work is limited to 7am to 5pm on weekdays.
+Jackhammer use is rotated between workers every 30 minutes.
+
+[15] contractor-safety-manual, page 19 (d6a53e5d-c69d-4720-97c3-3da2ad507a89)
+CONTRACTOR SAFETY MANUAL - SECTION 19 - MANUAL HANDLING
+Loads over 20 kilograms require a two person lift or a mechanical aid.
+
+[16] contractor-safety-manual, page 20 (e177eee3-2266-4e6f-b268-e4cfd836b188)
+CONTRACTOR SAFETY MANUAL - SECTION 20 - HOUSEKEEPING
+Work areas are cleaned at the end of every shift.
+Waste is separated into general, metal and timber skips.
+
+[17] contractor-safety-manual, page 21 (3eb58a72-7413-4b7e-b990-ce6f0fe24e10)
+CONTRACTOR SAFETY MANUAL - SECTION 21 - FIRST AID
+Each crew of five or more carries a first aid kit.
+The site first aid room is next to the gatehouse.
+
+[18] contractor-safety-manual, page 22 (afad5777-d58d-4511-b571-a588b7f33e4d)
+CONTRACTOR SAFETY MANUAL - SECTION 22 - HEAT STRESS
+When the temperature exceeds 35 degrees, crews take a 10 minute break every hour.
+Cool drinking water is provided at the gatehouse.
+
+[19] contractor-safety-manual, page 24 (98c146be-f097-43e4-b89f-98b93ff42b62)
+CONTRACTOR SAFETY MANUAL - SECTION 24 - ENVIRONMENTAL CONTROLS
+Spill kits are kept at every chemical store and refuelling point.
+Stormwater drains are covered during concrete washout.
+
+[20] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[21] contractor-safety-manual, page 26 (7182be90-0e60-441f-a8bc-85caf8064a86)
+CONTRACTOR SAFETY MANUAL - SECTION 26 - INSURANCE
+Contractors hold public liability cover of at least 20 million dollars.
+Certificates of currency are provided before the first day on site.
+
+[22] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.
+
+[23] contractor-safety-manual, page 29 (7d6467e2-7709-4ee9-b1aa-c67f739f884b)
+CONTRACTOR SAFETY MANUAL - SECTION 29 - CLOSING OUT WORK
+When work is finished, permits are returned and signed closed.
+The leading hand walks the area with the site supervisor before handover.
+
+[24] contractor-safety-manual, page 30 (a19caed4-a188-41c5-ba3b-22054abcaf63)
+CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL
+This manual was last revised in March 2026.
+Feedback on the manual goes to the Site Safety Office.","The contractor safety manual sets out the safety requirements that every contractor must follow when working on company sites [1]. It begins with an introduction stating that the manual applies to all contractors, is issued by the Site Safety Office and reviewed biennially, and must be read before the first day on site [1].
+
+Key procedural requirements include:
+
+* **Site induction** – a 90‑minute induction valid for 12 months; induction cards must be carried at all times [2].
+* **Supervision** – each crew nominates a leading hand who serves as the contact point for the site supervisor [3].
+* **Permit‑to‑work systems** – hot work permits (valid for one shift ≤ 8 hrs, signed by the duty engineer, with a 60‑minute fire watch) [4]; confined‑space permits (valid for 4 hrs, atmosphere tested before entry, signed by the entry supervisor) [5]; working‑at‑heights permits (harness required above 2 m without edge protection, inspected every six months, signed off by the rigging coordinator) [6]; electrical isolation (lock‑out/tag‑out, personal danger lock and tag, only the applier may remove it) [7];","faithfulness: 2.00 (S1=2, S2=2, S4=2, S5=2, S6=2)
+completeness: 1","completeness: Cut off mid-list by the eval's 400-token cap: most sections, insurance and audits are missing.
+S1 (2): The contractor safety manual sets out the safety requirements that every contractor must follow when working on company sites [1].
+S2 (2): It begins with an introduction stating that the manual applies to all contractors, is issued by the Site Safety Office and reviewed biennially, and must be read before the first day on site [1].
+S4 (2): * **Site induction** – a 90‑minute induction valid for 12 months; induction cards must be carried at all times [2].
+S5 (2): * **Supervision** – each crew nominates a leading hand who serves as the contact point for the site supervisor [3].
+S6 (2): * **Permit‑to‑work systems** – hot work permits (valid for one shift ≤ 8 hrs, signed by the duty engineer, with a 60‑minute fire watch) [4]; confined‑space permits (valid for 4 hrs, atmosphere tested before entry, signed by the entry supervisor) [5]; working‑at‑heights permits (harness required above 2 m without edge protection, inspected every six months, signed off by the rigging coordinator) [6]; electrical isolation (lock‑out/tag‑out, personal danger lock and tag, only the applier may remove it) [7];","S1:2,S2:2,S4:2,S5:2,S6:2",1,,,,
+summary-contractor-manual-closing,summary,"Summarise the contractor safety manual, including insurance, audits and non-compliance.","[1] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[2] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[3] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.
+
+[4] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.
+
+[5] contractor-safety-manual, page 6 (9f3dab27-931a-485f-a804-a6758cce2669)
+CONTRACTOR SAFETY MANUAL - SECTION 6 - CONFINED SPACES
+Entry to a tank, pit or vault requires a confined space permit.
+The atmosphere is tested for oxygen and gas before every entry.
+Confined space permits are signed off by the entry supervisor.
+A confined space permit is valid for 4 hours.
+
+[6] contractor-safety-manual, page 7 (a7f24062-f56f-42ee-b435-b31250e738fd)
+CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS
+A harness is required for any work above 2 metres without edge protection.
+Harnesses are inspected every six months and tagged.
+Working at heights permits are signed off by the rigging coordinator.
+
+[7] contractor-safety-manual, page 9 (55588e71-35e2-42e5-b02b-5526159ebc76)
+CONTRACTOR SAFETY MANUAL - SECTION 9 - ELECTRICAL ISOLATION
+Equipment is isolated and locked out before maintenance.
+Each worker applies a personal danger lock and tag.
+Only the person who applied a lock may remove it.
+
+[8] contractor-safety-manual, page 10 (8a2177eb-3944-4441-a425-43a1021f24b3)
+CONTRACTOR SAFETY MANUAL - SECTION 10 - PORTABLE ELECTRICAL EQUIPMENT
+Portable tools and leads are tested and tagged every three months.
+Untagged equipment is removed from site.
+
+[9] contractor-safety-manual, page 11 (7506f428-c0b1-4390-a834-a310378931e2)
+CONTRACTOR SAFETY MANUAL - SECTION 11 - HAZARDOUS CHEMICALS
+A safety data sheet must be on site for every chemical brought in.
+Chemicals are stored in the bunded store behind Building C.
+
+[10] contractor-safety-manual, page 12 (0c3e7a0c-531d-4aab-b1f7-9f31ddfdea51)
+CONTRACTOR SAFETY MANUAL - SECTION 12 - ASBESTOS
+The asbestos register is held by the Site Safety Office.
+Check the register before drilling or cutting any wall or ceiling.
+Suspected asbestos stops work immediately.
+
+[11] contractor-safety-manual, page 14 (1672f5a4-3129-4e85-bc20-07d42ec80ecc)
+CONTRACTOR SAFETY MANUAL - SECTION 14 - CRANE LIFTS
+Every crane lift needs a lift plan approved the day before.
+Lifts stop when wind gusts exceed 40 kilometres per hour.
+
+[12] contractor-safety-manual, page 15 (4cad8e8f-66d4-4d99-8dd3-e9404bab176d)
+CONTRACTOR SAFETY MANUAL - SECTION 15 - MOBILE PLANT
+Forklifts and elevated work platforms are operated only by licence holders.
+Plant is pre-start checked at the beginning of each shift.
+The site speed limit for plant is 10 kilometres per hour.
+
+[13] contractor-safety-manual, page 16 (d41f73ba-77e2-4832-910d-cb7892b75ef1)
+CONTRACTOR SAFETY MANUAL - SECTION 16 - TRAFFIC MANAGEMENT
+Pedestrian walkways are marked in yellow and must be kept clear.
+Reversing plant requires a spotter.
+
+[14] contractor-safety-manual, page 17 (4292a291-35e0-46b4-91ee-1ef36b58608e)
+CONTRACTOR SAFETY MANUAL - SECTION 17 - NOISE AND VIBRATION
+Noisy work is limited to 7am to 5pm on weekdays.
+Jackhammer use is rotated between workers every 30 minutes.
+
+[15] contractor-safety-manual, page 19 (d6a53e5d-c69d-4720-97c3-3da2ad507a89)
+CONTRACTOR SAFETY MANUAL - SECTION 19 - MANUAL HANDLING
+Loads over 20 kilograms require a two person lift or a mechanical aid.
+
+[16] contractor-safety-manual, page 20 (e177eee3-2266-4e6f-b268-e4cfd836b188)
+CONTRACTOR SAFETY MANUAL - SECTION 20 - HOUSEKEEPING
+Work areas are cleaned at the end of every shift.
+Waste is separated into general, metal and timber skips.
+
+[17] contractor-safety-manual, page 21 (3eb58a72-7413-4b7e-b990-ce6f0fe24e10)
+CONTRACTOR SAFETY MANUAL - SECTION 21 - FIRST AID
+Each crew of five or more carries a first aid kit.
+The site first aid room is next to the gatehouse.
+
+[18] contractor-safety-manual, page 22 (afad5777-d58d-4511-b571-a588b7f33e4d)
+CONTRACTOR SAFETY MANUAL - SECTION 22 - HEAT STRESS
+When the temperature exceeds 35 degrees, crews take a 10 minute break every hour.
+Cool drinking water is provided at the gatehouse.
+
+[19] contractor-safety-manual, page 24 (98c146be-f097-43e4-b89f-98b93ff42b62)
+CONTRACTOR SAFETY MANUAL - SECTION 24 - ENVIRONMENTAL CONTROLS
+Spill kits are kept at every chemical store and refuelling point.
+Stormwater drains are covered during concrete washout.
+
+[20] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[21] contractor-safety-manual, page 26 (7182be90-0e60-441f-a8bc-85caf8064a86)
+CONTRACTOR SAFETY MANUAL - SECTION 26 - INSURANCE
+Contractors hold public liability cover of at least 20 million dollars.
+Certificates of currency are provided before the first day on site.
+
+[22] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.
+
+[23] contractor-safety-manual, page 29 (7d6467e2-7709-4ee9-b1aa-c67f739f884b)
+CONTRACTOR SAFETY MANUAL - SECTION 29 - CLOSING OUT WORK
+When work is finished, permits are returned and signed closed.
+The leading hand walks the area with the site supervisor before handover.
+
+[24] contractor-safety-manual, page 30 (a19caed4-a188-41c5-ba3b-22054abcaf63)
+CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL
+This manual was last revised in March 2026.
+Feedback on the manual goes to the Site Safety Office.","We need to summarize the contractor safety manual, including insurance, audits and non-compliance. Use only sources. Provide citations. Need to mention insurance (section 26), audits (section 27), non-compliance? The manual mentions audit findings rated high must be closed within 7 days (implies non-compliance). Also maybe other sections about permits, etc. Summarize overall. Provide concise summary with citations.
+
+We must only use sources. Provide citations like [26] etc. Let's extract relevant lines:
+
+Insurance: [26] ""Contractors hold public liability cover of at least 20 million dollars. Certificates of currency are provided before the first day on site.""
+
+Audits: [27] ""The Site Safety Office audits each contractor at least once a quarter. Audit findings rated high must be closed within 7 days.""
+
+Non-compliance: Not explicit but implied: high audit findings must be closed within 7 days; also maybe other sections like permits must be signed off, etc. Could mention that failure to comply with permit requirements (e.g., hot work permit, confined space permit) stops work or requires immediate action. For example: [12] asbestos: ""Suspected asbestos stops work immediately."" That's a non-compliance action. Also [5] hot work permit: ""A fire watch stays for 60 minutes after hot work ends."" Not exactly non-compliance. But we can note that non-compliance leads to corrective actions, e.g., audit findings must be closed within 7 days, and suspected asbestos stops work.
+
+We'll summarize: manual covers site induction, supervision, permits, PPE, hazardous materials, plant, traffic, noise, manual handling, housekeeping, first aid, heat stress, environmental controls, subcontractors, insurance, audits, closing out work, review.
+
+Provide citations for each point.
+
+Let's craft answer.","faithfulness: 1.08 (S5=1, S12=1, S13=2, S14=2, S15=2, S16=1, S17=0, S18=1, S19=0, S20=1, S22=1, S23=1)
+completeness: 1","completeness: This is the writer's reasoning leaked into the answer, not an answer; it does carry the insurance and audit facts.
+S5 (1): The manual mentions audit findings rated high must be closed within 7 days (implies non-compliance).
+  note: The 7-day rule is right; 'implies non-compliance' is the writer's reading.
+S12 (1): Insurance: [26] ""Contractors hold public liability cover of at least 20 million dollars.
+  note: Quote is right but cited as [26]; the source is [21].
+S13 (2): Certificates of currency are provided before the first day on site.""
+S14 (2): Audits: [27] ""The Site Safety Office audits each contractor at least once a quarter.
+S15 (2): Audit findings rated high must be closed within 7 days.""
+S16 (1): Non-compliance: Not explicit but implied: high audit findings must be closed within 7 days; also maybe other sections like permits must be signed off, etc.
+  note: Interpretation; the non-compliance section was not retrieved.
+S17 (0): Could mention that failure to comply with permit requirements (e.g., hot work permit, confined space permit) stops work or requires immediate action.
+  note: Nothing retrieved says a permit failure stops work.
+S18 (1): For example: [12] asbestos: ""Suspected asbestos stops work immediately.""
+  note: Quote is right but cited as [12]; the source is [10].
+S19 (0): That's a non-compliance action.
+  note: The writer's opinion, not in the sources.
+S20 (1): Also [5] hot work permit: ""A fire watch stays for 60 minutes after hot work ends.""
+  note: Fact is right but cited as [5]; the source is [4].
+S22 (1): But we can note that non-compliance leads to corrective actions, e.g., audit findings must be closed within 7 days, and suspected asbestos stops work.
+  note: Mixes supported facts with an unsupported generalisation.
+S23 (1): We'll summarize: manual covers site induction, supervision, permits, PPE, hazardous materials, plant, traffic, noise, manual handling, housekeeping, first aid, heat stress, environmental controls, subcontractors, insurance, audits, closing out work, review.
+  note: Mostly right, but lists PPE, which is not in the retrieved sources.","S5:1,S12:1,S13:2,S14:2,S15:2,S16:1,S17:0,S18:1,S19:0,S20:1,S22:1,S23:1",1,,,,
+summary-records-policy,summary,Summarise the records policy.,"[1] records-policy, page 1 (80b53cac-bc8a-41db-942d-8355996d615f)
+Before any record is disposed of, the records officer confirms that it is
+listed in the records register and that its disposal date has passed.
+
+[2] records-policy, page 1 (6ac7c821-f545-4e12-a270-aec056131586)
+Disposal needs written custodian sign-off. The custodian named in the
+register approves each batch before it leaves the office.
+
+[3] records-policy, page 1 (1068a29f-b5bd-4abc-9d34-fabb57fabbfd)
+Paper records are destroyed by cross-cut shredding on site. Electronic
+records are erased from every server and every backup copy.
+
+[4] records-policy, page 1 (78778e04-a11b-4550-b4ab-f29594bfb5b7)
+When a batch has been destroyed, the records officer completes a
+destruction certificate and files it against the register entry.
+
+[5] records-policy, page 1 (b3e4d934-cb57-4c69-86b3-f1366f0d9321)
+Financial and tax records are kept for seven years from the end of the
+financial year they relate to.
+
+[6] records-policy, page 1 (64324ce7-d83b-4938-b6b1-2b9226e1d8bd)
+Board minutes, company registers and title deeds are kept permanently
+and are never destroyed.","The records policy requires that before any record is disposed of, the records officer verifies it is listed in the records register and that its disposal date has passed [1]. Disposal must have written custodian sign‑off, with the custodian named in the register approving each batch [2]. Paper records are destroyed on‑site by cross‑cut shredding, while electronic records are erased from every server and backup copy [3]. After destruction, the records officer completes a destruction certificate and files it against the register entry [4]. Financial and tax","faithfulness: 2.00 (S1=2, S2=2, S3=2, S4=2)
+completeness: 1","completeness: Cut off at 'Financial and tax' by the eval's 400-token cap: the retention periods are missing. S5 is a fragment, not graded.
+S1 (2): The records policy requires that before any record is disposed of, the records officer verifies it is listed in the records register and that its disposal date has passed [1].
+S2 (2): Disposal must have written custodian sign‑off, with the custodian named in the register approving each batch [2].
+S3 (2): Paper records are destroyed on‑site by cross‑cut shredding, while electronic records are erased from every server and backup copy [3].
+S4 (2): After destruction, the records officer completes a destruction certificate and files it against the register entry [4].","S1:2,S2:2,S3:2,S4:2",1,,,,

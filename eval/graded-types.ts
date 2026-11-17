@@ -24,6 +24,10 @@ export interface Grade {
   grader: string
   reviewed: boolean
   gradedAt: string
+  /** On a person's grade: they accepted the draft scores. */
+  agreesWithDraft?: boolean
+  /** On a person's grade: the notes column from the review sheet. */
+  reviewNotes?: string
 }
 
 export interface GradedAnswer {
@@ -39,7 +43,31 @@ export interface GradedAnswer {
   }>
   /** The results file and run the answer came from. */
   drawnFrom: { label: string; at: string }
+  /**
+   * The drafted grade. A person review does not overwrite this.
+   * Null until something has been graded.
+   */
   grade: Grade | null
+  /**
+   * The person's grade. Gold for the judge once `reviewed` is true.
+   * Absent until a review sheet is imported.
+   */
+  personGrade?: Grade | null
+}
+
+/**
+ * The grade the eval treats as gold. A reviewed person grade wins. A
+ * reviewed `grade` is gold when no person grade is stored. Unreviewed
+ * drafts count only when `includeDrafts` is set.
+ */
+export function referenceGrade(
+  answer: GradedAnswer,
+  options?: { includeDrafts?: boolean },
+): Grade | null {
+  if (answer.personGrade?.reviewed) return answer.personGrade
+  if (answer.grade?.reviewed) return answer.grade
+  if (options?.includeDrafts && answer.grade) return answer.grade
+  return null
 }
 
 /** Answer-level faithfulness: the mean claim score, 0–2; null with no claims. */
