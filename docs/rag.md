@@ -1213,10 +1213,10 @@ pooled. **Support** is 1 − unsupported sentences / sentences; **citation
 precision** is the same over the sentences that carry a `[n]` citation. Two
 things to know when reading them:
 
-- **No verdict is counted apart.** The app's verifier fails open: a timeout or
-  an unreadable reply leaves the answer as it is. The eval reads the verdict
-  strictly and reports those answers in a `no-verdict` column, left out of the
-  rates, rather than scoring them as fully supported.
+- **No verdict is counted apart.** The app withholds an answer when the
+  verifier times out, errors, or returns nothing readable (#171). The eval
+  reports those answers in a `no-verdict` column, left out of the rates,
+  rather than scoring them as fully supported.
 - **The rates are a ceiling.** The verifier lists a sentence only when a
   source "clearly does NOT support" it, so what it flags is a floor on
   unsupported sentences, and the rates are at most what a careful reader would
@@ -1679,10 +1679,11 @@ then runs while the stream stays open. If it strips a claim, it updates the
 saved row and sends `revision`, which the client applies to that answer by id
 (a next question may already be streaming). Verification gets **one attempt
 with a 12-second deadline** (`VERIFY_TIMEOUT_MS`) instead of the client default
-of 60s × 4, and fails open: a timeout strips nothing (#42). The answer's metrics
-(total time, tokens/sec) cover drafting only. If the thread is reopened
-mid-check, the saved draft can be seen unverified for those few seconds; once
-verification returns, the saved record is the verified text.
+of 60s × 4. A timeout, error, or unreadable verdict withholds the answer
+(#171); a readable verdict strips only the sentences it marks (#42). The
+answer's metrics (total time, tokens/sec) cover drafting only. If the thread is
+reopened mid-check, the saved draft can be seen unverified for those few
+seconds; once verification returns, the saved record is the verified text.
 
 ---
 

@@ -185,9 +185,9 @@ describe('parseVerdict', () => {
   })
 
   /**
-   * Fails OPEN, deliberately. The similarity floor is the gate on whether an
-   * answer may be shown, and it has already run. A flaky verification call must
-   * not be able to turn a correctly-grounded answer into a refusal.
+   * An unreadable verdict has no sentence numbers. That empty list is not a
+   * pass: `readVerdict` returns null for these, and `verifyAnswer` withholds
+   * the answer (#171).
    */
   it.each([
     ['null content', null],

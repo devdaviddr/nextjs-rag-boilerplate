@@ -8,6 +8,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An answer the verifier cannot check is withheld.** A timeout, error, or
+  unreadable verdict used to count as "all supported", so the answer was shown
+  unchecked. Those outcomes now replace the answer with the fixed refusal
+  (#171).
+
 ## [0.28.1] - 2026-09-27
 
 ### Fixed
