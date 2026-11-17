@@ -20,3 +20,6 @@ overrides:
   # mermaid > chevrotain pins 4.17.23: template code injection and prototype
   # pollution advisories (#129).
   lodash-es: '>=4.17.24'
+  # next 16.4.6 depends on postcss 8.5.23, which allows source-map-js ^1.2.1.
+  # 1.2.1 is the event-loop DoS advisory; no newer Next selects 1.2.2 (#181).
+  source-map-js: '>=1.2.2'
