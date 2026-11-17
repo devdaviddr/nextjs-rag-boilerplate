@@ -2,8 +2,11 @@
 
 # Next.js RAG Boilerplate
 
-**A production-ready Next.js 16 template for building grounded document chat —
-with an optional agentic retrieval loop.**
+**Grounded chat over your own PDFs: every claim cites its page, or the app says it does not know.**
+
+A Next.js 16 template for document chat that searches your files first and lets the model write only from what that search returned.
+
+For someone who wants that as a private app — accounts, per-user knowledge bases, storage, and a retrieval score you can re-run — and then renames it to their own.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-20232a?logo=react&logoColor=61dafb)
@@ -16,10 +19,121 @@ with an optional agentic retrieval loop.**
 ![PWA](https://img.shields.io/badge/PWA-ready-5a0fc8?logo=pwa&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
+[Measured](#measured) · [Limitations](#limitations) ·
 [Getting started](#getting-started) · [Configuration](#configuration) ·
 [Usage](#usage) · [Documentation](#documentation)
 
 </div>
+
+---
+
+## Measured
+
+Fixed retrieval path: contextual headers plus hybrid search (dense vectors and
+lexical search, fused), against the previous dense-only index. Recorded in
+[RAG → Measured](docs/rag.md#measured) and in
+[spec 0027](specs/0027-agentic-rag-and-document-cracking.md) (the "1a + 1b"
+table). Hit@1, MRR and refusal accuracy are that comparison. The leak count
+is the next measurement on the same index, described under the table.
+
+| Metric           | Dense only | Hybrid + headers |
+| ---------------- | ---------- | ---------------- |
+| hit@1            | 0.824      | **0.941**        |
+| MRR              | 0.853      | **0.941**        |
+| Refusal accuracy | 1.000      | **1.000**        |
+| Cross-KB leaks   | —          | **0**            |
+
+hit@1, MRR and refusal accuracy are the single-hop slice only: **20 questions,
+17 answerable**, over the original three synthetic PDFs (`staff-handbook`,
+`employment-contract`, `facilities-guide`). hit@1 and MRR are means over
+those 17. 0.941 is 16/17 at rank 1, rounded to three decimals
+(`coreMetrics` in [`eval/run.ts`](eval/run.ts)); 0.824 is 14/17. Refusal
+accuracy 1.000 is the other **3** questions, the ones the corpus cannot
+answer. The dense MRR (0.853) is higher than its hit@1 because some correct
+passages were not the first hit.
+
+**0 leaks** is from the same hybrid index after knowledge bases were added,
+not a column in the original dense-vs-hybrid table. The check found no chunk
+from a knowledge base the question was not scoped to, and 16 of those 17
+answerable questions were still found when search was limited to the knowledge
+base that holds the answer. The one miss is the known-weak exact-identifier
+question, which also misses with every knowledge base in scope.
+[RAG → Cross-knowledge-base leakage](docs/rag.md#cross-knowledge-base-leakage).
+The run fails if `crossKbLeakage > 0`
+([`eval/gate.ts`](eval/gate.ts), `crossKbCheck` in
+[`eval/run.ts`](eval/run.ts)).
+
+`eval/questions.json` has since grown to **90 questions** and `eval/corpus/`
+to **8 PDFs**. The headline lines stay on the original 20 so a new slice
+cannot move them. Questions:
+[`eval/questions.json`](eval/questions.json). The harness comment that names
+these figures: [`eval/run.ts`](eval/run.ts). The corpus generator still cites
+them: [`eval/make-corpus.mjs`](eval/make-corpus.mjs).
+
+There is no committed results file. `pnpm rag:eval` writes
+`eval/results/baseline.json`, and `eval/results/` is gitignored. The table
+above is the number recorded in the docs and the spec, not a JSON artefact
+checked into this repo.
+
+Reproduce the fixed-pipeline report (the hybrid column, on current code:
+parent assembly on, cracking and reranking off):
+
+```bash
+pnpm rag:eval
+```
+
+That needs Postgres with pgvector (`pnpm docker:db` and `pnpm db:migrate`) and
+`LLM_API_KEY` in `.env`, because the harness embeds the corpus. It prints
+hit@1, MRR, refusal accuracy and cross-KB leakage for the single-hop slice and
+writes `eval/results/baseline.json`. It does not reprint the dense-only
+column. That column is the index from before hybrid search and contextual
+headers; nothing in the current tree turns the lexical channel off.
+
+These figures are **not** the default chat path. `RAG_AGENTIC_ENABLED` defaults
+to on. With document cracking on, that loop's single-hop hit@1 was **0.824**
+against the fixed path's **0.882** (17 answerable), and a question took about
+11 seconds instead of about 0.15. It is the default because follow-up hit@1
+went from **0.062** to **0.938** on 16 answerable follow-ups. Refusal accuracy
+stayed 1.000. See
+[RAG → Which path answers](docs/rag.md#which-path-answers).
+
+## Limitations
+
+The table is a regression gate for this repository's synthetic corpus. It is
+not a claim about your documents.
+
+- **Seventeen answerable questions.** One question moves hit@1 by about 0.059.
+  Refusal accuracy 1.000 is 3 unanswerable questions in that slice. Eight
+  later `type: "refusal"` questions, and the follow-up and multi-hop refusals,
+  are scored on their own lines and are not part of that 1.000. The multi-hop
+  slice is unmeasured on the agentic path at its current size
+  ([known gaps](docs/rag.md#known-gaps)).
+- **The published 0.941 is the fixed path.** The app you get from
+  `pnpm dev` plans searches by default, and that path scored lower on
+  single-hop questions (above). Set `RAG_AGENTIC_ENABLED=false` when every
+  question stands alone.
+- **Answer grades are drafts.** [`eval/graded/`](eval/graded) holds 29 answers.
+  Every file has `"grader": "Claude (draft)"` and `"reviewed": false`. Only a
+  grade a person has reviewed counts as the reference. `pnpm rag:judge` does
+  not become that reference until someone reviews the sample.
+  [#119](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/119),
+  [#120](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/120).
+- **The citation verifier often returns no verdict.** It calls the planner
+  model with `maxTokens: 500`. About one answer in five hits that cap before
+  any JSON, the parser returns nothing, and the app fails open: the answer is
+  shown unchecked.
+  [#171](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/171)
+  is being fixed in a separate pull request.
+- **A strong lexical hit is not allowed to skip the similarity floor.** On
+  this corpus an unanswerable question outscored every real policy-number
+  query. That bypass took refusal accuracy from 1.000 to 0.000, so it was
+  removed. The exact-identifier question can still miss. Reranking, measured
+  at hit@1 0.882 → 0.941 on the fixed path with refusal held, is off by
+  default (`RAG_RERANK_ENABLED=false`).
+- **The corpus is generated fiction** (`eval/make-corpus.mjs`), written so
+  near-miss passages exist. It is not a production workload, and two
+  concurrent `pnpm rag:eval --compare` runs on one rate-limited key have
+  produced different numbers. Run it alone.
 
 ---
 
@@ -60,30 +174,20 @@ with an optional agentic retrieval loop.**
 
 ## What this is
 
-A starter project for building a chat app that answers questions about your own
-PDF files.
+Retrieval-augmented generation, already wired: search, then a model that may
+only use what the search returned. If that is new, start with the
+[Tutorial](docs/tutorial.md).
 
-Clone it, add an API key, and you have a working app. People sign up, upload
-PDFs into their own private collections, and ask questions about them. Every
-answer shows the page it came from.
+Two rules are in the code, so the model cannot break them:
 
-It works by searching your documents first, then asking the model to write an
-answer using only what the search found. This is called RAG
-(retrieval-augmented generation). If that's new to you, start with the
-[Tutorial](docs/tutorial.md), which explains everything from scratch.
-
-Two rules are built into the code, so the model can't break them:
-
-- It won't make things up. If nothing in your documents matches the
-  question, the app says it doesn't know, and the model isn't called at all.
+- It will not invent an answer. If nothing in your documents clears the
+  similarity floor, the app says it does not know, and the model is not called.
 - You only ever see your own documents. That limit is part of the database
-  query, so the model can't be talked out of it.
+  query, so the model cannot be talked out of it.
 
 Sign-in, the database, file storage, offline support and Docker are already set
 up. They come from [nextjs-fullstack-boilerplate](https://github.com/devdaviddr/nextjs-fullstack-boilerplate),
-which this project is built on. `pnpm rag:eval` scores how well the search is working.
-
----
+which this project is built on.
 
 Making it your own project? `make init` renames it in one step, and
 [Starting your own project](docs/forking.md) covers the rest: what not to

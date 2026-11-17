@@ -437,12 +437,15 @@ this measurement decides whether a change to chunking, the floor or the search
 helped. Unlike answer quality, it needs no model to judge it.
 
 The harness is a **ground-truth corpus**: a fixed set of documents, a fixed
-list of questions, and the passage each question is supposed to find. The three
-PDFs in `eval/corpus/` deliberately overlap. The handbook's fire assembly point
+list of questions, and the passage each question is supposed to find. The
+original three PDFs in `eval/corpus/` (staff handbook, employment contract,
+facilities guide) deliberately overlap. The handbook's fire assembly point
 and the facilities guide's staff parking are both on Wellington Street, and
 both the handbook and the employment contract discuss notice periods. Those
 near-misses are **distractors**. A corpus without them measures nothing,
-because every question would have only one plausible answer in it.
+because every question would have only one plausible answer in it. The
+directory now also holds the later layout and section documents; the overlap
+that makes the headline numbers mean something is still those three.
 
 The harness makes real embedding calls, so keep an eye on your rate limit.
 
@@ -450,10 +453,13 @@ The harness makes real embedding calls, so keep an eye on your rate limit.
 pnpm rag:eval                   # run, print a report
 ```
 
-It ingests `eval/corpus/` under a dedicated evaluation user, leaving the
-knowledge base you made in stage 2 alone, and then runs 25 questions through
-the same retrieval code the app uses. Twenty are single-hop, three are
-follow-ups and two are multi-hop.
+It ingests every PDF in `eval/corpus/` under a dedicated evaluation user,
+leaving the knowledge base you made in stage 2 alone, and runs every question
+in `eval/questions.json` (90 today) through the same retrieval code the app
+uses. The summary block below — hit@1, MRR, refusal accuracy — is computed on
+the original single-hop slice only: 20 questions, 17 of them answerable.
+Follow-ups, multi-hop, layout, section, summary and refusal questions are
+printed on their own lines, so they cannot move that baseline.
 
 The output starts with a header naming the label and the settings in force:
 
