@@ -8,6 +8,20 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- **Next.js, nodemailer and transitive advisories patched**
+  ([#181](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/181)).
+  `next` 16.3.6 → 16.4.6 (with `eslint-config-next`) fixes unauthenticated
+  remote code execution in image optimisation and in `use cache` functions,
+  plus a Server Action denial of service. `nodemailer` 9.1.1 → 10.6.0 fixes
+  address-parser denial of service; the app's SMTP transport is unchanged.
+  `zod` 4.6.7 and `sharp` 0.35.5 are direct bumps, `mermaid` 12.3.0 pulls
+  patched `dompurify`, and a pnpm override floors `source-map-js` at 1.2.2
+  because Next's PostCSS still allows the vulnerable release.
+  `pnpm audit --prod --audit-level=high` passes (it reported 8 high and 3
+  critical).
+
 ## [0.28.1] - 2026-09-27
 
 ### Fixed
