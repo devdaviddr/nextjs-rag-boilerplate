@@ -101,8 +101,8 @@ describe('inference request deadlines', () => {
   })
 
   /**
-   * #42: citation verification fails open and has a user waiting on it, so it
-   * asks for ONE attempt — a retry would only add another full deadline.
+   * #42: citation verification has a user waiting on it, so it asks for ONE
+   * attempt — a retry would only add another full deadline.
    */
   it('makes exactly one attempt when maxAttempts is 1', async () => {
     const fetchMock = stallingFetch()

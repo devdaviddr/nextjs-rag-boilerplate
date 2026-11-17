@@ -1034,9 +1034,9 @@ async function streamAnswer(messages: ChatMessage[]): Promise<string> {
 
 /**
  * The app's verifier, read strictly (#118): the same request as
- * `verifyAnswer`, with the client's usual retries, but a failed call or an
- * unreadable reply is "no verdict" rather than the app's fail-open "all
- * supported".
+ * `verifyAnswer`, with the client's usual retries. A failed call or an
+ * unreadable reply is "no verdict". The app withholds that answer (#171);
+ * the eval counts it apart from "all supported".
  */
 async function verifyStrictly(
   answer: string,
