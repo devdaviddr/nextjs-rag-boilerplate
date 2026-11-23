@@ -2,8 +2,8 @@
 
 # Next.js RAG Boilerplate
 
-**A production-ready Next.js 16 template for building grounded document chat —
-with an optional agentic retrieval loop.**
+A Next.js 16 template for chatting with your own PDFs: cited answers, sign-in,
+Postgres with pgvector and Docker set up, and an optional agentic retrieval loop.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-20232a?logo=react&logoColor=61dafb)
@@ -27,7 +27,7 @@ with an optional agentic retrieval loop.**
 
 <img src="docs/images/answer.webp" alt="A cited answer to &quot;Which Azure regions in Australia support fine-tuning, and what models?&quot;, with the cited passage highlighted on the source page" width="100%">
 
-<sub><b>Grounded answers.</b> Every claim cites its source; click a citation and the passage lights up on the page it came from.</sub>
+<sub>Every claim in an answer cites its source. Click a citation to highlight the passage on the page it came from.</sub>
 
 <br><br>
 
@@ -122,8 +122,8 @@ Then, in the browser: sign in with `demo@example.com` / `Password123`, go to
 `/documents` and create a knowledge base, upload a text PDF into it and wait
 for its status to reach `ready`, then go to `/chat`, pick that knowledge base
 and ask a question the document answers. Every answer cites the page it came
-from. Now ask something the document does not cover. You get a refusal instead
-of a guess, which is what the app is designed to do.
+from. Now ask something the document does not cover. The app should refuse to
+answer rather than guess.
 
 Without `LLM_API_KEY` the app still boots. `/chat` and `/documents` report
 themselves as unconfigured and the RAG test suites self-skip, so you can
@@ -234,27 +234,27 @@ system you understand. If you have built retrieval before, jump straight to
 [Usage](docs/usage.md) for env vars and scripts, or
 [Self-hosting](docs/self-hosting.md) to get it deployed.
 
-| Doc                                                 | What's inside                                                           |
-| --------------------------------------------------- | ----------------------------------------------------------------------- |
-| 🎓 **[Tutorial](docs/tutorial.md)**                 | Start here: build up a working RAG system step by step                  |
-| 📄 **[Summary](docs/summary.md)**                   | One-page project overview: stats, stack, what ships                     |
-| 🧭 **[Starting your own project](docs/forking.md)** | Rename, the one string to keep, what to delete, what to switch off      |
-| 🧩 **[Extending the agent](docs/extending.md)**     | Add a tool the agent can call; change chunking, embeddings or the store |
-| 🛠️ **[Usage & Development](docs/usage.md)**         | Scripts, env vars, testing, Docker, extending the app                   |
-| 🧠 **[RAG](docs/rag.md)**                           | Ingestion, index design, hybrid search, the agentic loop, evaluation    |
-| 🗄️ **[Database](docs/database.md)**                 | ERD, schema, migrations, Drizzle workflow, seeding                      |
-| 🏛️ **[Architecture](docs/architecture.md)**         | Request flow, auth design, security model, project structure            |
-| 📋 **[Features](docs/features.md)**                 | Complete feature list and what's included                               |
-| 🔑 **[OAuth](docs/oauth.md)**                       | GitHub + Google sign-in: setup, callback URLs, linking                  |
-| ✉️ **[Email](docs/email.md)**                       | SMTP setup, password reset, email verification, soft gate               |
-| 📱 **[PWA & App Shell](docs/pwa.md)**               | Manifest, service worker strategy, icons, responsive shell              |
-| 🔔 **[Web Push](docs/push.md)**                     | VAPID setup, subscribe/send, service-worker handlers                    |
-| 📦 **[Self-hosting](docs/self-hosting.md)**         | `make setup` clone-to-live + continuous deployment (`make deploy`)      |
-| 🚀 **[Deployment](docs/deployment.md)**             | Cloudflare Tunnel: quick, guided, and Terraform paths                   |
-| 💾 **[Backups](docs/backups.md)**                   | Nightly Postgres + MinIO backups, restore runbook, offsite              |
-| 🔁 **[Feature → Production](docs/workflow.md)**     | One playbook: branch → PR → release → deploy                            |
-| ⚙️ **[CI/CD](docs/ci-cd.md)**                       | GitHub Actions: quality gate, E2E, GHCR images, release fast-path       |
-| 📐 **[Specs](specs/README.md)**                     | Spec-driven development: one spec per feature/release                   |
+| Doc                                          | What's inside                                                           |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| [Tutorial](docs/tutorial.md)                 | Start here: build up a working RAG system step by step                  |
+| [Summary](docs/summary.md)                   | One-page project overview: stats, stack, what ships                     |
+| [Starting your own project](docs/forking.md) | Rename, the one string to keep, what to delete, what to switch off      |
+| [Extending the agent](docs/extending.md)     | Add a tool the agent can call; change chunking, embeddings or the store |
+| [Usage & Development](docs/usage.md)         | Scripts, env vars, testing, Docker, extending the app                   |
+| [RAG](docs/rag.md)                           | Ingestion, index design, hybrid search, the agentic loop, evaluation    |
+| [Database](docs/database.md)                 | ERD, schema, migrations, Drizzle workflow, seeding                      |
+| [Architecture](docs/architecture.md)         | Request flow, auth design, security model, project structure            |
+| [Features](docs/features.md)                 | Full feature list                                                       |
+| [OAuth](docs/oauth.md)                       | GitHub + Google sign-in: setup, callback URLs, linking                  |
+| [Email](docs/email.md)                       | SMTP setup, password reset, email verification, soft gate               |
+| [PWA & App Shell](docs/pwa.md)               | Manifest, service worker strategy, icons, responsive shell              |
+| [Web Push](docs/push.md)                     | VAPID setup, subscribe/send, service-worker handlers                    |
+| [Self-hosting](docs/self-hosting.md)         | `make setup` clone-to-live + continuous deployment (`make deploy`)      |
+| [Deployment](docs/deployment.md)             | Cloudflare Tunnel: quick, guided, and Terraform paths                   |
+| [Backups](docs/backups.md)                   | Nightly Postgres + MinIO backups, restore runbook, offsite              |
+| [Feature → Production](docs/workflow.md)     | One playbook: branch → PR → release → deploy                            |
+| [CI/CD](docs/ci-cd.md)                       | GitHub Actions: quality gate, E2E, GHCR images, release fast-path       |
+| [Specs](specs/README.md)                     | Spec-driven development: one spec per feature/release                   |
 
 ---
 
