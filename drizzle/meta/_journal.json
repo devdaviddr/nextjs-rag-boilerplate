@@ -190,6 +190,13 @@
       "when": 1790475051352,
       "tag": "0026_mcp_servers",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795557106012,
+      "tag": "0027_drop_legacy_chunk_embedding",
+      "breakpoints": true
     }
   ]
 }
