@@ -47,6 +47,16 @@ export function isRagConfigured(): boolean {
  * key, no RAG — while a saved connection may legitimately have none (a local
  * llama.cpp or Ollama server).
  */
+/**
+ * Presets whose servers honour `chat_template_kwargs.enable_thinking` (#84):
+ * Nemotron and Qwen3 on NIM and vLLM. A per-call `reasoning: 'off'` is sent
+ * only to these.
+ */
+export const THINKING_SWITCH_PRESETS: ReadonlySet<string> = new Set([
+  'nvidia-nim',
+  'vllm',
+])
+
 function keyFor(role: AiRole): {
   url: string
   key: string | undefined
@@ -416,6 +426,14 @@ export interface CompletionOptions {
    */
   maxAttempts?: number
   /**
+   * Ask for no hidden reasoning on this call, whatever RAG_PLANNER_REASONING
+   * says. Sent only to providers known to honour the switch
+   * (`THINKING_SWITCH_PRESETS`); others get the request unchanged. Citation
+   * verification uses it: it only returns a short JSON verdict, and reasoning
+   * spent its token budget before the verdict (#171).
+   */
+  reasoning?: 'off'
+  /**
    * The job, which picks the connection and the model (spec 0040 FR2).
    * Defaults to `chat`.
    */
@@ -463,6 +481,12 @@ export async function createChatCompletion(
   // Skip the planner's hidden reasoning when asked (#84). Planner-role calls
   // only: the field is a chat-template option some providers reject.
   if (role === 'planner' && aiSettings().RAG_PLANNER_REASONING === 'off') {
+    body.chat_template_kwargs = { enable_thinking: false }
+  }
+  if (
+    options.reasoning === 'off' &&
+    THINKING_SWITCH_PRESETS.has(endpoint.preset)
+  ) {
     body.chat_template_kwargs = { enable_thinking: false }
   }
 

@@ -606,6 +606,9 @@ export async function verifyAnswer(
         signal,
         timeoutMs: VERIFY_TIMEOUT_MS,
         maxAttempts: 1,
+        // A verdict is short JSON; hidden reasoning ate the 500 tokens before
+        // it on about one answer in five (#171).
+        reasoning: 'off',
       },
     )
     return parseVerdict(choice?.message?.content)

@@ -1046,7 +1046,7 @@ async function verifyStrictly(
   try {
     const { choice } = await createChatCompletion(
       verifyMessages(answer, chunks),
-      { role: 'planner', maxTokens: 500, temperature: 0 },
+      { role: 'planner', maxTokens: 500, temperature: 0, reasoning: 'off' },
     )
     return scoreVerification(answer, readVerdict(choice.message?.content))
   } catch {
