@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-25
+
 ### Changed
 
 - **README describes the project as it is now** ([#187](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/187)).
@@ -1537,7 +1539,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.28.1...v0.29.0
+[0.28.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.28.0...v0.28.1
+[0.28.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.27.0...v0.28.0
+[0.27.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.26.0...v0.27.0
+[0.26.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.25.0...v0.26.0
+[0.25.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.24.1...v0.25.0
+[0.24.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.21.1...v0.22.0
