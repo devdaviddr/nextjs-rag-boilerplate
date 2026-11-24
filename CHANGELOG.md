@@ -17,6 +17,15 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Fixed
 
+- **Every answer is citation-checked again, and an unchecked one is withheld**
+  ([#171](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/171)).
+  On the default NIM planner, hidden reasoning used up the verifier's
+  500-token budget before it wrote a verdict, so `pnpm rag:eval --answers`
+  found no verdict on 50 of 51 answers and the app showed them all unchecked.
+  The verifier now asks for no reasoning on providers that honour the switch
+  (NVIDIA NIM and vLLM), which gave a verdict on all 51. A timeout, error or
+  unreadable verdict now replaces the answer with the fixed refusal instead
+  of counting as "all supported".
 - **Refreshing a web document is rate limited** ([#194](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/194)).
   It re-fetches and re-embeds like an upload, so it now shares the upload
   limit (20 per user per 10 minutes) and stops before touching the database.

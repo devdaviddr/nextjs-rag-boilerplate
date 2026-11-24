@@ -235,6 +235,22 @@ describe('answerQuestion', () => {
     ])
   })
 
+  it('withholds the answer when verification cannot check it', async () => {
+    const t = setup({ verify: vi.fn().mockResolvedValue(null) })
+    await t.run()
+
+    expect(t.inserted[0]!.content).toBe('Leave is 20 days [1].')
+    expect(t.state.answer).toBe(NO_CONTEXT_ANSWER)
+    expect(t.revised).toEqual([NO_CONTEXT_ANSWER])
+    expect(t.events).toContainEqual({
+      type: 'revision',
+      value: NO_CONTEXT_ANSWER,
+      stripped: [],
+    })
+    expect(t.types()).not.toContain('error')
+    expect(t.outcomes[0]!.status).toBe('ok')
+  })
+
   it('strips what verification rejects and revises the saved answer', async () => {
     const t = setup({
       chatStream: vi

@@ -6,8 +6,8 @@ import { citedIndices, splitSentences } from '@/lib/rag/verify'
  *
  * The verifier is the app's (`verifyMessages`), asked the same question,
  * but its verdict is read strictly: a timeout or an unreadable reply is "no
- * verdict", counted on its own, never as "all supported", which is how the
- * app fails open. The prompt lists a sentence only when a source "clearly
+ * verdict", counted on its own, never as "all supported". The app withholds
+ * that answer (#171). The prompt lists a sentence only when a source "clearly
  * does NOT support" it, so `unsupported` is a floor, and the rates below a
  * ceiling.
  */

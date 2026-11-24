@@ -421,8 +421,8 @@ export interface CompletionOptions {
   timeoutMs?: number
   /**
    * Attempts including the first, capped at the client's own maximum (4, the
-   * default). A caller that fails open and has a user waiting — citation
-   * verification — passes 1: a retry only adds another full deadline (#42).
+   * default). Citation verification passes 1: a retry would only add another
+   * full deadline while the user is waiting (#42).
    */
   maxAttempts?: number
   /**

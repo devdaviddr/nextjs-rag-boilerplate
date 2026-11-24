@@ -39,7 +39,7 @@ import {
 } from './retrieve'
 import { routeTurn } from './route-intent'
 import { resolveScope } from './scope'
-import { numberSentences, parseVerdict, verifySystemPrompt } from './verify'
+import { numberSentences, readVerdict, verifySystemPrompt } from './verify'
 
 export type AgenticPhase = 'routing' | 'searching' | 'drafting' | 'verifying'
 
@@ -538,28 +538,15 @@ export function withFigureReadings(
 /**
  * Deadline for citation verification, one attempt (#42).
  *
- * Verification runs after the answer has streamed and fails open (no verdict =
- * nothing stripped), but the stream — and so the composer — stays open until
- * it returns. With the client defaults (60s x 4 attempts) a hanging planner
- * kept the send button locked for 92–113s after the answer was on screen.
- * 12s covers the planner's recorded median (8.4s, spec 0036) while bounding
- * the worst case to one short wait.
+ * Verification runs after the answer has streamed, and the stream stays open
+ * until it returns. With the client defaults (60s x 4 attempts) a hanging
+ * planner kept the send button locked for 92–113s after the answer was on
+ * screen. 12s covers the planner's recorded median (8.4s, spec 0036) while
+ * bounding the worst case to one short wait. A timeout is not a pass: the
+ * answer is withheld (#171).
  */
 export const VERIFY_TIMEOUT_MS = 12_000
 
-/**
- * Check that each sentence of the answer is supported by the sources.
- *
- * One batched call, never a redraft loop — an unbounded verify-redraft cycle is
- * the same failure mode as an unbounded search loop, moved one step later
- * (spec 0029 FR6). The verifier sees the answer as numbered sentences, so an
- * uncited sentence is judged against all the sources (#127).
- *
- * Returns the 1-based sentence numbers judged unsupported. Any failure returns
- * an empty list, i.e. it fails OPEN: the gate on whether an answer may be shown
- * at all is the similarity floor, which has already run. A flaky verification
- * call must not be able to turn a correctly-grounded answer into a refusal.
- */
 /**
  * The verifier's request, shared with the eval's copy (#118) so both ask
  * exactly the same question.
@@ -587,13 +574,26 @@ export function verifyMessages(
   ]
 }
 
+/**
+ * Check that each sentence of the answer is supported by the sources.
+ *
+ * One batched call, never a redraft loop — an unbounded verify-redraft cycle
+ * is the same failure mode as an unbounded search loop, moved one step later
+ * (spec 0029 FR6). The verifier sees the answer as numbered sentences, so an
+ * uncited sentence is judged against all the sources (#127).
+ *
+ * Returns the 1-based sentence numbers judged unsupported. An empty list is a
+ * pass: the verdict was readable and listed nothing. A thrown error, a
+ * timeout, or a missing or unreadable verdict returns null. That is not a
+ * pass — the caller withholds the answer (#171).
+ */
 export async function verifyAnswer(
   answer: string,
   chunks: readonly RetrievedChunk[],
   signal: AbortSignal,
   /** Output of registered tools the planner called (spec 0044 FR6). */
   toolResults?: readonly ToolOutput[],
-): Promise<number[]> {
+): Promise<number[] | null> {
   if (!answer.trim() || chunks.length === 0) return []
 
   try {
@@ -611,8 +611,38 @@ export async function verifyAnswer(
         reasoning: 'off',
       },
     )
-    return parseVerdict(choice?.message?.content)
-  } catch {
-    return []
+    const content = choice?.message?.content
+    const verdict = readVerdict(content)
+    if (verdict === null) {
+      logger.warn('Citation verification failed', {
+        reason: missingVerdictReason(content),
+      })
+      return null
+    }
+    return verdict
+  } catch (error) {
+    logger.warn('Citation verification failed', {
+      reason: thrownVerdictReason(error),
+    })
+    return null
   }
+}
+
+/** Why a reply had no verdict. Empty content is a missing result. */
+function missingVerdictReason(content: string | null | undefined): string {
+  return content?.trim()
+    ? 'verifier returned an unreadable verdict'
+    : 'verifier returned no result'
+}
+
+/**
+ * Why the verifier call threw. A deadline from the chat client is a timeout;
+ * anything else is an error. Both withhold the answer.
+ */
+function thrownVerdictReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/no response within|timed out|timeout|request exceeded/i.test(message)) {
+    return `verifier timed out: ${message}`
+  }
+  return `verifier error: ${message}`
 }

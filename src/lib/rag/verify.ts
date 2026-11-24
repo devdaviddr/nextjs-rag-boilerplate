@@ -181,22 +181,22 @@ A TOOL RESULTS block may follow the sources: output of tools run for this questi
 }
 
 /**
- * Read the verifier's verdict.
+ * The unsupported sentence numbers in a verdict.
  *
- * Fails **open** — an unparseable verdict yields an empty list, so the answer
- * is shown unchanged. That is the deliberate direction: this step exists to
- * catch a model blurring two sources together, not to be a second gate on
- * whether an answer may be shown. The gate is the similarity floor, and it has
- * already run. Failing closed here would let one flaky verification call turn a
- * correctly-grounded answer into a refusal.
+ * An unreadable verdict yields an empty list here, which is not a decision to
+ * show the answer. Callers that must tell "no verdict" from "all supported"
+ * use `readVerdict`. `verifyAnswer` withholds the answer when that is null
+ * (#171).
  */
 export function parseVerdict(content: string | null | undefined): number[] {
   return readVerdict(content) ?? []
 }
 
 /**
- * The verdict, or null when there is none to read. The eval (#118) counts a
- * missing verdict apart from "all supported"; the app fails open instead.
+ * The verdict, or null when there is none to read.
+ *
+ * Null is not a pass. The eval (#118) counts a missing verdict apart from
+ * "all supported", and `verifyAnswer` withholds the answer (#171).
  */
 export function readVerdict(
   content: string | null | undefined,
