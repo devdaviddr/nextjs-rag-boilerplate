@@ -36,6 +36,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Security
 
+- **High-severity advisories in dev tooling cleared** ([#189](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/189)).
+  pnpm overrides floor brace-expansion, fast-uri, js-yaml, nanoid, postcss,
+  undici and zod inside their current majors, and `vite` 8.3.8 is now a direct
+  dev dependency so vitest and the React plugin stop resolving 8.1.4.
+  `pnpm audit` goes from 29 high to none (5 moderate, 1 low remain); the
+  production audit was already clean.
 - **Safer admin defaults** ([#185](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/185)).
   `make setup` now gives the seeded admin a random password, printed once,
   instead of the published `Password123`, and `pnpm db:seed` refuses that
