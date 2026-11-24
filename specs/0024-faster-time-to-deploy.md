@@ -20,7 +20,7 @@ frequent polling is nearly free.
 
 ## Problem / motivation
 
-A release currently flows `tag → ci.yml → GHCR → frank's Tier B pull timer → live`. Measured on the
+A release currently flows `tag → ci.yml → GHCR → the reference host's Tier B pull timer → live`. Measured on the
 `v0.16.x` releases, the budget was:
 
 | Phase                            | Time                      | Note                                      |
@@ -46,7 +46,7 @@ Three structural inefficiencies drive this:
   app, pull the large `builder`-target migrate image, `up -d`) even when nothing had changed, so a
   new release waited up to a full 5-minute interval and idle ticks did real work.
 
-The box ([frank](../CLAUDE.md)) pins a **semver `APP_TAG`** (not `latest`), so the **release-tag
+The reference host pins a **semver `APP_TAG`** (not `latest`), so the **release-tag
 pipeline is squarely on its critical path** — optimizing it is what moves time-to-deploy.
 
 ## Goals

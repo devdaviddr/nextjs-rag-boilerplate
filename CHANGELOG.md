@@ -8,6 +8,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **README describes the project as it is now** ([#187](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/187)).
+  The opening covers every document type and provider, a Results section shows
+  the recorded retrieval numbers with their limits, specs 0020 to 0024 describe
+  the reference host generically, and `FORKING.md` is gone (the guide is
+  `docs/forking.md`).
+
 ### Fixed
 
 - **Default models updated after NVIDIA retired the old ones.** On

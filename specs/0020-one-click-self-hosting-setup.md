@@ -211,7 +211,7 @@ sequence to close them out:
 
 Boot persistence and the self-hosted-runner CD path
 ([0022](0022-always-on-hardening-mac-mini.md), [0021](0021-continuous-deployment-self-hosted.md))
-are already **verified live on the frank server**; this remaining item is the
+are already **verified live on the reference Mac mini host**; this remaining item is the
 one-time wizard run on a brand-new domain.
 
 ## Security & privacy
