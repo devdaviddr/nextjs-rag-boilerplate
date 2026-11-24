@@ -68,12 +68,12 @@ export const aiEnvShape = {
     .string()
     .min(1)
     .optional()
-    .default('nvidia/nemotron-3-embed-1b'),
+    .default('nvidia/nemotron-3.5-embed-1b'),
   RAG_CHAT_MODEL: z
     .string()
     .min(1)
     .optional()
-    .default('nvidia/nemotron-3-super-120b-a12b'),
+    .default('nvidia/nemotron-3.5-super-vl-120b-a12b'),
   RAG_CHUNK_TOKENS: z.coerce.number().int().positive().optional().default(512),
   RAG_CHUNK_OVERLAP_TOKENS: z.coerce
     .number()
@@ -139,12 +139,12 @@ export const aiEnvShape = {
     .string()
     .min(1)
     .optional()
-    .default('nvidia/nemotron-parse'),
+    .default('nvidia/nemotron-parse'), // retired by NVIDIA 2026-11-16; see .env.example
   RAG_VISION_MODEL: z
     .string()
     .min(1)
     .optional()
-    .default('meta/llama-3.2-11b-vision-instruct'),
+    .default('nvidia/nemotron-3.5-super-vl-120b-a12b'),
   // Parse calls a single document may spend. Triage decides WHICH pages are
   // worth one; this bounds how many, so a pathological 200-page scan cannot
   // consume a shared free-tier quota on its own. Past the cap the remaining
