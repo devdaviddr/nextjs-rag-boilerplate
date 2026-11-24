@@ -8,6 +8,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- **Remaining dev-tooling advisories cleared** ([#192](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/192)).
+  `vitest` and `@vitest/coverage-v8` 4.1.12, `eslint` 9.39.5 and `drizzle-kit`
+  0.31.11, plus floors for the esbuild that drizzle-kit's config loader pins
+  and for minimatch under typescript-estree. `pnpm audit` now reports no known
+  vulnerabilities.
+
 ## [0.29.0] - 2026-11-25
 
 ### Changed
