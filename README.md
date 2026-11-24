@@ -2,8 +2,10 @@
 
 # Next.js RAG Boilerplate
 
-**A production-ready Next.js 16 template for building grounded document chat —
-with an optional agentic retrieval loop.**
+Chat with your own documents and get answers that cite the passage they came
+from, or a plain "I don't know". PDFs, Word, Markdown, HTML and web pages, with
+hybrid search on Postgres and pgvector, an agent that plans its own searches,
+and an eval harness that blocks a release when retrieval gets worse.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-20232a?logo=react&logoColor=61dafb)
@@ -12,11 +14,11 @@ with an optional agentic retrieval loop.**
 ![pgvector](https://img.shields.io/badge/pgvector-HNSW-4169e1?logo=postgresql&logoColor=white)
 ![Auth.js](https://img.shields.io/badge/Auth.js-v5-000000?logo=auth0&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss&logoColor=white)
-![NVIDIA NIM](https://img.shields.io/badge/NVIDIA_NIM-nemotron--3-76b900?logo=nvidia&logoColor=white)
+![NVIDIA NIM](https://img.shields.io/badge/NVIDIA_NIM-nemotron--3.5-76b900?logo=nvidia&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-ready-5a0fc8?logo=pwa&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-[Getting started](#getting-started) · [Configuration](#configuration) ·
+[Results](#results) · [Getting started](#getting-started) · [Configuration](#configuration) ·
 [Usage](#usage) · [Documentation](#documentation)
 
 </div>
@@ -27,7 +29,7 @@ with an optional agentic retrieval loop.**
 
 <img src="docs/images/answer.webp" alt="A cited answer to &quot;Which Azure regions in Australia support fine-tuning, and what models?&quot;, with the cited passage highlighted on the source page" width="100%">
 
-<sub><b>Grounded answers.</b> Every claim cites its source; click a citation and the passage lights up on the page it came from.</sub>
+<sub>Every claim in an answer cites its source. Click a citation to highlight the passage on the page it came from.</sub>
 
 <br><br>
 
@@ -61,11 +63,14 @@ with an optional agentic retrieval loop.**
 ## What this is
 
 A starter project for building a chat app that answers questions about your own
-PDF files.
+documents.
 
-Clone it, add an API key, and you have a working app. People sign up, upload
-PDFs into their own private collections, and ask questions about them. Every
-answer shows the page it came from.
+Clone it, add an API key, and you have a working app. People sign up, add PDFs,
+Word files, Markdown, HTML or web pages to their own private collections, and
+ask questions about them. Every answer shows the passage it came from. It runs
+on any OpenAI-compatible endpoint (NVIDIA NIM by default, or Ollama and
+llama.cpp offline) or on Anthropic, and admins can switch models and add MCP
+tools from Settings.
 
 It works by searching your documents first, then asking the model to write an
 answer using only what the search found. This is called RAG
@@ -81,21 +86,39 @@ Two rules are built into the code, so the model can't break them:
 
 Sign-in, the database, file storage, offline support and Docker are already set
 up. They come from [nextjs-fullstack-boilerplate](https://github.com/devdaviddr/nextjs-fullstack-boilerplate),
-which this project is built on. `pnpm rag:eval` scores how well the search is working.
+which this project is built on.
 
----
-
-Making it your own project? `make init` renames it in one step, and
+To make it your own project, `make init` renames it in one step, and
 [Starting your own project](docs/forking.md) covers the rest: what not to
 rename, what to delete and what to switch off.
+
+## Results
+
+`pnpm rag:eval` scores retrieval against a synthetic corpus with known answers,
+and the release gate fails if refusals or cross-knowledge-base leaks get worse.
+On the single-hop set (17 answerable questions, 3 with no answer in the corpus):
+
+| Metric                     | Dense search only | Hybrid search + contextual headers |
+| -------------------------- | ----------------- | ---------------------------------- |
+| hit@1                      | 0.824             | 0.941                              |
+| MRR                        | 0.853             | 0.941                              |
+| Refusal accuracy           | 1.000             | 1.000                              |
+| Chunks leaked across bases | not measured      | 0                                  |
+
+The agentic path, on by default, trades a little single-hop accuracy (hit@1
+0.824 against 0.882 for the fixed path) for follow-up questions: hit@1 on 16
+follow-ups went from 0.062 to 0.938. The question sets are small and the
+corpus is generated, so treat these as regression checks, not a benchmark.
+Method and every measurement: [RAG → Measured](docs/rag.md#measured) and
+[Which path answers](docs/rag.md#which-path-answers).
 
 ## Getting started
 
 You need Node ≥ 20.9 (22 recommended), [pnpm](https://pnpm.io)
 (`corepack enable`, or `npm install -g pnpm` where Node ships without
 corepack), Docker, and an API key for an OpenAI-compatible endpoint.
-A free [NVIDIA NIM](https://build.nvidia.com) key works; it is rate-limited,
-not token-billed.
+A free [NVIDIA NIM](https://build.nvidia.com) key works. It is rate-limited
+rather than billed per token.
 
 Run these in order from a fresh clone. Each step is safe to re-run.
 
@@ -122,8 +145,8 @@ Then, in the browser: sign in with `demo@example.com` / `Password123`, go to
 `/documents` and create a knowledge base, upload a text PDF into it and wait
 for its status to reach `ready`, then go to `/chat`, pick that knowledge base
 and ask a question the document answers. Every answer cites the page it came
-from. Now ask something the document does not cover. You get a refusal instead
-of a guess, which is what the app is designed to do.
+from. Now ask something the document does not cover. The app should refuse to
+answer rather than guess.
 
 Without `LLM_API_KEY` the app still boots. `/chat` and `/documents` report
 themselves as unconfigured and the RAG test suites self-skip, so you can
@@ -159,12 +182,12 @@ proxy.
 
 ### Models and endpoint
 
-| Variable           | Default                               | Description                                                                                                 |
-| ------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `LLM_API_KEY`      | —                                     | API key for the inference endpoint; unset disables chat + documents (old name `NVIDIA_API_KEY` still works) |
-| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline                        |
-| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3-super-120b-a12b`   | Writes the answer prose                                                                                     |
-| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3-embed-1b`          | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes                |
+| Variable           | Default                                  | Description                                                                                                 |
+| ------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `LLM_API_KEY`      | none                                     | API key for the inference endpoint; unset disables chat + documents (old name `NVIDIA_API_KEY` still works) |
+| `RAG_LLM_BASE_URL` | `https://integrate.api.nvidia.com/v1`    | Any OpenAI-compatible base URL; point it at Ollama or llama.cpp to run fully offline                        |
+| `RAG_CHAT_MODEL`   | `nvidia/nemotron-3.5-super-vl-120b-a12b` | Writes the answer prose                                                                                     |
+| `RAG_EMBED_MODEL`  | `nvidia/nemotron-3.5-embed-1b`           | Turns passages into vectors; switch it in Settings, up to 4000 dimensions, and it re-indexes                |
 
 Running offline has two constraints: the embedding model must emit at most
 4000 numbers per passage, and the planner model must emit native tool calls
@@ -204,12 +227,12 @@ The scripts you will use most:
 
 ```bash
 pnpm dev                   # dev server (Turbopack) at localhost:3000
-pnpm build && pnpm start   # production build — required to exercise the PWA
+pnpm build && pnpm start   # production build, needed to exercise the PWA
                            # (its "output: standalone" warning is harmless here)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # verify the setup
 pnpm rag:eval              # score retrieval against the ground-truth corpus
 pnpm rag:eval --compare    # A/B the fixed and agentic retrieval paths
-pnpm test:e2e              # Playwright — needs Postgres, MinIO, and Mailpit
+pnpm test:e2e              # Playwright; needs Postgres, MinIO and Mailpit
 ```
 
 The full script reference, testing notes and Docker workflow are in
@@ -226,7 +249,7 @@ thereafter. See [Self-hosting](docs/self-hosting.md) and
 
 ## Documentation
 
-The table is in reading order, not alphabetical. If RAG is new to you, start at
+The table is in reading order. If RAG is new to you, start at
 the top and work down. The first four pages take you from nothing to a working
 system you understand. If you have built retrieval before, jump straight to
 [RAG](docs/rag.md) for the retrieval design,
@@ -234,27 +257,27 @@ system you understand. If you have built retrieval before, jump straight to
 [Usage](docs/usage.md) for env vars and scripts, or
 [Self-hosting](docs/self-hosting.md) to get it deployed.
 
-| Doc                                                 | What's inside                                                           |
-| --------------------------------------------------- | ----------------------------------------------------------------------- |
-| 🎓 **[Tutorial](docs/tutorial.md)**                 | Start here: build up a working RAG system step by step                  |
-| 📄 **[Summary](docs/summary.md)**                   | One-page project overview: stats, stack, what ships                     |
-| 🧭 **[Starting your own project](docs/forking.md)** | Rename, the one string to keep, what to delete, what to switch off      |
-| 🧩 **[Extending the agent](docs/extending.md)**     | Add a tool the agent can call; change chunking, embeddings or the store |
-| 🛠️ **[Usage & Development](docs/usage.md)**         | Scripts, env vars, testing, Docker, extending the app                   |
-| 🧠 **[RAG](docs/rag.md)**                           | Ingestion, index design, hybrid search, the agentic loop, evaluation    |
-| 🗄️ **[Database](docs/database.md)**                 | ERD, schema, migrations, Drizzle workflow, seeding                      |
-| 🏛️ **[Architecture](docs/architecture.md)**         | Request flow, auth design, security model, project structure            |
-| 📋 **[Features](docs/features.md)**                 | Complete feature list and what's included                               |
-| 🔑 **[OAuth](docs/oauth.md)**                       | GitHub + Google sign-in: setup, callback URLs, linking                  |
-| ✉️ **[Email](docs/email.md)**                       | SMTP setup, password reset, email verification, soft gate               |
-| 📱 **[PWA & App Shell](docs/pwa.md)**               | Manifest, service worker strategy, icons, responsive shell              |
-| 🔔 **[Web Push](docs/push.md)**                     | VAPID setup, subscribe/send, service-worker handlers                    |
-| 📦 **[Self-hosting](docs/self-hosting.md)**         | `make setup` clone-to-live + continuous deployment (`make deploy`)      |
-| 🚀 **[Deployment](docs/deployment.md)**             | Cloudflare Tunnel: quick, guided, and Terraform paths                   |
-| 💾 **[Backups](docs/backups.md)**                   | Nightly Postgres + MinIO backups, restore runbook, offsite              |
-| 🔁 **[Feature → Production](docs/workflow.md)**     | One playbook: branch → PR → release → deploy                            |
-| ⚙️ **[CI/CD](docs/ci-cd.md)**                       | GitHub Actions: quality gate, E2E, GHCR images, release fast-path       |
-| 📐 **[Specs](specs/README.md)**                     | Spec-driven development: one spec per feature/release                   |
+| Doc                                          | What's inside                                                           |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| [Tutorial](docs/tutorial.md)                 | Start here: build up a working RAG system step by step                  |
+| [Summary](docs/summary.md)                   | One-page project overview: stats, stack, what ships                     |
+| [Starting your own project](docs/forking.md) | Rename, the one string to keep, what to delete, what to switch off      |
+| [Extending the agent](docs/extending.md)     | Add a tool the agent can call; change chunking, embeddings or the store |
+| [Usage & Development](docs/usage.md)         | Scripts, env vars, testing, Docker, extending the app                   |
+| [RAG](docs/rag.md)                           | Ingestion, index design, hybrid search, the agentic loop, evaluation    |
+| [Database](docs/database.md)                 | ERD, schema, migrations, Drizzle workflow, seeding                      |
+| [Architecture](docs/architecture.md)         | Request flow, auth design, security model, project structure            |
+| [Features](docs/features.md)                 | Full feature list                                                       |
+| [OAuth](docs/oauth.md)                       | GitHub + Google sign-in: setup, callback URLs, linking                  |
+| [Email](docs/email.md)                       | SMTP setup, password reset, email verification, soft gate               |
+| [PWA & App Shell](docs/pwa.md)               | Manifest, service worker strategy, icons, responsive shell              |
+| [Web Push](docs/push.md)                     | VAPID setup, subscribe/send, service-worker handlers                    |
+| [Self-hosting](docs/self-hosting.md)         | `make setup` clone-to-live + continuous deployment (`make deploy`)      |
+| [Deployment](docs/deployment.md)             | Cloudflare Tunnel: quick, guided, and Terraform paths                   |
+| [Backups](docs/backups.md)                   | Nightly Postgres + MinIO backups, restore runbook, offsite              |
+| [Feature → Production](docs/workflow.md)     | One playbook: branch → PR → release → deploy                            |
+| [CI/CD](docs/ci-cd.md)                       | GitHub Actions: quality gate, E2E, GHCR images, release fast-path       |
+| [Specs](specs/README.md)                     | Spec-driven development: one spec per feature/release                   |
 
 ---
 
@@ -269,8 +292,3 @@ because refusal accuracy is a hard gate. See
 ## License
 
 Released under the [MIT License](LICENSE).
-
----
-
-Next: if RAG is new to you, read the [Tutorial](docs/tutorial.md). Otherwise
-see the [Summary](docs/summary.md) for the whole project on one page.

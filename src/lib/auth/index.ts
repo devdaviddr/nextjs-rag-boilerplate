@@ -218,7 +218,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 'unknown' means the lookup itself failed. Leave `verifiedAt` alone so
         // the check retries next request, and keep the user signed in — a
         // database blip must never read as "this account was deleted".
-        if (presence === 'present') token.verifiedAt = nowSeconds
+        if (presence === 'present') {
+          token.verifiedAt = nowSeconds
+          // Re-read roles on the same cadence, so removing a role takes effect
+          // within one revalidation window, not when the cookie expires. A
+          // failed read keeps the current roles, like a failed presence check.
+          try {
+            token.roles = await getUserRoles(token.id as string)
+          } catch (err) {
+            logger.warn('Role refresh failed; keeping current roles', {
+              userId: token.id,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+        }
       }
       // Fetch roles on an explicit session update, when a token has none yet,
       // or on a fresh OAuth sign-in (roles assigned in events.createUser).

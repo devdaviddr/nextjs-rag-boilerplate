@@ -144,8 +144,8 @@ primitive; Watchtower is mentioned as an optional convenience with this caveat.
       (no `build:`) for `app` and `migrate`.
 - [x] `deploy.yml` does nothing unless `vars.SELF_HOSTED_DEPLOY == 'true'`, and
       then deploys on a release tag from a self-hosted runner. _(Verified live
-      on the **frank** server, 2026-07-16: `frank` launchd runner + tunnel
-      `frank-boilerplate` → https://boilerplate.danielruffolo.net; skip-when-unset
+      on the reference Mac mini host, 2026-07-16: a launchd runner + tunnel
+      a named tunnel to a public hostname; skip-when-unset
       confirmed before enabling, then every `v*` tag auto-deploys there.)_
 - [x] Nothing changes for a fork that sets neither `APP_IMAGE` nor the repo
       variable. _(PR #9's `docker` job built both images without pushing.)_

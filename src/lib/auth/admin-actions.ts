@@ -11,6 +11,8 @@ import { sendEmail, isEmailEnabled } from '@/lib/email'
 import { inviteEmail } from '@/lib/email/templates'
 import { env } from '@/lib/env'
 import { AUTH_LIMITS, rateLimit } from '@/lib/rate-limit'
+
+import { getCurrentSession } from './session'
 import { clientIpFromHeaders } from '@/lib/request-ip'
 import { deleteAllFilesForUser } from '@/lib/storage/cleanup'
 import { headers } from 'next/headers'
@@ -528,6 +530,3 @@ async function assignRolesOrThrow(input: AssignRolesInput): Promise<void> {
     roleIds,
   })
 }
-
-// Import getCurrentSession here to avoid circular dependency
-import { getCurrentSession } from './session'

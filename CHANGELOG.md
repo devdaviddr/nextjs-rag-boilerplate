@@ -8,12 +8,58 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **README describes the project as it is now** ([#187](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/187)).
+  The opening covers every document type and provider, a Results section shows
+  the recorded retrieval numbers with their limits, specs 0020 to 0024 describe
+  the reference host generically, and `FORKING.md` is gone (the guide is
+  `docs/forking.md`).
+
+### Fixed
+
+- **Default models updated after NVIDIA retired the old ones.** On
+  2026-11-16 NVIDIA retired `nemotron-3-embed-1b`, `nemotron-3-super-120b-a12b`,
+  `llama-3.2-11b-vision-instruct` and `nemotron-parse`, so a fresh clone
+  could not ingest a document. The defaults are now
+  `nvidia/nemotron-3.5-embed-1b` (still 2048 dimensions) for embeddings and
+  `nvidia/nemotron-3.5-super-vl-120b-a12b` for chat and figure captions.
+  There is no replacement parser, so `.env.example` and `docs/rag.md` now say
+  to keep `RAG_CRACK_ENABLED` off unless `RAG_PARSE_MODEL` points at one your
+  endpoint serves.
+
 ### Added
 
 - **Review the drafted eval grades yourself.** `pnpm rag:review:export` writes a
   blank sheet for the Claude-drafted answers in `eval/graded/`, and
   `pnpm rag:review:import` checks it, stores the person's grades beside the
   drafts, and reports percent agreement and Cohen's kappa (#119, #120).
+
+- `pnpm gen:screenshots` takes `--theme light` for light-mode screenshots
+  (written with a `-light` suffix) and `--only answer,docs` to capture a
+  subset.
+
+### Security
+
+- **Safer admin defaults** ([#185](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/185)).
+  `make setup` now gives the seeded admin a random password, printed once,
+  instead of the published `Password123`, and `pnpm db:seed` refuses that
+  password when `NODE_ENV=production` unless `SEED_ADMIN_PASSWORD` is set.
+  Roles are re-read at every session revalidation, so removing a role takes
+  effect within five minutes instead of when the cookie expires. Testing an AI
+  connection with a blank key now only uses the saved key against the saved
+  URL. The committed `.claude/settings.json` (personal graphify hooks) is gone.
+- **Next.js, nodemailer and transitive advisories patched**
+  ([#181](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/181)).
+  `next` 16.3.6 → 16.4.6 (with `eslint-config-next`) fixes unauthenticated
+  remote code execution in image optimisation and in `use cache` functions,
+  plus a Server Action denial of service. `nodemailer` 9.1.1 → 10.6.0 fixes
+  address-parser denial of service; the app's SMTP transport is unchanged.
+  `zod` 4.6.7 and `sharp` 0.35.5 are direct bumps, `mermaid` 12.3.0 pulls
+  patched `dompurify`, and a pnpm override floors `source-map-js` at 1.2.2
+  because Next's PostCSS still allows the vulnerable release.
+  `pnpm audit --prod --audit-level=high` passes (it reported 8 high and 3
+  critical).
 
 ## [0.28.1] - 2026-09-27
 

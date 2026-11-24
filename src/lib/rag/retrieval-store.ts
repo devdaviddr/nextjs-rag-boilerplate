@@ -146,8 +146,9 @@ export async function searchHybrid(q: HybridSearch): Promise<RetrievedChunk[]> {
       -- not also contain "cover". Questions are full of verbs and filler that
       -- never appear in the passage that answers them.
       --
-      -- OR-ing is permissive by design; ts_rank_cd then does the discriminating,
-      -- and the lexical floor below decides what is strong enough to admit.
+      -- OR-ing is permissive by design; ts_rank_cd then does the discriminating.
+      -- Nothing here admits a chunk on its own: the fused list still has to
+      -- clear the similarity floor in retrieve.ts.
       SELECT to_tsquery(
                'english',
                NULLIF(string_agg(quote_literal(lexeme), ' | '), '')

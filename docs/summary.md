@@ -4,7 +4,7 @@
 project is, what it is built from and what already works, and links to the page
 that explains each part properly.
 
-This is a production-ready Next.js 16 template for grounded document chat.
+This is a Next.js 16 template for grounded document chat.
 Users register, upload PDFs into private knowledge bases they own, and hold
 conversations answered only from those documents, with a page-level citation
 for every claim. Authentication, PostgreSQL + pgvector, object storage, a PWA,
@@ -27,7 +27,7 @@ from scratch.
 
 | Layer            | Technology        | Version               |
 | ---------------- | ----------------- | --------------------- |
-| Framework        | Next.js           | 16.3.6                |
+| Framework        | Next.js           | 16.4.6                |
 | Runtime          | React             | 19.2.7                |
 | Language         | TypeScript        | 5.9.3                 |
 | Database         | PostgreSQL        | 17 (+ pgvector)       |

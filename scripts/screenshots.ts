@@ -11,19 +11,20 @@ import { join, resolve } from 'node:path'
 import { conversations, roles, userRoles, users } from '../src/db/schema'
 
 /**
- * The README screenshots (#175), in dark mode.
+ * The README screenshots (#175), in dark mode, or light with `--theme light`.
  *
  *   pnpm build
  *   RAG_CRACK_ENABLED=true PORT=3100 APP_URL=http://localhost:3100 \
  *     AUTH_URL=http://localhost:3100 LLM_API_KEY=<your key> pnpm start
- *   pnpm gen:screenshots --pdf path/to/document.pdf
+ *   pnpm gen:screenshots --pdf path/to/document.pdf [--theme light] [--only answer]
  *
  * Against a local production build (no dev overlay), with cracking on so the
  * inspector shows pages read by the parsing model. It uses its own admin
  * account, so the sidebar holds only what the shots need, and never touches
  * anyone else's data. Idempotent: the account, knowledge base and document
  * are created once and reused. Each shot is framed (backdrop, rounded window,
- * shadow) and written to docs/images/ as WebP.
+ * shadow) and written to docs/images/ as WebP. Light shots get a `-light`
+ * suffix, so the dark set the README uses is left alone.
  *
  * Local development only: it writes to the database named in .env.
  */
@@ -48,6 +49,12 @@ const ACCOUNT = {
   password: 'Screenshots123',
 }
 const VIEWPORT = { width: 1440, height: 900 }
+const THEME: 'dark' | 'light' = arg('theme') === 'light' ? 'light' : 'dark'
+/** `--only answer,docs` limits the run to those shots. */
+const ONLY = arg('only')
+  ?.split(',')
+  .map((s) => s.trim())
+const want = (name: string) => !ONLY || ONLY.includes(name)
 
 /** The screenshot account, an admin so Observability is visible. */
 async function ensureAccount(): Promise<void> {
@@ -164,27 +171,38 @@ async function shot(page: Page): Promise<Buffer> {
   return page.screenshot({ type: 'png' })
 }
 
-/** The screenshot in a window on a dark backdrop, as the README shows it. */
+/** The screenshot in a window on a backdrop that matches the theme. */
 async function frame(page: Page, png: Buffer, name: string): Promise<void> {
   const src = `data:image/png;base64,${png.toString('base64')}`
+  const light = THEME === 'light'
+  const stage = light
+    ? 'radial-gradient(120% 90% at 15% 0%,#ffffff 0%,#eef2f7 45%,#dde3ec 100%)'
+    : 'radial-gradient(120% 90% at 15% 0%,#23324a 0%,#121926 45%,#0a0e15 100%)'
+  const shadow = light
+    ? '0 30px 80px rgba(15,23,42,.18),0 0 0 1px rgba(15,23,42,.08)'
+    : '0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08)'
+  const bar = light ? '#f3f4f6' : '#1b212b'
+  const barLine = light ? 'rgba(15,23,42,.08)' : 'rgba(255,255,255,.06)'
+  const dot = light ? '#d1d5db' : '#3a4250'
+  const label = light ? '#6b7280' : '#8b95a5'
   await page.setViewportSize({ width: 1600, height: 1100 })
   await page.setContent(`<!doctype html><html><head><style>
     html,body{margin:0;background:transparent}
     .stage{display:inline-block;padding:56px 64px;
-      background:radial-gradient(120% 90% at 15% 0%,#23324a 0%,#121926 45%,#0a0e15 100%)}
+      background:${stage}}
     .win{width:1440px;border-radius:14px;overflow:hidden;
-      box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08)}
-    .bar{height:34px;background:#1b212b;display:flex;align-items:center;gap:8px;padding:0 14px;
-      border-bottom:1px solid rgba(255,255,255,.06)}
-    .bar i{width:11px;height:11px;border-radius:50%;background:#3a4250}
-    .bar span{margin-left:12px;font:12px ui-sans-serif,system-ui;color:#8b95a5}
+      box-shadow:${shadow}}
+    .bar{height:34px;background:${bar};display:flex;align-items:center;gap:8px;padding:0 14px;
+      border-bottom:1px solid ${barLine}}
+    .bar i{width:11px;height:11px;border-radius:50%;background:${dot}}
+    .bar span{margin-left:12px;font:12px ui-sans-serif,system-ui;color:${label}}
     img{display:block;width:1440px}
   </style></head><body><div class="stage" id="s"><div class="win">
     <div class="bar"><i></i><i></i><i></i><span>localhost</span></div>
     <img src="${src}"></div></div></body></html>`)
   await page.waitForLoadState('load')
   const raw = await page.locator('#s').screenshot({ type: 'png' })
-  const file = join(OUT, `${name}.webp`)
+  const file = join(OUT, `${name}${light ? '-light' : ''}.webp`)
   await sharp(raw).resize({ width: 2000 }).webp({ quality: 88 }).toFile(file)
   console.log(`Wrote ${file}`)
 }
@@ -196,58 +214,68 @@ async function main(): Promise<void> {
   const context = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor: 2,
-    colorScheme: 'dark',
+    colorScheme: THEME,
   })
-  await context.addInitScript(() => {
+  await context.addInitScript((theme) => {
     try {
-      localStorage.setItem('theme', 'dark')
+      localStorage.setItem('theme', theme)
     } catch {
-      // Storage blocked: the dark colour scheme still applies.
+      // Storage blocked: the colour scheme still applies.
     }
-  })
+  }, THEME)
   const page = await context.newPage()
   await signIn(page)
   const docUrl = await ensureDocument(page)
 
   const shots: Array<[string, Buffer]> = []
 
-  // 1. The answer, with its cited page open beside it.
-  await ask(page)
-  await page
-    .getByRole('button', { name: / — (p|§)\d+/ })
-    .first()
-    .click()
-  await page.getByRole('complementary').first().waitFor()
-  await page.waitForTimeout(2500)
-  shots.push(['answer', await shot(page)])
+  // 1. The answer, with its cited page open beside it. Shot 2 reuses it.
+  if (want('answer') || want('agent-activity')) await ask(page)
+  if (want('answer')) {
+    await page
+      .getByRole('button', { name: / — (p|§)\d+/ })
+      .first()
+      .click()
+    await page.getByRole('complementary').first().waitFor()
+    await page.waitForTimeout(2500)
+    shots.push(['answer', await shot(page)])
+  }
 
   // 2. The Agent activity drawer under the same answer.
-  await page.keyboard.press('Escape')
-  await page
-    .getByRole('button', { name: /Agent activity/ })
-    .last()
-    .click()
-  await page.getByRole('region', { name: 'Agent activity' }).waitFor()
-  await page.waitForTimeout(1500)
-  await page
-    .getByRole('region', { name: 'Agent activity' })
-    .scrollIntoViewIfNeeded()
-  shots.push(['agent-activity', await shot(page)])
+  if (want('agent-activity')) {
+    await page.keyboard.press('Escape')
+    await page
+      .getByRole('button', { name: /Agent activity/ })
+      .last()
+      .click()
+    await page.getByRole('region', { name: 'Agent activity' }).waitFor()
+    await page.waitForTimeout(1500)
+    await page
+      .getByRole('region', { name: 'Agent activity' })
+      .scrollIntoViewIfNeeded()
+    shots.push(['agent-activity', await shot(page)])
+  }
 
   // 3. What cracking read from each page.
-  await page.goto(docUrl)
-  await page.waitForLoadState('networkidle')
-  shots.push(['cracking', await shot(page)])
+  if (want('cracking')) {
+    await page.goto(docUrl)
+    await page.waitForLoadState('networkidle')
+    shots.push(['cracking', await shot(page)])
+  }
 
   // 4. Observability.
-  await page.goto(`${BASE}/observability`)
-  await page.waitForLoadState('networkidle')
-  shots.push(['observability', await shot(page)])
+  if (want('observability')) {
+    await page.goto(`${BASE}/observability`)
+    await page.waitForLoadState('networkidle')
+    shots.push(['observability', await shot(page)])
+  }
 
   // 5. The in-app docs.
-  await page.goto(`${BASE}/docs`)
-  await page.waitForLoadState('networkidle')
-  shots.push(['docs', await shot(page)])
+  if (want('docs')) {
+    await page.goto(`${BASE}/docs`)
+    await page.waitForLoadState('networkidle')
+    shots.push(['docs', await shot(page)])
+  }
 
   const framer = await (
     await browser.newContext({ deviceScaleFactor: 2 })

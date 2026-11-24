@@ -899,7 +899,10 @@ columns and vector indexes, so the whole search runs in the database you already
 operate instead of a separate service. Less obvious is why the column type is
 `halfvec` and not the ordinary `vector`.
 
-Three measured facts, in order, force the column type:
+Three measured facts, in order, force the column type. (NVIDIA retired
+`nvidia/nemotron-3-embed-1b` on 2026-11-16. Its successor,
+`nvidia/nemotron-3.5-embed-1b`, is now the default and also returns 2048
+dimensions, so the column type still holds.)
 
 1. **`nvidia/nemotron-3-embed-1b` is the only embedding model reachable on a
    free NIM account.** `snowflake/arctic-embed-l`,
@@ -1703,7 +1706,9 @@ the whole pipeline and nothing here costs anything.
 When it is on, ingestion stops treating every page the same way. Each page is
 triaged locally at no cost, and only the pages that need help are sent to
 `nvidia/nemotron-parse`, which returns typed, boxed elements instead of a flat
-string:
+string. NVIDIA retired `nemotron-parse` on 2026-11-16 and lists no replacement,
+so cracking only works if `RAG_PARSE_MODEL` names a parser your endpoint still
+serves; otherwise leave `RAG_CRACK_ENABLED` off.
 
 | page looks like                  | route         | cost         |
 | -------------------------------- | ------------- | ------------ |
