@@ -349,6 +349,17 @@ export async function refreshDocument(
 ): Promise<ActionResult<null>> {
   await refreshAiSettings()
   const userId = await requireUserId()
+  // A refresh fetches and re-embeds like an upload, so it spends the same
+  // per-user budget.
+  const h = await headers()
+  const limited = rateLimit(
+    `rag-upload:${userId}:${clientIpFromHeaders(h)}`,
+    UPLOAD_LIMITS.upload.limit,
+    UPLOAD_LIMITS.upload.windowMs,
+  )
+  if (!limited.success) {
+    return { ok: false, error: 'Too many uploads. Please wait a moment.' }
+  }
   const doc = await db.query.documents.findFirst({
     where: eq(documents.id, documentId),
   })

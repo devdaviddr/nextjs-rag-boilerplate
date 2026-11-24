@@ -8,6 +8,12 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Refreshing a web document is rate limited** ([#194](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/194)).
+  It re-fetches and re-embeds like an upload, so it now shares the upload
+  limit (20 per user per 10 minutes) and stops before touching the database.
+
 ### Security
 
 - **Remaining dev-tooling advisories cleared** ([#192](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/192)).
