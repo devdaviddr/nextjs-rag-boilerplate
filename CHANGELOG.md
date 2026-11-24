@@ -8,6 +8,13 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Removed
+
+- **The unused `chunks.embedding` column** ([#196](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/196)).
+  Superseded by `chunk_embeddings` in v0.25.0 and kept since as a rollback
+  path. Migration 0027 drops it and its HNSW index, which frees the space it
+  still took on databases that predate v0.25.0.
+
 ## [0.29.0] - 2026-11-25
 
 ### Changed

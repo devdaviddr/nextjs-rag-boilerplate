@@ -548,10 +548,6 @@ export const chunks = pgTable(
     // every row written before this column existed.
     headingBbox: jsonb('heading_bbox').$type<ChunkBox>(),
     captionBbox: jsonb('caption_bbox').$type<ChunkBox>(),
-    // Superseded by `chunk_embeddings` (#56): no longer written or read, and
-    // null for chunks ingested since. Kept one release so a rollback still
-    // finds its vectors; dropped after.
-    embedding: halfvec('embedding', { dimensions: 2048 }),
     createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
