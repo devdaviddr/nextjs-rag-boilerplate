@@ -117,8 +117,8 @@ one.
 ## Acceptance criteria
 
 - [x] `make autostart` installs a LaunchAgent; after a reboot (with auto-login)
-      the stack comes up unattended. Verified live on the **frank** server
-      (`frank-boilerplate` tunnel → https://boilerplate.danielruffolo.net).
+      the stack comes up unattended. Verified live on the reference Mac mini host
+      (named tunnel to a public hostname).
 - [x] CI publishes a multi-arch manifest (amd64 + arm64) built on native
       runners; no QEMU step remains.
 - [x] 51 login attempts from one IP inside 10 min are throttled regardless of

@@ -37,7 +37,7 @@ verifying a deploy has to shell into the box and inspect image tags.
 
 - Make pull-based deploy (Tier B) the **documented default**, with a first-class, reproducible
   **scheduled timer** (not a hand-rolled cron on one box).
-- **Deregister the self-hosted runner** on the live instance (frank) and disable the Tier C gate.
+- **Deregister the self-hosted runner** on the live instance (the reference host) and disable the Tier C gate.
 - Bake **version + short commit SHA** into the published image at build time.
 - Show the deployed version in the app **Settings** page for any signed-in user.
 - Keep Tier C available but clearly **opt-in for private/trusted repos only**, with a loud warning.
@@ -45,7 +45,7 @@ verifying a deploy has to shell into the box and inspect image tags.
 ## Non-goals
 
 - Deleting Tier C entirely — it stays valid for private repos; only its default/recommended status
-  and the live frank runner change.
+  and the live runner change.
 - An update/rollback UI in the app — Settings only _displays_ the version (read-only).
 - Build provenance/SBOM/signing (still future, per [0021](0021-continuous-deployment-self-hosted.md)).
 - Exposing the version publicly/unauthenticated — it's shown to signed-in users only.
@@ -65,7 +65,7 @@ verifying a deploy has to shell into the box and inspect image tags.
 - **FR4** — **Tier B timer.** A `scripts/macos-deploy-timer.sh` (`install [interval] | uninstall |
 status`) installs a launchd agent that runs `make deploy` on an interval (default 5 min), plus a
   `make deploy-timer` convenience target. Documented as the recommended self-host deploy path.
-- **FR5** — **Runner stand-down (frank).** Deregister the `frank` self-hosted runner, set the repo
+- **FR5** — **Runner stand-down (the reference host).** Deregister the self-hosted runner, set the repo
   variable `SELF_HOSTED_DEPLOY=false`, and install the Tier B timer on the box.
 
 ### Non-functional
@@ -110,7 +110,7 @@ a `LaunchAgent` plist with `StartInterval` that runs a wrapper doing `git pull` 
 `.env` + `make deploy`. `install`/`uninstall`/`status` subcommands; `make deploy-timer` wraps
 `install`.
 
-**Runner stand-down (FR5).** On frank: `./config.sh remove` (or `svc.sh uninstall` + remove) for the
+**Runner stand-down (FR5).** On the reference host: `./config.sh remove` (or `svc.sh uninstall` + remove) for the
 runner, `gh variable set SELF_HOSTED_DEPLOY -b false`, install the Tier B timer, verify a pull cycle.
 `deploy.yml` stays in the repo but gets a strengthened header warning and is documented as
 private-repo-only.
@@ -138,7 +138,7 @@ private-repo-only.
       `... status` reports it; `... uninstall` removes it. —
       `Makefile` target → `scripts/macos-deploy-timer.sh`, which implements
       `install`, `uninstall` and `status`.
-- [ ] On frank: the `frank` runner is deregistered (gone from repo → Settings → Actions → Runners),
+- [ ] On the reference host: the self-hosted runner is deregistered (gone from repo → Settings → Actions → Runners),
       `SELF_HOSTED_DEPLOY=false`, and the Tier B timer keeps the box current within one interval.
 - [x] `docs/self-hosting.md` presents Tier B as the default and Tier C as private-repo-only with the
       fork-PR warning. —
@@ -151,7 +151,7 @@ private-repo-only.
 ## Security & privacy
 
 - **Removes the self-hosted-runner RCE surface** on the public repo (the motivating threat) by not
-  running a runner on frank; Tier B is outbound-only.
+  running a runner on the reference host; Tier B is outbound-only.
 - **Version disclosure** is limited to version + short SHA, authenticated users only — enough for an
   operator to confirm a deploy without publishing precise build coordinates to the anonymous
   internet.
