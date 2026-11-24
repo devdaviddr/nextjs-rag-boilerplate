@@ -56,6 +56,7 @@ vi.mock('@/lib/rag/fetch-url', async (original) => ({
 
 import { addDocumentFromUrl, refreshDocument } from '@/lib/rag/actions'
 import { UnsafeUrlError } from '@/lib/rag/fetch-url'
+import { UPLOAD_LIMITS } from '@/lib/rate-limit'
 
 const ME = 'user-me'
 const PAGE = Buffer.from(
@@ -199,6 +200,21 @@ describe('refreshDocument', () => {
     status: 'ready',
     sourceUrl: 'https://example.com/leave',
   }
+
+  it('shares the upload rate limit, and stops before any lookup', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'user-busy' } })
+    dbMock.query.documents.findFirst.mockResolvedValue(undefined)
+    for (let i = 0; i < UPLOAD_LIMITS.upload.limit; i++) {
+      await refreshDocument('doc-web')
+    }
+    dbMock.query.documents.findFirst.mockClear()
+    expect(await refreshDocument('doc-web')).toEqual({
+      ok: false,
+      error: 'Too many uploads. Please wait a moment.',
+    })
+    expect(dbMock.query.documents.findFirst).not.toHaveBeenCalled()
+    expect(mockSafeFetch).not.toHaveBeenCalled()
+  })
 
   it('refuses an uploaded document, and someone else’s, as not found', async () => {
     dbMock.query.documents.findFirst.mockResolvedValueOnce({
