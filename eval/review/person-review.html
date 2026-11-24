@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Person review — 29 drafted answers</title>
+  <style>
+    body { font: 16px/1.45 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    pre { white-space: pre-wrap; background: #f4f4f4; padding: 0.75rem 1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 0.35rem 0.5rem; vertical-align: top; }
+    section { border-top: 1px solid #ccc; padding: 1.5rem 0; }
+    .blank { color: #555; }
+    code { font-size: 0.95em; }
+  </style>
+</head>
+<body>
+  <h1>Person review of drafted grades</h1>
+  <p>29 items. This file is for reading. It contains no person grades. Enter grades in <code>eval/review/person-review.csv</code>. Steps: <code>docs/person-review.md</code>.</p>
+  <h2>Rubric</h2>
+  <p>Faithfulness, per factual sentence: <strong>2</strong> fully supported, <strong>1</strong> partly supported or overstated, <strong>0</strong> unsupported or contradicted. Completeness, for the answer: <strong>2</strong> everything the sources hold that was asked, <strong>1</strong> misses part, <strong>0</strong> misses the point or refuses when the sources answer. A correct refusal is complete.</p>
+  <h2>What to type</h2>
+  <ul>
+    <li><code>agree</code> is <code>agree</code> or <code>disagree</code>.</li>
+    <li>On agree, leave <code>person_faithfulness</code> and <code>person_completeness</code> empty.</li>
+    <li>On disagree, set <code>person_completeness</code> to 0, 1 or 2. Set <code>person_faithfulness</code> to one score per claim, in the claim-token order (<code>2,0</code>) or with sentence numbers (<code>S1:2,S2:0</code>). Leave it empty when the draft has no claims.</li>
+    <li><code>notes</code> is optional. Do not edit <code>draft_claims</code> or <code>draft_completeness</code>.</li>
+  </ul>
+  <h2>Items</h2>
+  <ol>
+    <li><a href="#followup-hot-work-fire-watch">followup-hot-work-fire-watch</a> <span>followup</span></li>
+<li><a href="#layout-condenser-approach-building-b">layout-condenser-approach-building-b</a> <span>layout</span></li>
+<li><a href="#layout-downtime-spike-quarter">layout-downtime-spike-quarter</a> <span>layout</span></li>
+<li><a href="#layout-figure-lowest-quarter">layout-figure-lowest-quarter</a> <span>layout</span></li>
+<li><a href="#layout-figure-q1-vs-q4">layout-figure-q1-vs-q4</a> <span>layout</span></li>
+<li><a href="#layout-lift-capacity-north">layout-lift-capacity-north</a> <span>layout</span></li>
+<li><a href="#layout-q2-downtime-hours">layout-q2-downtime-hours</a> <span>layout</span></li>
+<li><a href="#multi-hop-breach-and-audit">multi-hop-breach-and-audit</a> <span>multi-hop</span></li>
+<li><a href="#multi-hop-hartley-setpoint-and-lift">multi-hop-hartley-setpoint-and-lift</a> <span>multi-hop</span></li>
+<li><a href="#multi-hop-induction-and-leave">multi-hop-induction-and-leave</a> <span>multi-hop</span></li>
+<li><a href="#multi-hop-inspection-intervals">multi-hop-inspection-intervals</a> <span>multi-hop</span></li>
+<li><a href="#multi-hop-leave-payout-vs-carryover">multi-hop-leave-payout-vs-carryover</a> <span>multi-hop</span></li>
+<li><a href="#multi-hop-no-answer-boardroom-av">multi-hop-no-answer-boardroom-av</a> <span>multi-hop</span></li>
+<li><a href="#refusal-handbook-dress-code">refusal-handbook-dress-code</a> <span>refusal</span></li>
+<li><a href="#refusal-hot-work-cost">refusal-hot-work-cost</a> <span>refusal</span></li>
+<li><a href="#refusal-manual-drones">refusal-manual-drones</a> <span>refusal</span></li>
+<li><a href="#refusal-records-email">refusal-records-email</a> <span>refusal</span></li>
+<li><a href="#refusal-sick-leave">refusal-sick-leave</a> <span>refusal</span></li>
+<li><a href="#section-records-disposal">section-records-disposal</a> <span>section</span></li>
+<li><a href="#section-records-retention">section-records-retention</a> <span>section</span></li>
+<li><a href="#boardroom-capacity">boardroom-capacity</a> <span>single-hop</span></li>
+<li><a href="#building-hours">building-hours</a> <span>single-hop</span></li>
+<li><a href="#catering-notice">catering-notice</a> <span>single-hop</span></li>
+<li><a href="#expense-approval">expense-approval</a> <span>single-hop</span></li>
+<li><a href="#expense-deadline">expense-deadline</a> <span>single-hop</span></li>
+<li><a href="#fire-assembly">fire-assembly</a> <span>single-hop</span></li>
+<li><a href="#summary-contractor-manual">summary-contractor-manual</a> <span>summary</span></li>
+<li><a href="#summary-contractor-manual-closing">summary-contractor-manual-closing</a> <span>summary</span></li>
+<li><a href="#summary-records-policy">summary-records-policy</a> <span>summary</span></li>
+  </ol>
+  <section id="followup-hot-work-fire-watch">
+        <h2>followup-hot-work-fire-watch</h2>
+        <p><strong>followup</strong></p>
+        <h3>Question</h3>
+        <p>How long does the fire watch stay afterwards?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.</pre>
+        <h3>Model answer</h3>
+        <pre>The fire watch stays for 60 minutes after hot work ends. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The fire watch stays for 60 minutes after hot work ends. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="layout-condenser-approach-building-b">
+        <h2>layout-condenser-approach-building-b</h2>
+        <p><strong>layout</strong></p>
+        <h3>Question</h3>
+        <p>What is Building B's condenser approach?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] plant-services-manual, page 1 (d0366c90-ac77-4d1e-9884-23dd435ae0ce)
+Building A was recommissioned in Building B was recommissioned in
+March by Hartley Mechanical. August by Hartley Mechanical.
+Its chilled water setpoint is Its chilled water setpoint is
+6.5 degrees. 9.0 degrees.
+Its condenser approach is Its condenser approach is
+1.2 degrees. 2.8 degrees.</pre>
+        <h3>Model answer</h3>
+        <pre>Building B's condenser approach is 2.8 degrees [1].</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Building B's condenser approach is 2.8 degrees [1].</td>
+              <td>The source's two columns are interleaved; Building B is the second value, 2.8.</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="layout-downtime-spike-quarter">
+        <h2>layout-downtime-spike-quarter</h2>
+        <p><strong>layout</strong></p>
+        <h3>Question</h3>
+        <p>Which quarter had the spike in unplanned downtime?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] site-operations-report, page 3 (22ad0883-6d3d-4f1a-931d-ba4de4ac1f2c)
+Figure 3.2 - Unplanned downtime trend
+
+Q1 Q2 Q3 Q4 Q5
+
+Figure 3.2: Unplanned downtime by quarter across all sites.
+
+The Q3 spike corresponds to the Geelong furnace outage.
+Quarterly totals are held in the operations data warehouse.</pre>
+        <h3>Model answer</h3>
+        <pre>Q3 [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Q3 [1]</td>
+              <td>'The Q3 spike corresponds to...'</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="layout-figure-lowest-quarter">
+        <h2>layout-figure-lowest-quarter</h2>
+        <p><strong>layout</strong></p>
+        <h3>Question</h3>
+        <p>In Figure 3.2, which quarter had the lowest unplanned downtime?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] site-operations-report, page 3 (22ad0883-6d3d-4f1a-931d-ba4de4ac1f2c)
+Figure 3.2 - Unplanned downtime trend
+
+Q1 Q2 Q3 Q4 Q5
+
+Figure 3.2: Unplanned downtime by quarter across all sites.
+
+The Q3 spike corresponds to the Geelong furnace outage.
+Quarterly totals are held in the operations data warehouse.</pre>
+        <h3>Model answer</h3>
+        <pre>The context does not provide the specific unplanned downtime values for each quarter, so it is not possible to determine which quarter had the lowest unplanned downtime from the information given.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines: the values exist only as bar heights, not in the text.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="layout-figure-q1-vs-q4">
+        <h2>layout-figure-q1-vs-q4</h2>
+        <p><strong>layout</strong></p>
+        <h3>Question</h3>
+        <p>In the unplanned downtime chart, which was higher: Q1 or Q4?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] site-operations-report, page 3 (5ad7eabb-097c-47ad-83a2-d080a965282c)
+Figure 3.2: Unplanned downtime by quarter across all sites.</pre>
+        <h3>Model answer</h3>
+        <pre>The provided context only mentions that Figure 3.2 shows unplanned downtime by quarter, but it does not give the actual values for Q1 or Q4. Therefore, I cannot determine which quarter had higher unplanned downtime from the information given.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines; S1 is about what the source lacks, S2 connects.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="layout-lift-capacity-north">
+        <h2>layout-lift-capacity-north</h2>
+        <p><strong>layout</strong></p>
+        <h3>Question</h3>
+        <p>What is the rated capacity of the north wing lift?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] site-operations-report, page 1 (40dc1d88-3bac-49a5-ab89-5ce89ad687f9)
+The north wing lift was upgraded in The south wing lift remains on the
+February by Hartley Mechanical. original controller.
+Its new rated capacity is 1600 Its rated capacity is unchanged at
+kilograms. 1000 kilograms.
+The upgrade was funded from the A replacement is scheduled for the
+capital reserve. next financial year.
+The north wing lift is certified The south wing lift is certified
+until 2031. until 2027.</pre>
+        <h3>Model answer</h3>
+        <pre>The north wing lift’s rated capacity is 1600 kilograms. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The north wing lift’s rated capacity is 1600 kilograms. [1]</td>
+              <td>Interleaved columns: the north wing's new capacity is 1600 kilograms.</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="layout-q2-downtime-hours">
+        <h2>layout-q2-downtime-hours</h2>
+        <p><strong>layout</strong></p>
+        <h3>Question</h3>
+        <p>How many hours of unplanned downtime were recorded in Q2?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] site-operations-report, page 3 (5ad7eabb-097c-47ad-83a2-d080a965282c)
+Figure 3.2: Unplanned downtime by quarter across all sites.</pre>
+        <h3>Model answer</h3>
+        <pre>The context does not provide the specific number of hours of unplanned downtime recorded in Q2.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines; no text gives Q2 hours.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="multi-hop-breach-and-audit">
+        <h2>multi-hop-breach-and-audit</h2>
+        <p><strong>multi-hop</strong></p>
+        <h3>Question</h3>
+        <p>What happens after a second breach, and how quickly must high audit findings be closed?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.</pre>
+        <h3>Model answer</h3>
+        <pre>The context does not specify what occurs after a second breach. It only states that audit findings rated high must be closed within 7 days【1】.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>It only states that audit findings rated high must be closed within 7 days【1】.</td>
+              <td>Cites with 【1】 (full-width brackets), which citedIndices does not read.</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: The breach half is not in the retrieved sources (section 28 was not retrieved), so saying so is complete against them.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="multi-hop-hartley-setpoint-and-lift">
+        <h2>multi-hop-hartley-setpoint-and-lift</h2>
+        <p><strong>multi-hop</strong></p>
+        <h3>Question</h3>
+        <p>Hartley Mechanical recommissioned Building A — what chilled water setpoint did they leave it at, and what rated capacity did the same contractor give the north wing lift?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] plant-services-manual, page 1 (d0366c90-ac77-4d1e-9884-23dd435ae0ce)
+Building A was recommissioned in Building B was recommissioned in
+March by Hartley Mechanical. August by Hartley Mechanical.
+Its chilled water setpoint is Its chilled water setpoint is
+6.5 degrees. 9.0 degrees.
+Its condenser approach is Its condenser approach is
+1.2 degrees. 2.8 degrees.
+
+[2] site-operations-report, page 1 (40dc1d88-3bac-49a5-ab89-5ce89ad687f9)
+The north wing lift was upgraded in The south wing lift remains on the
+February by Hartley Mechanical. original controller.
+Its new rated capacity is 1600 Its rated capacity is unchanged at
+kilograms. 1000 kilograms.
+The upgrade was funded from the A replacement is scheduled for the
+capital reserve. next financial year.
+The north wing lift is certified The south wing lift is certified
+until 2031. until 2027.</pre>
+        <h3>Model answer</h3>
+        <pre>Hartley Mechanical left Building A with a chilled‑water setpoint of **6.5 degrees** [1] and gave the north‑wing lift a rated capacity of **1600 kilograms** [2].</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Hartley Mechanical left Building A with a chilled‑water setpoint of **6.5 degrees** [1] and gave the north‑wing lift a rated capacity of **1600 kilograms** [2].</td>
+              <td>Both values are right once the interleaved columns are read in order (Building A 6.5; north wing 1600).</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="multi-hop-induction-and-leave">
+        <h2>multi-hop-induction-and-leave</h2>
+        <p><strong>multi-hop</strong></p>
+        <h3>Question</h3>
+        <p>How long does the contractor site induction take, and how far in advance must staff book annual leave?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[2] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[3] staff-handbook, page 1 (06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e)
+STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+Policy reference POL-HR-014.
+The annual leave entitlement is 20 working days per calendar year.
+Unused leave does not carry over into the following year.
+Leave must be approved by your manager at least two weeks in advance.
+Leave requests during the December shutdown are not accepted.
+
+[4] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[5] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.</pre>
+        <h3>Model answer</h3>
+        <pre>The contractor site induction takes **90 minutes** [1]. Staff must book annual leave **at least two weeks in advance** [3].</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The contractor site induction takes **90 minutes** [1].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>Staff must book annual leave **at least two weeks in advance** [3].</td>
+              <td>Source: leave 'must be approved by your manager at least two weeks in advance'; 'book' is a fair paraphrase.</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="multi-hop-inspection-intervals">
+        <h2>multi-hop-inspection-intervals</h2>
+        <p><strong>multi-hop</strong></p>
+        <h3>Question</h3>
+        <p>How often are harnesses inspected, and how often are scaffolds inspected?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 8 (1449212d-38ee-4e3e-8602-93b245939a27)
+CONTRACTOR SAFETY MANUAL - SECTION 8 - SCAFFOLDING
+Only licensed scaffolders may erect or alter scaffolding.
+Scaffolds are inspected every 30 days and after storms.
+A green scaffold tag means the scaffold is safe to use.
+
+[2] contractor-safety-manual, page 7 (a7f24062-f56f-42ee-b435-b31250e738fd)
+CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS
+A harness is required for any work above 2 metres without edge protection.
+Harnesses are inspected every six months and tagged.
+Working at heights permits are signed off by the rigging coordinator.</pre>
+        <h3>Model answer</h3>
+        <pre>Harnesses are inspected every six months [2]. Scaffolds are inspected every 30 days and after storms [1].</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Harnesses are inspected every six months [2].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>Scaffolds are inspected every 30 days and after storms [1].</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="multi-hop-leave-payout-vs-carryover">
+        <h2>multi-hop-leave-payout-vs-carryover</h2>
+        <p><strong>multi-hop</strong></p>
+        <h3>Question</h3>
+        <p>My contract says untaken leave is paid out when I leave — does the handbook let me carry it into next year while I am still employed?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] staff-handbook, page 1 (06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e)
+STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+Policy reference POL-HR-014.
+The annual leave entitlement is 20 working days per calendar year.
+Unused leave does not carry over into the following year.
+Leave must be approved by your manager at least two weeks in advance.
+Leave requests during the December shutdown are not accepted.
+
+[2] employment-contract, page 2 (d9653863-abe4-4a7b-9c24-603141bc77c8)
+EMPLOYMENT CONTRACT - PART B - NOTICE AND TERMINATION
+After probation the notice period is four weeks in writing.
+Accrued but untaken leave is paid out on termination.
+Summary dismissal applies only in cases of serious misconduct.</pre>
+        <h3>Model answer</h3>
+        <pre>No. The staff handbook states that unused leave does **not** carry over into the following year [1].</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>No.</td>
+              <td>'No.' is the answer, supported by [1].</td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>The staff handbook states that unused leave does **not** carry over into the following year [1].</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="multi-hop-no-answer-boardroom-av">
+        <h2>multi-hop-no-answer-boardroom-av</h2>
+        <p><strong>multi-hop</strong></p>
+        <h3>Question</h3>
+        <p>Who maintains the boardroom's video conferencing, and what does that contract cost?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] facilities-guide, page 3 (f14e5dcd-3620-49c5-89c5-6a71085273c5)
+FACILITIES GUIDE - MEETING ROOMS
+Rooms are booked through the calendar system.
+The boardroom seats fourteen and has video conferencing.
+Catering must be ordered two business days in advance.</pre>
+        <h3>Model answer</h3>
+        <pre>The provided context does not contain information about who maintains the boardroom’s video conferencing system or the cost of any related contract.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="refusal-handbook-dress-code">
+        <h2>refusal-handbook-dress-code</h2>
+        <p><strong>refusal</strong></p>
+        <h3>Question</h3>
+        <p>What is the dress code in the staff handbook?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] staff-handbook, page 3 (a224ddbc-0b59-4266-b40d-48aedfb53477)
+STAFF HANDBOOK - SECTION 3 - WORKPLACE SAFETY
+The fire assembly point is the grassed area on Wellington Street.
+Wardens wear high visibility vests and take a roll call.
+Incidents must be reported to the safety officer within 24 hours.
+
+[2] staff-handbook, page 2 (0878b922-08a2-45f9-ba56-064bfbb79f38)
+STAFF HANDBOOK - SECTION 2 - EXPENSES
+Policy reference POL-FIN-022.
+Reimbursement for travel must be submitted within 30 days of the trip.
+Original receipts must be attached to every claim.
+Claims over 500 dollars require director approval before payment.
+Mileage is reimbursed at 78 cents per kilometre.
+
+[3] staff-handbook, page 4 (f2b03cb7-3a87-438e-90fb-d793114417ca)
+STAFF HANDBOOK - SECTION 4 - INFORMATION TECHNOLOGY
+Passwords must be at least 14 characters and are rotated annually.
+Personal devices may access email but not the finance system.
+Report suspected phishing to the service desk immediately.</pre>
+        <h3>Model answer</h3>
+        <pre>The staff handbook does not provide a general dress‑code policy. It only notes that wardens must wear high‑visibility vests during safety duties [1]. No other clothing requirements are mentioned.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>It only notes that wardens must wear high‑visibility vests during safety duties [1].</td>
+              <td>'during safety duties' is a fair reading of the workplace-safety section.</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: S1 and S3 say what the handbook lacks; not claims.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="refusal-hot-work-cost">
+        <h2>refusal-hot-work-cost</h2>
+        <p><strong>refusal</strong></p>
+        <h3>Question</h3>
+        <p>How much does a hot work permit cost?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.</pre>
+        <h3>Model answer</h3>
+        <pre>The provided context does not contain any information about the cost of a hot work permit.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="refusal-manual-drones">
+        <h2>refusal-manual-drones</h2>
+        <p><strong>refusal</strong></p>
+        <h3>Question</h3>
+        <p>What does the contractor safety manual say about flying drones on site?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[2] contractor-safety-manual, page 30 (a19caed4-a188-41c5-ba3b-22054abcaf63)
+CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL
+This manual was last revised in March 2026.
+Feedback on the manual goes to the Site Safety Office.
+
+[3] contractor-safety-manual, page 28 (b511f6cd-7be5-45d2-81e9-2e5d499893a0)
+CONTRACTOR SAFETY MANUAL - SECTION 28 - NON-COMPLIANCE
+A first breach of this manual results in a written warning.
+A second breach within twelve months removes the contractor from site for 14 days.
+A serious breach ends the contract.
+
+[4] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[5] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[6] contractor-safety-manual, page 3 (68ac9866-fa78-47c1-8870-b7ac51f94515)
+CONTRACTOR SAFETY MANUAL - SECTION 3 - PERSONAL PROTECTIVE EQUIPMENT
+Steel capped boots, a hard hat and safety glasses are required in all work zones.
+Hearing protection is required where noise exceeds 85 decibels.
+Contractors supply their own protective equipment unless the work order says otherwise.
+
+[7] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.
+
+[8] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.</pre>
+        <h3>Model answer</h3>
+        <pre>The contractor safety manual does not contain any information about flying drones on site.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="refusal-records-email">
+        <h2>refusal-records-email</h2>
+        <p><strong>refusal</strong></p>
+        <h3>Question</h3>
+        <p>What does the records policy say about archiving email?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] records-policy, page 1 (80b53cac-bc8a-41db-942d-8355996d615f)
+Before any record is disposed of, the records officer confirms that it is
+listed in the records register and that its disposal date has passed.
+
+Disposal needs written custodian sign-off. The custodian named in the
+register approves each batch before it leaves the office.
+
+Paper records are destroyed by cross-cut shredding on site. Electronic
+records are erased from every server and every backup copy.
+
+When a batch has been destroyed, the records officer completes a
+destruction certificate and files it against the register entry.</pre>
+        <h3>Model answer</h3>
+        <pre>The records policy excerpt provided does not mention anything about archiving email.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: n/a (no factual claims)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>(none)</code></p>
+        <p>No factual claims. Completeness is the whole grade.</p>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Correctly declines.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="refusal-sick-leave">
+        <h2>refusal-sick-leave</h2>
+        <p><strong>refusal</strong></p>
+        <h3>Question</h3>
+        <p>How many days of sick leave do I get?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] staff-handbook, page 1 (06d309bb-aa1a-4a1b-8c4c-3dc14f4c6b7e)
+STAFF HANDBOOK - SECTION 1 - ANNUAL LEAVE
+Policy reference POL-HR-014.
+The annual leave entitlement is 20 working days per calendar year.
+Unused leave does not carry over into the following year.
+Leave must be approved by your manager at least two weeks in advance.
+Leave requests during the December shutdown are not accepted.</pre>
+        <h3>Model answer</h3>
+        <pre>The provided context does not contain any information about sick leave entitlement. It only describes the annual leave policy (20 working days per calendar year, no carryover, etc.). Therefore, I cannot answer how many days of sick leave you get from the given sources.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>It only describes the annual leave policy (20 working days per calendar year, no carryover, etc.).</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Declines sick leave correctly; S1 and S3 are not claims.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="section-records-disposal">
+        <h2>section-records-disposal</h2>
+        <p><strong>section</strong></p>
+        <h3>Question</h3>
+        <p>What is the process for disposing of records?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] records-policy, page 1 (80b53cac-bc8a-41db-942d-8355996d615f)
+Before any record is disposed of, the records officer confirms that it is
+listed in the records register and that its disposal date has passed.
+
+Disposal needs written custodian sign-off. The custodian named in the
+register approves each batch before it leaves the office.
+
+Paper records are destroyed by cross-cut shredding on site. Electronic
+records are erased from every server and every backup copy.
+
+When a batch has been destroyed, the records officer completes a
+destruction certificate and files it against the register entry.</pre>
+        <h3>Model answer</h3>
+        <pre>The disposal process is: the records officer first verifies that the record is in the records register and its disposal date has passed; then the custodian listed in the register provides written sign‑off for the batch. Once approved, paper records are destroyed by cross‑cut shredding on site, while electronic records are erased from all servers and backup copies. After destruction, the records officer completes a destruction certificate and files it against the register entry. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2, S3=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2,S3:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The disposal process is: the records officer first verifies that the record is in the records register and its disposal date has passed; then the custodian listed in the register provides written sign‑off for the batch.</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>Once approved, paper records are destroyed by cross‑cut shredding on site, while electronic records are erased from all servers and backup copies.</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S3</td>
+              <td>2</td>
+              <td>After destruction, the records officer completes a destruction certificate and files it against the register entry. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="section-records-retention">
+        <h2>section-records-retention</h2>
+        <p><strong>section</strong></p>
+        <h3>Question</h3>
+        <p>What are the retention periods for records?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] records-policy, page 1 (b3e4d934-cb57-4c69-86b3-f1366f0d9321)
+Financial and tax records are kept for seven years from the end of the
+financial year they relate to.
+
+Board minutes, company registers and title deeds are kept permanently
+and are never destroyed.</pre>
+        <h3>Model answer</h3>
+        <pre>Financial and tax records are retained for seven years from the end of the financial year they relate to. Board minutes, company registers, and title deeds are kept permanently and are never destroyed. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Financial and tax records are retained for seven years from the end of the financial year they relate to.</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>Board minutes, company registers, and title deeds are kept permanently and are never destroyed. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="boardroom-capacity">
+        <h2>boardroom-capacity</h2>
+        <p><strong>single-hop</strong></p>
+        <h3>Question</h3>
+        <p>How many people does the boardroom seat?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] facilities-guide, page 3 (f14e5dcd-3620-49c5-89c5-6a71085273c5)
+FACILITIES GUIDE - MEETING ROOMS
+Rooms are booked through the calendar system.
+The boardroom seats fourteen and has video conferencing.
+Catering must be ordered two business days in advance.</pre>
+        <h3>Model answer</h3>
+        <pre>The boardroom seats fourteen people. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The boardroom seats fourteen people. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="building-hours">
+        <h2>building-hours</h2>
+        <p><strong>single-hop</strong></p>
+        <h3>Question</h3>
+        <p>What time does the building open?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] facilities-guide, page 1 (9d1f20cb-09b4-4b81-931b-071764662029)
+FACILITIES GUIDE - BUILDING ACCESS
+Access cards are issued by reception on the ground floor.
+The building is open from 6am to 8pm on weekdays.
+After hours entry requires a card and a PIN.</pre>
+        <h3>Model answer</h3>
+        <pre>The building opens at 6 am on weekdays. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The building opens at 6 am on weekdays. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        <p>Completeness rationale: Gives the opening time; the closing time was not asked.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="catering-notice">
+        <h2>catering-notice</h2>
+        <p><strong>single-hop</strong></p>
+        <h3>Question</h3>
+        <p>How far ahead must catering be ordered?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] facilities-guide, page 3 (f14e5dcd-3620-49c5-89c5-6a71085273c5)
+FACILITIES GUIDE - MEETING ROOMS
+Rooms are booked through the calendar system.
+The boardroom seats fourteen and has video conferencing.
+Catering must be ordered two business days in advance.</pre>
+        <h3>Model answer</h3>
+        <pre>Catering must be ordered two business days in advance. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Catering must be ordered two business days in advance. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="expense-approval">
+        <h2>expense-approval</h2>
+        <p><strong>single-hop</strong></p>
+        <h3>Question</h3>
+        <p>Who approves a claim over 500 dollars?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] staff-handbook, page 2 (0878b922-08a2-45f9-ba56-064bfbb79f38)
+STAFF HANDBOOK - SECTION 2 - EXPENSES
+Policy reference POL-FIN-022.
+Reimbursement for travel must be submitted within 30 days of the trip.
+Original receipts must be attached to every claim.
+Claims over 500 dollars require director approval before payment.
+Mileage is reimbursed at 78 cents per kilometre.</pre>
+        <h3>Model answer</h3>
+        <pre>The claim must be approved by the director before payment. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The claim must be approved by the director before payment. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="expense-deadline">
+        <h2>expense-deadline</h2>
+        <p><strong>single-hop</strong></p>
+        <h3>Question</h3>
+        <p>What is the deadline for submitting travel expenses?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] staff-handbook, page 2 (0878b922-08a2-45f9-ba56-064bfbb79f38)
+STAFF HANDBOOK - SECTION 2 - EXPENSES
+Policy reference POL-FIN-022.
+Reimbursement for travel must be submitted within 30 days of the trip.
+Original receipts must be attached to every claim.
+Claims over 500 dollars require director approval before payment.
+Mileage is reimbursed at 78 cents per kilometre.</pre>
+        <h3>Model answer</h3>
+        <pre>Travel expense reimbursement must be submitted within 30 days of the trip. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>Travel expense reimbursement must be submitted within 30 days of the trip. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="fire-assembly">
+        <h2>fire-assembly</h2>
+        <p><strong>single-hop</strong></p>
+        <h3>Question</h3>
+        <p>Where is the fire assembly point?</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] staff-handbook, page 3 (a224ddbc-0b59-4266-b40d-48aedfb53477)
+STAFF HANDBOOK - SECTION 3 - WORKPLACE SAFETY
+The fire assembly point is the grassed area on Wellington Street.
+Wardens wear high visibility vests and take a roll call.
+Incidents must be reported to the safety officer within 24 hours.</pre>
+        <h3>Model answer</h3>
+        <pre>The fire assembly point is the grassed area on Wellington Street. [1]</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2)
+completeness: 2</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The fire assembly point is the grassed area on Wellington Street. [1]</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>2</strong></p>
+        
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="summary-contractor-manual">
+        <h2>summary-contractor-manual</h2>
+        <p><strong>summary</strong></p>
+        <h3>Question</h3>
+        <p>Give me an overview of the contractor safety manual.</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[2] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[3] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.
+
+[4] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.
+
+[5] contractor-safety-manual, page 6 (9f3dab27-931a-485f-a804-a6758cce2669)
+CONTRACTOR SAFETY MANUAL - SECTION 6 - CONFINED SPACES
+Entry to a tank, pit or vault requires a confined space permit.
+The atmosphere is tested for oxygen and gas before every entry.
+Confined space permits are signed off by the entry supervisor.
+A confined space permit is valid for 4 hours.
+
+[6] contractor-safety-manual, page 7 (a7f24062-f56f-42ee-b435-b31250e738fd)
+CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS
+A harness is required for any work above 2 metres without edge protection.
+Harnesses are inspected every six months and tagged.
+Working at heights permits are signed off by the rigging coordinator.
+
+[7] contractor-safety-manual, page 9 (55588e71-35e2-42e5-b02b-5526159ebc76)
+CONTRACTOR SAFETY MANUAL - SECTION 9 - ELECTRICAL ISOLATION
+Equipment is isolated and locked out before maintenance.
+Each worker applies a personal danger lock and tag.
+Only the person who applied a lock may remove it.
+
+[8] contractor-safety-manual, page 10 (8a2177eb-3944-4441-a425-43a1021f24b3)
+CONTRACTOR SAFETY MANUAL - SECTION 10 - PORTABLE ELECTRICAL EQUIPMENT
+Portable tools and leads are tested and tagged every three months.
+Untagged equipment is removed from site.
+
+[9] contractor-safety-manual, page 11 (7506f428-c0b1-4390-a834-a310378931e2)
+CONTRACTOR SAFETY MANUAL - SECTION 11 - HAZARDOUS CHEMICALS
+A safety data sheet must be on site for every chemical brought in.
+Chemicals are stored in the bunded store behind Building C.
+
+[10] contractor-safety-manual, page 12 (0c3e7a0c-531d-4aab-b1f7-9f31ddfdea51)
+CONTRACTOR SAFETY MANUAL - SECTION 12 - ASBESTOS
+The asbestos register is held by the Site Safety Office.
+Check the register before drilling or cutting any wall or ceiling.
+Suspected asbestos stops work immediately.
+
+[11] contractor-safety-manual, page 14 (1672f5a4-3129-4e85-bc20-07d42ec80ecc)
+CONTRACTOR SAFETY MANUAL - SECTION 14 - CRANE LIFTS
+Every crane lift needs a lift plan approved the day before.
+Lifts stop when wind gusts exceed 40 kilometres per hour.
+
+[12] contractor-safety-manual, page 15 (4cad8e8f-66d4-4d99-8dd3-e9404bab176d)
+CONTRACTOR SAFETY MANUAL - SECTION 15 - MOBILE PLANT
+Forklifts and elevated work platforms are operated only by licence holders.
+Plant is pre-start checked at the beginning of each shift.
+The site speed limit for plant is 10 kilometres per hour.
+
+[13] contractor-safety-manual, page 16 (d41f73ba-77e2-4832-910d-cb7892b75ef1)
+CONTRACTOR SAFETY MANUAL - SECTION 16 - TRAFFIC MANAGEMENT
+Pedestrian walkways are marked in yellow and must be kept clear.
+Reversing plant requires a spotter.
+
+[14] contractor-safety-manual, page 17 (4292a291-35e0-46b4-91ee-1ef36b58608e)
+CONTRACTOR SAFETY MANUAL - SECTION 17 - NOISE AND VIBRATION
+Noisy work is limited to 7am to 5pm on weekdays.
+Jackhammer use is rotated between workers every 30 minutes.
+
+[15] contractor-safety-manual, page 19 (d6a53e5d-c69d-4720-97c3-3da2ad507a89)
+CONTRACTOR SAFETY MANUAL - SECTION 19 - MANUAL HANDLING
+Loads over 20 kilograms require a two person lift or a mechanical aid.
+
+[16] contractor-safety-manual, page 20 (e177eee3-2266-4e6f-b268-e4cfd836b188)
+CONTRACTOR SAFETY MANUAL - SECTION 20 - HOUSEKEEPING
+Work areas are cleaned at the end of every shift.
+Waste is separated into general, metal and timber skips.
+
+[17] contractor-safety-manual, page 21 (3eb58a72-7413-4b7e-b990-ce6f0fe24e10)
+CONTRACTOR SAFETY MANUAL - SECTION 21 - FIRST AID
+Each crew of five or more carries a first aid kit.
+The site first aid room is next to the gatehouse.
+
+[18] contractor-safety-manual, page 22 (afad5777-d58d-4511-b571-a588b7f33e4d)
+CONTRACTOR SAFETY MANUAL - SECTION 22 - HEAT STRESS
+When the temperature exceeds 35 degrees, crews take a 10 minute break every hour.
+Cool drinking water is provided at the gatehouse.
+
+[19] contractor-safety-manual, page 24 (98c146be-f097-43e4-b89f-98b93ff42b62)
+CONTRACTOR SAFETY MANUAL - SECTION 24 - ENVIRONMENTAL CONTROLS
+Spill kits are kept at every chemical store and refuelling point.
+Stormwater drains are covered during concrete washout.
+
+[20] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[21] contractor-safety-manual, page 26 (7182be90-0e60-441f-a8bc-85caf8064a86)
+CONTRACTOR SAFETY MANUAL - SECTION 26 - INSURANCE
+Contractors hold public liability cover of at least 20 million dollars.
+Certificates of currency are provided before the first day on site.
+
+[22] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.
+
+[23] contractor-safety-manual, page 29 (7d6467e2-7709-4ee9-b1aa-c67f739f884b)
+CONTRACTOR SAFETY MANUAL - SECTION 29 - CLOSING OUT WORK
+When work is finished, permits are returned and signed closed.
+The leading hand walks the area with the site supervisor before handover.
+
+[24] contractor-safety-manual, page 30 (a19caed4-a188-41c5-ba3b-22054abcaf63)
+CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL
+This manual was last revised in March 2026.
+Feedback on the manual goes to the Site Safety Office.</pre>
+        <h3>Model answer</h3>
+        <pre>The contractor safety manual sets out the safety requirements that every contractor must follow when working on company sites [1]. It begins with an introduction stating that the manual applies to all contractors, is issued by the Site Safety Office and reviewed biennially, and must be read before the first day on site [1].
+
+Key procedural requirements include:
+
+* **Site induction** – a 90‑minute induction valid for 12 months; induction cards must be carried at all times [2].
+* **Supervision** – each crew nominates a leading hand who serves as the contact point for the site supervisor [3].
+* **Permit‑to‑work systems** – hot work permits (valid for one shift ≤ 8 hrs, signed by the duty engineer, with a 60‑minute fire watch) [4]; confined‑space permits (valid for 4 hrs, atmosphere tested before entry, signed by the entry supervisor) [5]; working‑at‑heights permits (harness required above 2 m without edge protection, inspected every six months, signed off by the rigging coordinator) [6]; electrical isolation (lock‑out/tag‑out, personal danger lock and tag, only the applier may remove it) [7];</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2, S4=2, S5=2, S6=2)
+completeness: 1</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2,S4:2,S5:2,S6:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The contractor safety manual sets out the safety requirements that every contractor must follow when working on company sites [1].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>It begins with an introduction stating that the manual applies to all contractors, is issued by the Site Safety Office and reviewed biennially, and must be read before the first day on site [1].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S4</td>
+              <td>2</td>
+              <td>* **Site induction** – a 90‑minute induction valid for 12 months; induction cards must be carried at all times [2].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S5</td>
+              <td>2</td>
+              <td>* **Supervision** – each crew nominates a leading hand who serves as the contact point for the site supervisor [3].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S6</td>
+              <td>2</td>
+              <td>* **Permit‑to‑work systems** – hot work permits (valid for one shift ≤ 8 hrs, signed by the duty engineer, with a 60‑minute fire watch) [4]; confined‑space permits (valid for 4 hrs, atmosphere tested before entry, signed by the entry supervisor) [5]; working‑at‑heights permits (harness required above 2 m without edge protection, inspected every six months, signed off by the rigging coordinator) [6]; electrical isolation (lock‑out/tag‑out, personal danger lock and tag, only the applier may remove it) [7];</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>1</strong></p>
+        <p>Completeness rationale: Cut off mid-list by the eval's 400-token cap: most sections, insurance and audits are missing.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="summary-contractor-manual-closing">
+        <h2>summary-contractor-manual-closing</h2>
+        <p><strong>summary</strong></p>
+        <h3>Question</h3>
+        <p>Summarise the contractor safety manual, including insurance, audits and non-compliance.</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] contractor-safety-manual, page 1 (2a2fa01d-c290-480c-82a4-b66814520362)
+CONTRACTOR SAFETY MANUAL - SECTION 1 - INTRODUCTION
+This manual applies to every contractor working on company sites.
+It is issued by the Site Safety Office and reviewed every two years.
+Contractors must read it before their first day on site.
+
+[2] contractor-safety-manual, page 2 (44453b6b-96a7-4033-aac1-56a33b830724)
+CONTRACTOR SAFETY MANUAL - SECTION 2 - SITE INDUCTION
+Every contractor completes a site induction before starting work.
+The induction takes 90 minutes and is valid for twelve months.
+Induction cards must be carried at all times on site.
+
+[3] contractor-safety-manual, page 4 (134f23e9-e6ce-4a71-a962-30ce8f49d83e)
+CONTRACTOR SAFETY MANUAL - SECTION 4 - SUPERVISION
+Each contractor crew nominates a leading hand before work starts.
+The leading hand is the contact point for the site supervisor.
+
+[4] contractor-safety-manual, page 5 (ca45a9e2-ccdd-4baa-8d7a-7018b8c57739)
+CONTRACTOR SAFETY MANUAL - SECTION 5 - HOT WORK PERMITS
+Welding, grinding and cutting require a hot work permit.
+A hot work permit is valid for one shift of up to 8 hours.
+Hot work permits are signed off by the duty engineer.
+A fire watch stays for 60 minutes after hot work ends.
+
+[5] contractor-safety-manual, page 6 (9f3dab27-931a-485f-a804-a6758cce2669)
+CONTRACTOR SAFETY MANUAL - SECTION 6 - CONFINED SPACES
+Entry to a tank, pit or vault requires a confined space permit.
+The atmosphere is tested for oxygen and gas before every entry.
+Confined space permits are signed off by the entry supervisor.
+A confined space permit is valid for 4 hours.
+
+[6] contractor-safety-manual, page 7 (a7f24062-f56f-42ee-b435-b31250e738fd)
+CONTRACTOR SAFETY MANUAL - SECTION 7 - WORKING AT HEIGHTS
+A harness is required for any work above 2 metres without edge protection.
+Harnesses are inspected every six months and tagged.
+Working at heights permits are signed off by the rigging coordinator.
+
+[7] contractor-safety-manual, page 9 (55588e71-35e2-42e5-b02b-5526159ebc76)
+CONTRACTOR SAFETY MANUAL - SECTION 9 - ELECTRICAL ISOLATION
+Equipment is isolated and locked out before maintenance.
+Each worker applies a personal danger lock and tag.
+Only the person who applied a lock may remove it.
+
+[8] contractor-safety-manual, page 10 (8a2177eb-3944-4441-a425-43a1021f24b3)
+CONTRACTOR SAFETY MANUAL - SECTION 10 - PORTABLE ELECTRICAL EQUIPMENT
+Portable tools and leads are tested and tagged every three months.
+Untagged equipment is removed from site.
+
+[9] contractor-safety-manual, page 11 (7506f428-c0b1-4390-a834-a310378931e2)
+CONTRACTOR SAFETY MANUAL - SECTION 11 - HAZARDOUS CHEMICALS
+A safety data sheet must be on site for every chemical brought in.
+Chemicals are stored in the bunded store behind Building C.
+
+[10] contractor-safety-manual, page 12 (0c3e7a0c-531d-4aab-b1f7-9f31ddfdea51)
+CONTRACTOR SAFETY MANUAL - SECTION 12 - ASBESTOS
+The asbestos register is held by the Site Safety Office.
+Check the register before drilling or cutting any wall or ceiling.
+Suspected asbestos stops work immediately.
+
+[11] contractor-safety-manual, page 14 (1672f5a4-3129-4e85-bc20-07d42ec80ecc)
+CONTRACTOR SAFETY MANUAL - SECTION 14 - CRANE LIFTS
+Every crane lift needs a lift plan approved the day before.
+Lifts stop when wind gusts exceed 40 kilometres per hour.
+
+[12] contractor-safety-manual, page 15 (4cad8e8f-66d4-4d99-8dd3-e9404bab176d)
+CONTRACTOR SAFETY MANUAL - SECTION 15 - MOBILE PLANT
+Forklifts and elevated work platforms are operated only by licence holders.
+Plant is pre-start checked at the beginning of each shift.
+The site speed limit for plant is 10 kilometres per hour.
+
+[13] contractor-safety-manual, page 16 (d41f73ba-77e2-4832-910d-cb7892b75ef1)
+CONTRACTOR SAFETY MANUAL - SECTION 16 - TRAFFIC MANAGEMENT
+Pedestrian walkways are marked in yellow and must be kept clear.
+Reversing plant requires a spotter.
+
+[14] contractor-safety-manual, page 17 (4292a291-35e0-46b4-91ee-1ef36b58608e)
+CONTRACTOR SAFETY MANUAL - SECTION 17 - NOISE AND VIBRATION
+Noisy work is limited to 7am to 5pm on weekdays.
+Jackhammer use is rotated between workers every 30 minutes.
+
+[15] contractor-safety-manual, page 19 (d6a53e5d-c69d-4720-97c3-3da2ad507a89)
+CONTRACTOR SAFETY MANUAL - SECTION 19 - MANUAL HANDLING
+Loads over 20 kilograms require a two person lift or a mechanical aid.
+
+[16] contractor-safety-manual, page 20 (e177eee3-2266-4e6f-b268-e4cfd836b188)
+CONTRACTOR SAFETY MANUAL - SECTION 20 - HOUSEKEEPING
+Work areas are cleaned at the end of every shift.
+Waste is separated into general, metal and timber skips.
+
+[17] contractor-safety-manual, page 21 (3eb58a72-7413-4b7e-b990-ce6f0fe24e10)
+CONTRACTOR SAFETY MANUAL - SECTION 21 - FIRST AID
+Each crew of five or more carries a first aid kit.
+The site first aid room is next to the gatehouse.
+
+[18] contractor-safety-manual, page 22 (afad5777-d58d-4511-b571-a588b7f33e4d)
+CONTRACTOR SAFETY MANUAL - SECTION 22 - HEAT STRESS
+When the temperature exceeds 35 degrees, crews take a 10 minute break every hour.
+Cool drinking water is provided at the gatehouse.
+
+[19] contractor-safety-manual, page 24 (98c146be-f097-43e4-b89f-98b93ff42b62)
+CONTRACTOR SAFETY MANUAL - SECTION 24 - ENVIRONMENTAL CONTROLS
+Spill kits are kept at every chemical store and refuelling point.
+Stormwater drains are covered during concrete washout.
+
+[20] contractor-safety-manual, page 25 (09dd3117-1a80-4ebf-af3d-7305cef01e57)
+CONTRACTOR SAFETY MANUAL - SECTION 25 - SUBCONTRACTORS
+A contractor may engage a subcontractor only with written approval from the site supervisor.
+Subcontractors complete the same site induction.
+
+[21] contractor-safety-manual, page 26 (7182be90-0e60-441f-a8bc-85caf8064a86)
+CONTRACTOR SAFETY MANUAL - SECTION 26 - INSURANCE
+Contractors hold public liability cover of at least 20 million dollars.
+Certificates of currency are provided before the first day on site.
+
+[22] contractor-safety-manual, page 27 (28fc62e3-9752-4815-aa71-f7021d1c0b65)
+CONTRACTOR SAFETY MANUAL - SECTION 27 - AUDITS
+The Site Safety Office audits each contractor at least once a quarter.
+Audit findings rated high must be closed within 7 days.
+
+[23] contractor-safety-manual, page 29 (7d6467e2-7709-4ee9-b1aa-c67f739f884b)
+CONTRACTOR SAFETY MANUAL - SECTION 29 - CLOSING OUT WORK
+When work is finished, permits are returned and signed closed.
+The leading hand walks the area with the site supervisor before handover.
+
+[24] contractor-safety-manual, page 30 (a19caed4-a188-41c5-ba3b-22054abcaf63)
+CONTRACTOR SAFETY MANUAL - SECTION 30 - REVIEW OF THIS MANUAL
+This manual was last revised in March 2026.
+Feedback on the manual goes to the Site Safety Office.</pre>
+        <h3>Model answer</h3>
+        <pre>We need to summarize the contractor safety manual, including insurance, audits and non-compliance. Use only sources. Provide citations. Need to mention insurance (section 26), audits (section 27), non-compliance? The manual mentions audit findings rated high must be closed within 7 days (implies non-compliance). Also maybe other sections about permits, etc. Summarize overall. Provide concise summary with citations.
+
+We must only use sources. Provide citations like [26] etc. Let's extract relevant lines:
+
+Insurance: [26] &quot;Contractors hold public liability cover of at least 20 million dollars. Certificates of currency are provided before the first day on site.&quot;
+
+Audits: [27] &quot;The Site Safety Office audits each contractor at least once a quarter. Audit findings rated high must be closed within 7 days.&quot;
+
+Non-compliance: Not explicit but implied: high audit findings must be closed within 7 days; also maybe other sections like permits must be signed off, etc. Could mention that failure to comply with permit requirements (e.g., hot work permit, confined space permit) stops work or requires immediate action. For example: [12] asbestos: &quot;Suspected asbestos stops work immediately.&quot; That's a non-compliance action. Also [5] hot work permit: &quot;A fire watch stays for 60 minutes after hot work ends.&quot; Not exactly non-compliance. But we can note that non-compliance leads to corrective actions, e.g., audit findings must be closed within 7 days, and suspected asbestos stops work.
+
+We'll summarize: manual covers site induction, supervision, permits, PPE, hazardous materials, plant, traffic, noise, manual handling, housekeeping, first aid, heat stress, environmental controls, subcontractors, insurance, audits, closing out work, review.
+
+Provide citations for each point.
+
+Let's craft answer.</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 1.08 (S5=1, S12=1, S13=2, S14=2, S15=2, S16=1, S17=0, S18=1, S19=0, S20=1, S22=1, S23=1)
+completeness: 1</pre>
+        <p>Claim token (do not edit in the CSV): <code>S5:1,S12:1,S13:2,S14:2,S15:2,S16:1,S17:0,S18:1,S19:0,S20:1,S22:1,S23:1</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S5</td>
+              <td>1</td>
+              <td>The manual mentions audit findings rated high must be closed within 7 days (implies non-compliance).</td>
+              <td>The 7-day rule is right; 'implies non-compliance' is the writer's reading.</td>
+            </tr>
+<tr>
+              <td>S12</td>
+              <td>1</td>
+              <td>Insurance: [26] &quot;Contractors hold public liability cover of at least 20 million dollars.</td>
+              <td>Quote is right but cited as [26]; the source is [21].</td>
+            </tr>
+<tr>
+              <td>S13</td>
+              <td>2</td>
+              <td>Certificates of currency are provided before the first day on site.&quot;</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S14</td>
+              <td>2</td>
+              <td>Audits: [27] &quot;The Site Safety Office audits each contractor at least once a quarter.</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S15</td>
+              <td>2</td>
+              <td>Audit findings rated high must be closed within 7 days.&quot;</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S16</td>
+              <td>1</td>
+              <td>Non-compliance: Not explicit but implied: high audit findings must be closed within 7 days; also maybe other sections like permits must be signed off, etc.</td>
+              <td>Interpretation; the non-compliance section was not retrieved.</td>
+            </tr>
+<tr>
+              <td>S17</td>
+              <td>0</td>
+              <td>Could mention that failure to comply with permit requirements (e.g., hot work permit, confined space permit) stops work or requires immediate action.</td>
+              <td>Nothing retrieved says a permit failure stops work.</td>
+            </tr>
+<tr>
+              <td>S18</td>
+              <td>1</td>
+              <td>For example: [12] asbestos: &quot;Suspected asbestos stops work immediately.&quot;</td>
+              <td>Quote is right but cited as [12]; the source is [10].</td>
+            </tr>
+<tr>
+              <td>S19</td>
+              <td>0</td>
+              <td>That's a non-compliance action.</td>
+              <td>The writer's opinion, not in the sources.</td>
+            </tr>
+<tr>
+              <td>S20</td>
+              <td>1</td>
+              <td>Also [5] hot work permit: &quot;A fire watch stays for 60 minutes after hot work ends.&quot;</td>
+              <td>Fact is right but cited as [5]; the source is [4].</td>
+            </tr>
+<tr>
+              <td>S22</td>
+              <td>1</td>
+              <td>But we can note that non-compliance leads to corrective actions, e.g., audit findings must be closed within 7 days, and suspected asbestos stops work.</td>
+              <td>Mixes supported facts with an unsupported generalisation.</td>
+            </tr>
+<tr>
+              <td>S23</td>
+              <td>1</td>
+              <td>We'll summarize: manual covers site induction, supervision, permits, PPE, hazardous materials, plant, traffic, noise, manual handling, housekeeping, first aid, heat stress, environmental controls, subcontractors, insurance, audits, closing out work, review.</td>
+              <td>Mostly right, but lists PPE, which is not in the retrieved sources.</td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>1</strong></p>
+        <p>Completeness rationale: This is the writer's reasoning leaked into the answer, not an answer; it does carry the insurance and audit facts.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+<section id="summary-records-policy">
+        <h2>summary-records-policy</h2>
+        <p><strong>summary</strong></p>
+        <h3>Question</h3>
+        <p>Summarise the records policy.</p>
+        <h3>Retrieved context</h3>
+        <pre>[1] records-policy, page 1 (80b53cac-bc8a-41db-942d-8355996d615f)
+Before any record is disposed of, the records officer confirms that it is
+listed in the records register and that its disposal date has passed.
+
+[2] records-policy, page 1 (6ac7c821-f545-4e12-a270-aec056131586)
+Disposal needs written custodian sign-off. The custodian named in the
+register approves each batch before it leaves the office.
+
+[3] records-policy, page 1 (1068a29f-b5bd-4abc-9d34-fabb57fabbfd)
+Paper records are destroyed by cross-cut shredding on site. Electronic
+records are erased from every server and every backup copy.
+
+[4] records-policy, page 1 (78778e04-a11b-4550-b4ab-f29594bfb5b7)
+When a batch has been destroyed, the records officer completes a
+destruction certificate and files it against the register entry.
+
+[5] records-policy, page 1 (b3e4d934-cb57-4c69-86b3-f1366f0d9321)
+Financial and tax records are kept for seven years from the end of the
+financial year they relate to.
+
+[6] records-policy, page 1 (64324ce7-d83b-4938-b6b1-2b9226e1d8bd)
+Board minutes, company registers and title deeds are kept permanently
+and are never destroyed.</pre>
+        <h3>Model answer</h3>
+        <pre>The records policy requires that before any record is disposed of, the records officer verifies it is listed in the records register and that its disposal date has passed [1]. Disposal must have written custodian sign‑off, with the custodian named in the register approving each batch [2]. Paper records are destroyed on‑site by cross‑cut shredding, while electronic records are erased from every server and backup copy [3]. After destruction, the records officer completes a destruction certificate and files it against the register entry [4]. Financial and tax</pre>
+        <h3>Claude's draft grade</h3>
+        <pre>faithfulness: 2.00 (S1=2, S2=2, S3=2, S4=2)
+completeness: 1</pre>
+        <p>Claim token (do not edit in the CSV): <code>S1:2,S2:2,S3:2,S4:2</code></p>
+        <table>
+        <thead><tr><th>Sentence</th><th>Score</th><th>Claim</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr>
+              <td>S1</td>
+              <td>2</td>
+              <td>The records policy requires that before any record is disposed of, the records officer verifies it is listed in the records register and that its disposal date has passed [1].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S2</td>
+              <td>2</td>
+              <td>Disposal must have written custodian sign‑off, with the custodian named in the register approving each batch [2].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S3</td>
+              <td>2</td>
+              <td>Paper records are destroyed on‑site by cross‑cut shredding, while electronic records are erased from every server and backup copy [3].</td>
+              <td></td>
+            </tr>
+<tr>
+              <td>S4</td>
+              <td>2</td>
+              <td>After destruction, the records officer completes a destruction certificate and files it against the register entry [4].</td>
+              <td></td>
+            </tr>
+        </tbody>
+      </table>
+        <p>Completeness: <strong>1</strong></p>
+        <p>Completeness rationale: Cut off at 'Financial and tax' by the eval's 400-token cap: the retention periods are missing. S5 is a fragment, not graded.</p>
+        <p class="blank">Person grade, agree/disagree and notes are blank. Fill them on this item's row in <code>person-review.csv</code>.</p>
+      </section>
+</body>
+</html>

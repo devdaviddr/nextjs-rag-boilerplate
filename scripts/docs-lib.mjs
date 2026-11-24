@@ -35,7 +35,7 @@ export const DOC_SECTIONS = [
     title: 'Architecture & retrieval',
     description:
       'How the pieces fit together, how answers are grounded, and how to extend them.',
-    slugs: ['architecture', 'rag', 'extending'],
+    slugs: ['architecture', 'rag', 'person-review', 'extending'],
   },
   {
     title: 'Data',

@@ -30,6 +30,11 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Added
 
+- **Review the drafted eval grades yourself.** `pnpm rag:review:export` writes a
+  blank sheet for the Claude-drafted answers in `eval/graded/`, and
+  `pnpm rag:review:import` checks it, stores the person's grades beside the
+  drafts, and reports percent agreement and Cohen's kappa (#119, #120).
+
 - `pnpm gen:screenshots` takes `--theme light` for light-mode screenshots
   (written with a `-light` suffix) and `--only answer,docs` to capture a
   subset.
