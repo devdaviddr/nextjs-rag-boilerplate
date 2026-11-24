@@ -33,3 +33,7 @@ overrides:
   'postcss@>=8.0.0 <8.5.18': '^8.5.18'
   'undici@>=7.0.0 <7.30.1': '^7.30.1'
   'zod@<4.6.6': '^4.6.6'
+  # drizzle-kit still loads its config through @esbuild-kit, which pins
+  # esbuild 0.18 (dev-server advisory); typescript-estree allows minimatch 10.
+  '@esbuild-kit/core-utils>esbuild': '^0.25.4'
+  'minimatch@>=7.0.0 <11.0.1': '^11.0.1'
