@@ -548,7 +548,9 @@ async function listModels(
 
 /**
  * Test a connection. For a saved one, the form may carry a new URL or key to
- * try before saving; a blank key means "use the saved key".
+ * try before saving; a blank key means "use the saved key", but only against
+ * the saved URL, so the stored key is never sent to an address typed into the
+ * form.
  */
 export async function testConnection(input: {
   id?: string
@@ -571,9 +573,19 @@ export async function testConnection(input: {
     ) {
       return { ok: false, error: 'Enter the full base URL first' }
     }
+    const typedKey = input.apiKey?.trim()
+    const sameUrl =
+      !!saved?.baseUrl &&
+      baseUrl.replace(/\/+$/, '') === saved.baseUrl.replace(/\/+$/, '')
+    if (!typedKey && saved?.apiKey && !sameUrl) {
+      return {
+        ok: false,
+        error: 'Enter the API key again to test a different URL',
+      }
+    }
     return listModels(
       baseUrl,
-      input.apiKey?.trim() || saved?.apiKey,
+      typedKey || saved?.apiKey,
       input.preset ?? saved?.preset ?? presetForUrl(baseUrl),
     )
   })
