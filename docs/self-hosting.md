@@ -117,7 +117,7 @@ Best for kicking the tyres. You get a random public
 
 ```bash
 make setup            # pick "quick"
-# → prints the live URL, seeds demo@example.com / Password123, verifies
+# → prints the live URL, seeds demo@example.com with a random password, verifies
 ```
 
 The URL is ephemeral: every quick run gets a new one. Use a named tunnel

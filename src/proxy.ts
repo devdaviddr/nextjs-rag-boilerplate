@@ -46,8 +46,9 @@ function buildCsp(nonce: string, isDev: boolean): string {
     `manifest-src 'self'`,
     `worker-src 'self'`,
     // Same-origin only: the citation source panel frames our own
-    // /api/documents/[id]/source route, which is itself sandboxed. Explicit
-    // rather than relying on the default-src fallback.
+    // /api/documents/[id]/source route (served as application/pdf with
+    // nosniff; see that route for why it is not sandboxed). Explicit rather
+    // than relying on the default-src fallback.
     `frame-src 'self'`,
     `object-src 'none'`,
     `base-uri 'self'`,

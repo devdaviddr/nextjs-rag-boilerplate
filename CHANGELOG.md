@@ -28,6 +28,14 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ### Security
 
+- **Safer admin defaults** ([#185](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/185)).
+  `make setup` now gives the seeded admin a random password, printed once,
+  instead of the published `Password123`, and `pnpm db:seed` refuses that
+  password when `NODE_ENV=production` unless `SEED_ADMIN_PASSWORD` is set.
+  Roles are re-read at every session revalidation, so removing a role takes
+  effect within five minutes instead of when the cookie expires. Testing an AI
+  connection with a blank key now only uses the saved key against the saved
+  URL. The committed `.claude/settings.json` (personal graphify hooks) is gone.
 - **Next.js, nodemailer and transitive advisories patched**
   ([#181](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/181)).
   `next` 16.3.6 → 16.4.6 (with `eslint-config-next`) fixes unauthenticated

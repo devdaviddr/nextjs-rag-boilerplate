@@ -262,6 +262,37 @@ describe('FR1 / NFR3: keys go in and never come out', () => {
   })
 })
 
+describe('testConnection never sends a saved key to a new URL', () => {
+  it('refuses a changed URL with a blank key, and sends nothing', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: [] })))
+    const result = await testConnection({
+      id: 'env',
+      baseUrl: 'https://attacker.example/v1',
+    })
+    expect(result).toMatchObject({ ok: false })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('uses a key typed into the form against a new URL', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'm' }] })))
+    const result = await testConnection({
+      id: 'env',
+      baseUrl: 'https://other.example/v1',
+      apiKey: SECRET,
+    })
+    expect(result).toMatchObject({ ok: true })
+    const headers = fetchSpy.mock.calls[0]![1]!.headers as Record<
+      string,
+      string
+    >
+    expect(headers.Authorization).toBe(`Bearer ${SECRET}`)
+  })
+})
+
 describe('FR2: jobs', () => {
   it('points a job at a connection and a model', async () => {
     await saveConnection({

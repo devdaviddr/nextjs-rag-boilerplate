@@ -91,9 +91,8 @@ Before pushing: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 
 ## Work tracking
 
-All work is tracked as issues in this repo on the private project board
-**"devdaviddr — Public repos"** (<https://github.com/users/devdaviddr/projects/11>).
-Do not start a change that has no issue.
+All work is tracked as issues in this repo. Do not start a change that has no
+issue.
 
 - **Find or file the issue first.** Product work is a tree: `[Pillar]` →
   `[Capability]` (users can …) → `[Feature]` (one user job), each linked to its
@@ -181,17 +180,6 @@ unsafe); the box's pull timer deploys instead — see
 
 **Do NOT credit AI in git.** Never add `Co-Authored-By: Claude`, "Generated
 with…", or any AI/assistant trailer to commits or PR descriptions.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
 <!-- BEGIN:nextjs-agent-rules -->
 

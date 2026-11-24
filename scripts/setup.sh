@@ -22,7 +22,7 @@ ENV_FILE=".env"
 TFVARS="infra/cloudflare/terraform.tfvars"
 MIN_COMPOSE="2.24"
 DEMO_EMAIL="demo@example.com"
-DEMO_PASSWORD="Password123"
+DEMO_PASSWORD="" # generated in seed_admin
 
 # --- pretty output ----------------------------------------------------------
 if [ -t 1 ]; then B=$'\033[1m'; C=$'\033[36m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; X=$'\033[0m'
@@ -241,10 +241,15 @@ EOF
 seed_admin() {
   [ "${NO_SEED:-0}" = "1" ] && { warn "Skipping seed (NO_SEED=1)"; return; }
   step "Seeding the demo admin"
+  # A fresh random password per setup: this stack is public, so the published
+  # local-dev password must never reach it.
+  DEMO_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)"
+  [ -n "$DEMO_PASSWORD" ] || die "Could not generate an admin password."
   # `compose run` resolves the migrate service's depends_on (db healthy), so
   # this blocks until Postgres is ready — no explicit wait needed.
-  docker compose -f docker-compose.prod.yml run --rm migrate pnpm db:seed
-  ok "Admin ready: $DEMO_EMAIL / $DEMO_PASSWORD"
+  docker compose -f docker-compose.prod.yml run --rm \
+    -e SEED_ADMIN_PASSWORD="$DEMO_PASSWORD" migrate pnpm db:seed
+  ok "Admin ready: $DEMO_EMAIL / $DEMO_PASSWORD (shown once; save it now)"
 }
 
 verify() {
@@ -260,7 +265,7 @@ verify() {
 summary() {
   step "Done"
   printf '  %sYour app is live:%s %s%s%s\n' "$B" "$X" "$C" "$PUBLIC_URL" "$X"
-  [ "${NO_SEED:-0}" = "1" ] || printf '  %sLogin:%s %s / %s\n' "$B" "$X" "$DEMO_EMAIL" "$DEMO_PASSWORD"
+  [ "${NO_SEED:-0}" = "1" ] || printf '  %sLogin:%s %s / %s  (random, shown once; an admin that already existed keeps its password)\n' "$B" "$X" "$DEMO_EMAIL" "$DEMO_PASSWORD"
   cat <<EOF
 
   Next steps:

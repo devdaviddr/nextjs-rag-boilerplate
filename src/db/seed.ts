@@ -6,16 +6,26 @@ import postgres from 'postgres'
 import { hash } from '@node-rs/argon2'
 import { users, roles, userRoles } from './schema'
 
-// Idempotent dev seed — safe to run repeatedly. Never run against production.
+// Idempotent seed: creates the roles and one admin. Safe to run repeatedly.
+// Locally the admin is demo@example.com / Password123. Anywhere else, set
+// SEED_ADMIN_PASSWORD (scripts/setup.sh generates one); with NODE_ENV=production
+// the seed refuses to fall back to the published password.
 config({ path: '.env' })
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required to seed')
 
+const seedPassword = process.env.SEED_ADMIN_PASSWORD?.trim()
+if (!seedPassword && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'SEED_ADMIN_PASSWORD is required to seed with NODE_ENV=production',
+  )
+}
+
 const DEMO = {
   name: 'Demo User',
-  email: 'demo@example.com',
-  password: 'Password123',
+  email: process.env.SEED_ADMIN_EMAIL?.trim() || 'demo@example.com',
+  password: seedPassword || 'Password123',
 }
 
 async function main() {
@@ -84,7 +94,9 @@ async function main() {
         hashedPassword,
       })
       .returning()
-    console.log(`✅ Seeded demo user: ${DEMO.email} / ${DEMO.password}`)
+    console.log(
+      `✅ Seeded demo user: ${DEMO.email}${seedPassword ? '' : ' / Password123'}`,
+    )
     existing = user
   }
 

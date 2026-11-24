@@ -55,7 +55,7 @@ SETUP_MODE=automated SETUP_YES=1 \
 ```
 
 The wizard: generates `AUTH_SECRET` → writes `.env` (and sets `AUTH_URL`) →
-provisions/starts the stack → seeds `demo@example.com` / `Password123` → verifies
+provisions/starts the stack → seeds `demo@example.com` with a random password (printed once) → verifies
 `/api/health` + HSTS + CSP → prints the live URL.
 
 ## 4 — Gather Cloudflare inputs (guided / automated)
