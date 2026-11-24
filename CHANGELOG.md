@@ -8,6 +8,24 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Default models updated after NVIDIA retired the old ones.** On
+  2026-11-16 NVIDIA retired `nemotron-3-embed-1b`, `nemotron-3-super-120b-a12b`,
+  `llama-3.2-11b-vision-instruct` and `nemotron-parse`, so a fresh clone
+  could not ingest a document. The defaults are now
+  `nvidia/nemotron-3.5-embed-1b` (still 2048 dimensions) for embeddings and
+  `nvidia/nemotron-3.5-super-vl-120b-a12b` for chat and figure captions.
+  There is no replacement parser, so `.env.example` and `docs/rag.md` now say
+  to keep `RAG_CRACK_ENABLED` off unless `RAG_PARSE_MODEL` points at one your
+  endpoint serves.
+
+### Added
+
+- `pnpm gen:screenshots` takes `--theme light` for light-mode screenshots
+  (written with a `-light` suffix) and `--only answer,docs` to capture a
+  subset.
+
 ### Security
 
 - **Next.js, nodemailer and transitive advisories patched**
