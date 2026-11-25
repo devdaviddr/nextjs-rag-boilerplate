@@ -96,6 +96,7 @@ function setup(over: Partial<AnswerDeps> = {}, agentic = false) {
     {},
   )
   const state: AnswerState = { answer: '', mode: 'search' }
+  const request = new AbortController()
   let closed = false
   const run = () =>
     answerQuestion(
@@ -104,7 +105,7 @@ function setup(over: Partial<AnswerDeps> = {}, agentic = false) {
         conversationId: 'c',
         question: 'How much leave do I get?',
         permittedKbIds: ['kb'],
-        signal: new AbortController().signal,
+        signal: request.signal,
       },
       deps,
       {
@@ -119,7 +120,17 @@ function setup(over: Partial<AnswerDeps> = {}, agentic = false) {
       state,
     )
   const types = () => events.map((e) => e.type)
-  return { deps, events, outcomes, inserted, revised, state, run, types }
+  return {
+    deps,
+    events,
+    outcomes,
+    inserted,
+    revised,
+    state,
+    run,
+    types,
+    request,
+  }
 }
 
 describe('answerQuestion', () => {
@@ -249,6 +260,25 @@ describe('answerQuestion', () => {
     })
     expect(t.types()).not.toContain('error')
     expect(t.outcomes[0]!.status).toBe('ok')
+  })
+
+  it('finishes verification when the reader leaves, so a check is never lost', async () => {
+    const seen: AbortSignal[] = []
+    const t = setup({
+      verify: vi.fn(async (_a, _c, signal: AbortSignal) => {
+        // The reader closes the tab while the check runs.
+        t.request.abort()
+        seen.push(signal)
+        return [2]
+      }),
+      chatStream: vi
+        .fn()
+        .mockResolvedValue(sse(['Leave is 20 days [1]. It never expires.'])),
+    })
+    await t.run()
+
+    expect(seen[0]!.aborted).toBe(false)
+    expect(t.revised).toEqual(['Leave is 20 days [1].'])
   })
 
   it('strips what verification rejects and revises the saved answer', async () => {

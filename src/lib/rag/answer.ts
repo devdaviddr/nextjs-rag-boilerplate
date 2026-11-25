@@ -628,10 +628,14 @@ export async function answerQuestion(
     ) {
       io.send({ type: 'step', phase: 'verifying' })
       const unsupported = await span('verify', async (step) => {
+        // Not the request's signal: a reader who leaves while the check runs
+        // must not cancel it, or the saved answer would become a refusal
+        // because nobody waited. The verifier has its own deadline
+        // (VERIFY_TIMEOUT_MS), and the revision below still saves.
         const found = await deps.verify(
           state.answer,
           retrieved,
-          signal,
+          new AbortController().signal,
           toolResults,
         )
         // null: the check failed. An empty list is a pass.
