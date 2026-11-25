@@ -8,6 +8,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
 
 ## [Unreleased]
 
+## [0.29.1] - 2026-11-25
+
 ### Removed
 
 - **The unused `chunks.embedding` column** ([#196](https://github.com/devdaviddr/nextjs-rag-boilerplate/issues/196)).
@@ -1569,7 +1571,8 @@ As this project is pre-1.0, minor versions may introduce breaking changes.
   Tailwind CSS v4 + shadcn/ui, Vitest + Playwright, a multi-stage Docker image,
   and a GitHub Actions CI pipeline.
 
-[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.29.1...HEAD
+[0.29.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.29.0...v0.29.1
 [0.29.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.28.1...v0.29.0
 [0.28.1]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/devdaviddr/nextjs-rag-boilerplate/compare/v0.27.0...v0.28.0
