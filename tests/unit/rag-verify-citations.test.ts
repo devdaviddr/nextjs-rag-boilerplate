@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * #42 — verification must not hold the composer for minutes. It runs after
- * the answer has streamed and fails open, so it gets one short attempt.
+ * the answer has streamed, so it gets one short attempt. A failure withholds
+ * the answer (#171); it is not a pass.
  */
 
 const { createChatCompletion } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ vi.mock('@/lib/rag/client', () => ({ createChatCompletion }))
 vi.mock('@/db', () => ({ db: {} }))
 vi.mock('@/lib/rag/embed', () => ({ embedQuery: vi.fn() }))
 
+import { logger } from '@/lib/logger'
 import { VERIFY_TIMEOUT_MS, verifyAnswer } from '@/lib/rag/agentic-run'
 import type { RetrievedChunk } from '@/lib/rag/retrieve'
 
@@ -29,7 +31,14 @@ const chunk = {
   similarity: 0.6,
 } as RetrievedChunk
 
+const ask = (answer = 'You get 20 days [1].') =>
+  verifyAnswer(answer, [chunk], new AbortController().signal)
+
 describe('verifyAnswer', () => {
+  beforeEach(() => {
+    vi.mocked(logger.warn).mockClear()
+  })
+
   // #126: a source must not be able to switch the check off.
   it('fences the sources it hands the verifier', async () => {
     createChatCompletion.mockResolvedValueOnce({
@@ -100,16 +109,59 @@ describe('verifyAnswer', () => {
     expect(VERIFY_TIMEOUT_MS).toBeLessThanOrEqual(15_000)
   })
 
-  it('fails open when the planner times out', async () => {
+  it('passes when the verdict says every sentence is supported', async () => {
+    createChatCompletion.mockResolvedValueOnce({
+      choice: { message: { content: '{"unsupported":[]}' } },
+      tokens: 1,
+    })
+
+    await expect(ask()).resolves.toEqual([])
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the planner throws', async () => {
+    createChatCompletion.mockRejectedValueOnce(new Error('planner exploded'))
+
+    await expect(ask()).resolves.toBeNull()
+    expect(logger.warn).toHaveBeenCalledWith('Citation verification failed', {
+      reason: 'verifier error: planner exploded',
+    })
+  })
+
+  it('fails closed when the planner times out', async () => {
     createChatCompletion.mockRejectedValueOnce(
       new Error('no response within 12000ms'),
     )
-    await expect(
-      verifyAnswer(
-        'You get 20 days [1].',
-        [chunk],
-        new AbortController().signal,
-      ),
-    ).resolves.toEqual([])
+
+    await expect(ask()).resolves.toBeNull()
+    expect(logger.warn).toHaveBeenCalledWith('Citation verification failed', {
+      reason: 'verifier timed out: no response within 12000ms',
+    })
+  })
+
+  it('fails closed when the verdict is malformed', async () => {
+    createChatCompletion.mockResolvedValueOnce({
+      choice: {
+        finish_reason: 'length',
+        message: {
+          content: 'Let me think through each sentence before the JSON.',
+        },
+      },
+      tokens: 500,
+    })
+
+    await expect(ask()).resolves.toBeNull()
+    expect(logger.warn).toHaveBeenCalledWith('Citation verification failed', {
+      reason: 'verifier returned an unreadable verdict',
+    })
+  })
+
+  it('fails closed when the verifier returns no result', async () => {
+    createChatCompletion.mockResolvedValueOnce({ choice: {}, tokens: 0 })
+
+    await expect(ask()).resolves.toBeNull()
+    expect(logger.warn).toHaveBeenCalledWith('Citation verification failed', {
+      reason: 'verifier returned no result',
+    })
   })
 })

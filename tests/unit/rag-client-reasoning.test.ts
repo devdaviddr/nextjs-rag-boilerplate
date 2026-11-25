@@ -41,6 +41,7 @@ function capture() {
 afterEach(() => {
   vi.unstubAllGlobals()
   mockEnv.RAG_PLANNER_REASONING = 'on'
+  mockEnv.RAG_LLM_BASE_URL = 'https://example.invalid/v1'
 })
 
 describe('RAG_PLANNER_REASONING', () => {
@@ -72,5 +73,28 @@ describe('RAG_PLANNER_REASONING', () => {
       role: 'vision',
     })
     for (const b of bodies) expect(b).not.toHaveProperty('chat_template_kwargs')
+  })
+})
+
+describe("a call's own reasoning: 'off' (#171)", () => {
+  it('turns thinking off on NVIDIA NIM even with the setting on', async () => {
+    mockEnv.RAG_LLM_BASE_URL = 'https://integrate.api.nvidia.com/v1'
+    const bodies = capture()
+    await createChatCompletion([{ role: 'user', content: 'q' }], {
+      role: 'planner',
+      reasoning: 'off',
+    })
+    expect(bodies[0]).toMatchObject({
+      chat_template_kwargs: { enable_thinking: false },
+    })
+  })
+
+  it('leaves a provider that may not know the field alone', async () => {
+    const bodies = capture()
+    await createChatCompletion([{ role: 'user', content: 'q' }], {
+      role: 'planner',
+      reasoning: 'off',
+    })
+    expect(bodies[0]).not.toHaveProperty('chat_template_kwargs')
   })
 })

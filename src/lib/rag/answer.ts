@@ -294,12 +294,16 @@ export interface AnswerDeps extends EvidenceDeps {
     messages: ChatMessage[],
     signal: AbortSignal,
   ): Promise<ReadableStream<Uint8Array>>
+  /**
+   * Sentence numbers the sources do not support, or null when the check
+   * itself failed. Null is not a pass: the caller withholds the answer (#171).
+   */
   verify(
     answer: string,
     chunks: readonly RetrievedChunk[],
     signal: AbortSignal,
     toolResults?: readonly ToolOutput[],
-  ): Promise<number[]>
+  ): Promise<number[] | null>
   chatModelName(): string
   finishRun(outcome: RunOutcome): void
   sleep?(ms: number): Promise<void>
@@ -624,29 +628,52 @@ export async function answerQuestion(
     ) {
       io.send({ type: 'step', phase: 'verifying' })
       const unsupported = await span('verify', async (step) => {
+        // Not the request's signal: a reader who leaves while the check runs
+        // must not cancel it, or the saved answer would become a refusal
+        // because nobody waited. The verifier has its own deadline
+        // (VERIFY_TIMEOUT_MS), and the revision below still saves.
         const found = await deps.verify(
           state.answer,
           retrieved,
-          signal,
+          new AbortController().signal,
           toolResults,
         )
+        // null: the check failed. An empty list is a pass.
+        if (found === null) {
+          step.set({ verified: false })
+          return null
+        }
         step.set({ unsupported: found.length })
         return found
       })
-      const verified = stripUnsupported(state.answer, unsupported)
-      if (verified.strippedSentences > 0) {
-        logger.warn('Stripped unsupported sentences', {
-          userId,
-          conversationId,
-          sentences: verified.strippedSentences,
-          stripped: verified.strippedIndices,
-        })
-        state.answer = verified.empty ? NO_CONTEXT_ANSWER : verified.text
+      // null is not a pass (#171): the check threw, timed out, or returned
+      // nothing readable. Withhold the draft the same way as an answer that
+      // strips down to nothing — the fixed refusal, via the saved revision.
+      let revision: { text: string; stripped: number[] } | null = null
+      if (unsupported === null) {
+        revision = { text: NO_CONTEXT_ANSWER, stripped: [] }
+      } else {
+        const verified = stripUnsupported(state.answer, unsupported)
+        if (verified.strippedSentences > 0) {
+          logger.warn('Stripped unsupported sentences', {
+            userId,
+            conversationId,
+            sentences: verified.strippedSentences,
+            stripped: verified.strippedIndices,
+          })
+          revision = {
+            text: verified.empty ? NO_CONTEXT_ANSWER : verified.text,
+            stripped: verified.strippedIndices,
+          }
+        }
+      }
+      if (revision) {
+        state.answer = revision.text
         await store.revise(state.answer)
         io.send({
           type: 'revision',
           value: state.answer,
-          stripped: verified.strippedIndices,
+          stripped: revision.stripped,
         })
       }
     }
